@@ -217,6 +217,23 @@ def desired_files(profile: str) -> dict[str, bytes]:
                     files[rel] = source.read_bytes()
     files[RULE] = (ROOT / "common/workflow-rules.md").read_bytes()
     files[mcp_runtime.LAUNCHER] = (ROOT / "mcp_runtime.py").read_bytes()
+    # Optional launcher assets travel only with profiles selecting that MCP.
+    for name, entry in desired_mcp(profile).items():
+        launcher = file_path(ROOT, f"mcp/launchers/{name}")
+        if launcher.exists():
+            if not launcher.is_dir():
+                raise ProfileError(f"Nieprawidłowy katalog launchera MCP: {name}")
+            for source in sorted(launcher.rglob("*")):
+                if source.is_symlink():
+                    raise ProfileError(f"Launcher MCP używa symlinka: {source}")
+                if "__pycache__" in source.relative_to(launcher).parts or source.suffix == ".pyc":
+                    continue
+                if source.is_file():
+                    rel = (Path(".opencode/mcp") / name / source.relative_to(launcher)).as_posix()
+                    files[rel] = source.read_bytes()
+        for argument in entry.get("command", []):
+            if argument.startswith(".opencode/mcp/") and argument not in files:
+                raise ProfileError(f"Brak zarządzanego pliku launchera MCP: {argument}")
     readme = file_path(ROOT, f"profiles/{profile}/README.md")
     if readme.is_file():
         files[".opencode/ai-profile/README.md"] = readme.read_bytes()

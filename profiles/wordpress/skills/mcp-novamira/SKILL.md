@@ -25,7 +25,7 @@ Multisite blogs have separate content, options, menus, and media. Never assume d
 4. Use read-only operations for inspection. Perform a write only when the user explicitly requests it.
 5. After a write, read the affected data back through Novamira and verify the result.
 
-This profile uses the ai-profiles stdio adapter and a pinned WordPress bridge with `OAUTH_ENABLED=false`, targeting `/wp-json/mcp/novamira` (not `/novamira-oauth`). The user configures a WordPress Application Password in a private env file. Never request credentials in chat, print them, read secret files into tool output, or put them in versioned files. Do not switch to OAuth or alter credentials as routine troubleshooting. See `examples/` for non-secret configuration templates.
+This profile uses the ai-profiles stdio adapter and a pinned WordPress bridge with `OAUTH_ENABLED=false`, targeting `/wp-json/mcp/novamira` (not `/novamira-oauth`). The user configures a WordPress Application Password in a private env file. Never request credentials in chat, print them, read secret files into tool output, or put them in versioned files. Do not switch to OAuth or alter credentials as routine troubleshooting. User-facing setup instructions are in `.opencode/ai-profile/README.md`.
 
 ## Safety boundaries
 

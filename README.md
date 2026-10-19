@@ -50,10 +50,12 @@ wymaga odblokowania zadania. Aktualizacja usuwa stare zarządzane pliki bramki;
 
 ## Lokalne ustawienia MCP
 
-Profil `wordpress` dostarcza MCP Novamira (Application Password, bez OAuth)
-i Figma. Instalację pluginu w WordPressie wykonujesz ręcznie. Pełna instrukcja:
+Profil `wordpress` dostarcza MCP Novamira (Application Password, bez OAuth),
+Figma i MariaDB (pełny SQL). Instalację pluginu w WordPressie wykonujesz ręcznie.
+Launcher MariaDB automatycznie buduje przypięty obraz przy pierwszym uruchomieniu
+włączonego MCP, potem używa cache Docker. Pełna instrukcja:
 [`profiles/wordpress/README.md`](profiles/wordpress/README.md); po instalacji
-również `.opencode/ai-profile/README.md` w projekcie. Novamira pozostaje wyłączona
+również `.opencode/ai-profile/README.md` w projekcie. Novamira i MariaDB pozostają wyłączone
 do czasu skonfigurowania połączenia. Profile z własnym `README.md` dostarczają
 go jako zarządzany plik `.opencode/ai-profile/README.md`.
 
@@ -185,7 +187,7 @@ Na przykład `mcp/servers/figma.json` zawiera pojedynczy obiekt serwera:
 }
 ```
 
-React wybiera `figma`, WordPress `figma` i `novamira`, backend-go tylko `postgres`.
+React wybiera `figma`, WordPress `figma`, `novamira` i `mariadb`, backend-go tylko `postgres`.
 Sama obecność pliku w rejestrze nie instaluje serwera w żadnym profilu.
 `common/` nadal zawiera wyłącznie elementy wspólne dla wszystkich profili.
 Nie kopiuj definicji do profili: `servers` to lista unikalnych nazw, bez definicji
@@ -202,6 +204,12 @@ Ustawienia projektu pozostają w `.opencode/ai-profile.local.json`; menedżer
 nakłada je na rozwinięte definicje z rejestru. Stan instalacji nadal przechowuje
 pełne `mcp_base`, nie odwołania do plików repozytorium, więc adapter działa bez
 dostępu do źródłowego `ai-profiles`.
+
+Opcjonalne zarządzane pliki uruchomieniowe umieszczaj w `mcp/launchers/<nazwa>/`.
+Instalator dostarcza je do `.opencode/mcp/<nazwa>/` tylko profilom wybierającym ten
+serwer. Pliki podlegają tym samym hashom, kontroli konfliktów i usuwaniu co skille.
+Nie przechowuj tam sekretów, cache ani artefaktów budowy. Rejestr pozostaje źródłem
+wyboru serwerów; obecność launchera nie włącza MCP automatycznie.
 
 Własne profile ze starym formatem inline przenieś do rejestru i zastąp ich `mcp.json`
 listą `servers`. Istniejących instalacji projektowych nie trzeba migrować ręcznie:

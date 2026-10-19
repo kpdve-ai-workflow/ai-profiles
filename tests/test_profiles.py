@@ -1,6 +1,7 @@
 import json
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
@@ -505,14 +506,15 @@ class ProfileTests(unittest.TestCase):
         plugin.parent.mkdir(parents=True)
         plugin.write_text("existing user-owned plugin")
         manager.apply_profile(self.project, "wordpress")
-        self.assertEqual(set(self.cfg()["mcp"]), {"novamira", "figma"})
+        self.assertEqual(set(self.cfg()["mcp"]), {"novamira", "figma", "mariadb"})
         self.assertTrue(self.cfg()["mcp"]["novamira"]["disabled"])
         self.assertFalse(self.cfg()["mcp"]["figma"]["disabled"])
-        for skill in ("mcp-novamira", "mcp-figma", "acf", "styling"):
+        for skill in ("mcp-novamira", "mcp-figma", "mcp-mariadb", "acf", "styling"):
             self.assertTrue((self.project / f".opencode/skills/{skill}/SKILL.md").is_file())
         self.assertEqual((self.project / ".opencode/ai-profile/README.md").read_bytes(),
                          (self.source / "profiles/wordpress/README.md").read_bytes())
-        self.assertTrue((self.project / ".opencode/skills/mcp-novamira/examples/novamira.env.example").is_file())
+        for skill in ("mcp-novamira", "mcp-mariadb"):
+            self.assertFalse(any((self.project / f".opencode/skills/{skill}/examples").glob("*")))
         self.assertFalse((self.project / mcp_runtime.LOCAL).exists())
         self.assertFalse((self.project / ".env.novamira").exists())
         with patch.object(mcp_runtime.os, "execvpe") as execute:
@@ -525,9 +527,10 @@ class ProfileTests(unittest.TestCase):
 
     def test_wordpress_private_credentials_launch_and_survive_update_uninstall(self):
         manager.apply_profile(self.project, "wordpress")
-        examples = self.project / ".opencode/skills/mcp-novamira/examples"
         local = self.project / mcp_runtime.LOCAL
-        local.write_bytes((examples / "ai-profile.local.example.json").read_bytes())
+        local.write_text(json.dumps({"mcp": {"novamira": {
+            "disabled": False, "env_file": ".env.novamira",
+        }}}))
         private = self.project / ".env.novamira"
         secret = "abcd efgh test-secret ijkl"
         private.write_text('WP_API_URL=https://example.test/wp-json/mcp/novamira\n'
@@ -559,6 +562,38 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(private.read_bytes(), env_before)
         self.assertEqual(private.stat().st_mode & 0o777, 0o600)
 
+    def test_wordpress_update_retires_managed_skill_templates_preserving_private_files(self):
+        old_templates = (
+            "mcp-novamira/examples/ai-profile.local.example.json",
+            "mcp-novamira/examples/novamira.env.example",
+            "mcp-mariadb/examples/ai-profile.local.example.json",
+            "mcp-mariadb/examples/mariadb.env.example",
+        )
+        for relative in old_templates:
+            source = self.source / "profiles/wordpress/skills" / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("old managed template\n")
+        manager.apply_profile(self.project, "wordpress")
+        local = self.project / mcp_runtime.LOCAL
+        local.write_text(json.dumps({"mcp": {"novamira": {"env_file": ".env.novamira"},
+                                             "mariadb": {"env_file": ".env.mariadb"}}}))
+        private = [local, self.project / ".env.novamira", self.project / ".env.mariadb"]
+        for path in private[1:]:
+            path.write_text("PROJECT_SECRET=synthetic-secret\n")
+        user_file = self.project / ".opencode/skills/mcp-novamira/examples/my-notes.txt"
+        user_file.write_text("user-owned notes\n")
+        private.append(user_file)
+        before = {path: path.read_bytes() for path in private}
+        for relative in old_templates:
+            (self.source / "profiles/wordpress/skills" / relative).unlink()
+        manager.apply_profile(self.project, "wordpress")
+        for relative in old_templates:
+            self.assertFalse((self.project / ".opencode/skills" / relative).exists())
+        self.assertEqual({path: path.read_bytes() for path in private}, before)
+        for skill in ("mcp-novamira", "mcp-mariadb"):
+            self.assertFalse(any(rel.startswith(f".opencode/skills/{skill}/examples/")
+                                 for rel in self.state()["files"]))
+
     def test_wordpress_missing_credentials_fail_before_bridge_starts(self):
         manager.apply_profile(self.project, "wordpress")
         local = self.project / mcp_runtime.LOCAL
@@ -572,6 +607,74 @@ class ProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(mcp_runtime.ConfigError, "WP_API_PASSWORD"):
                 mcp_runtime.launch(self.project, "novamira")
             execute.assert_not_called()
+
+    def test_wordpress_mariadb_installed_launcher_runs_with_private_env(self):
+        manager.apply_profile(self.project, "wordpress")
+        script = self.project / ".opencode/mcp/mariadb/launch.py"
+        self.assertTrue(script.is_file())
+        self.assertTrue(self.cfg()["mcp"]["mariadb"]["disabled"])
+        local = self.project / mcp_runtime.LOCAL
+        local.write_text(json.dumps({"mcp": {"mariadb": {
+            "disabled": False, "env_file": ".env.mariadb",
+        }}}))
+        private = self.project / ".env.mariadb"
+        secret = "synthetic-db-secret"
+        private.write_text('DB_HOST=127.0.0.1\nDB_PORT=62335\nDB_NAME=db\n'
+                           f'DB_USER=operator\nDB_PASSWORD="{secret}"\n')
+        manager.apply_profile(self.project, "wordpress")
+        # Exercise both installed launchers in a child process; Docker is replaced
+        # by a fake executable. No Docker/network/database access occurs.
+        bin_dir = self.base / "bin"
+        bin_dir.mkdir()
+        docker = bin_dir / "docker"
+        docker.write_text(f'#!{sys.executable}\n'
+                          'import json, os, sys\n'
+                          'if sys.argv[1:3] == ["image", "inspect"]:\n'
+                          '    print("64876fb1a4cb81bf51564c46eb60401097c067cc")\n'
+                          'elif sys.argv[1] == "run":\n'
+                          '    print(json.dumps({"args": sys.argv[1:], "env": dict(os.environ)}))\n'
+                          'else:\n'
+                          '    raise SystemExit(9)\n')
+        docker.chmod(0o700)
+        command = [sys.executable, str(self.project / mcp_runtime.LAUNCHER), "mariadb"]
+        result = subprocess.run(command, cwd=self.base, check=True, capture_output=True, text=True,
+                                env={"PATH": str(bin_dir) + os.pathsep + os.defpath,
+                                     "HOME": str(self.base)})
+        invoked = json.loads(result.stdout)
+        self.assertEqual(invoked["env"]["DB_PASSWORD"], secret)
+        self.assertEqual(invoked["env"]["MCP_READ_ONLY"], "false")
+        self.assertEqual(invoked["env"]["MCP_BLOCK_SENSITIVE_SHOW"], "false")
+        self.assertIn("--network=host", invoked["args"])
+        self.assertNotIn(secret, " ".join(invoked["args"]))
+        for rel in (*self.state()["files"], manager.STATE, "opencode.json"):
+            self.assertNotIn(secret.encode(), (self.project / rel).read_bytes())
+        before = local.read_bytes(), private.read_bytes()
+        manager.apply_profile(self.project, "wordpress")
+        manager.uninstall(self.project)
+        self.assertEqual(before, (local.read_bytes(), private.read_bytes()))
+        self.assertFalse(script.exists())
+
+    def test_mcp_launcher_assets_are_selected_protected_and_validated(self):
+        self.assertNotIn(".opencode/mcp/mariadb/launch.py", manager.desired_files("frontend-react"))
+        self.assertNotIn(".opencode/mcp/mariadb/launch.py", manager.desired_files("backend-go"))
+        manager.apply_profile(self.project, "wordpress")
+        script = self.project / ".opencode/mcp/mariadb/launch.py"
+        original = script.read_bytes()
+        script.write_bytes(original + b"\n# local change\n")
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Konflikt"):
+            manager.apply_profile(self.project, "wordpress")
+        self.assertEqual(self.snapshot(), before)
+        script.write_bytes(original)
+        manager.apply_profile(self.project, "frontend-react")
+        self.assertFalse(script.exists())
+        source = self.source / "mcp/launchers/mariadb/launch.py"
+        source.unlink()
+        with self.assertRaisesRegex(manager.ProfileError, "Brak zarządzanego pliku launchera"):
+            manager.desired_files("wordpress")
+        source.symlink_to(self.source / "profile.py")
+        with self.assertRaisesRegex(manager.ProfileError, "symlink"):
+            manager.desired_files("wordpress")
 
     def test_validate_profiles_resolve_shared_figma_and_example_detects_changes(self):
         manager.validate_sources()
@@ -587,7 +690,7 @@ class ProfileTests(unittest.TestCase):
     def test_switch_from_react_to_wordpress_preserves_shared_figma(self):
         manager.apply_profile(self.project, "frontend-react")
         manager.apply_profile(self.project, "wordpress")
-        self.assertEqual(set(self.cfg()["mcp"]), {"novamira", "figma"})
+        self.assertEqual(set(self.cfg()["mcp"]), {"novamira", "figma", "mariadb"})
         manager.apply_profile(self.project, "frontend-react")
         self.assertEqual(set(self.cfg()["mcp"]), {"figma"})
         self.assertFalse((self.project / ".opencode/ai-profile/README.md").exists())
@@ -595,7 +698,7 @@ class ProfileTests(unittest.TestCase):
     def test_registry_selects_only_explicit_servers_and_never_installs_everything(self):
         self.assertEqual(set(manager.desired_mcp("backend-go")), {"postgres"})
         self.assertEqual(set(manager.desired_mcp("frontend-react")), {"figma"})
-        self.assertEqual(set(manager.desired_mcp("wordpress")), {"figma", "novamira"})
+        self.assertEqual(set(manager.desired_mcp("wordpress")), {"figma", "novamira", "mariadb"})
         self.assertEqual(manager.desired_mcp("wordpress")["figma"],
                          manager.desired_mcp("frontend-react")["figma"])
         manager.create_profile("no-mcp")
