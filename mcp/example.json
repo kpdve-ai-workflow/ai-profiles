@@ -1,0 +1,15 @@
+{
+  "mcp": {
+    "postgres": {
+      "type": "local",
+      "command": ["uvx", "postgres-mcp", "--access-mode=restricted"],
+      "enabled": true,
+      "environment": {"DATABASE_URI": "{env:DATABASE_URI}"}
+    },
+    "figma": {
+      "type": "remote",
+      "url": "https://mcp.figma.com/mcp",
+      "enabled": true
+    }
+  }
+}
