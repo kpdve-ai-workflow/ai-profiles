@@ -25,8 +25,64 @@ Bez Make: `python3 profile.py update --project ~/projects/my-api`
 (analogicznie `install backend-go`, `status`, `switch frontend-react`, `uninstall`).
 
 Po instalacji, aktualizacji lub zmianie profilu zrestartuj OpenCode.
-Istniejące komendy `approve`, `lock` i `gate-status` pozostają bez zmian;
-udany `update` nadal ustawia bramkę na LOCKED.
+Profile nie instalują bramki blokującej zapis ani shell. Zwykła praca agenta nie
+wymaga odblokowania zadania. Aktualizacja usuwa stare zarządzane pliki bramki;
+`approve`, `lock` i `gate-status` są wyłącznie zgodnościowymi aliasami informacyjnymi.
+
+## Lokalne ustawienia MCP
+
+Profil zarządza definicją serwera, a projekt własnymi połączeniami i zmiennymi.
+Opcjonalny plik `.opencode/ai-profile.local.json` jest odczytywany przez menedżer
+i adapter MCP, **nie bezpośrednio przez OpenCode**. Przykład:
+
+```json
+{
+  "mcp": {
+    "postgres": {
+      "env_file": ".env.stage",
+      "environment": {
+        "DATABASE_URI": "{env:STAGE_DATABASE_URL}"
+      }
+    }
+  }
+}
+```
+
+Każdy projekt sam wybiera nazwę pliku env i zmiennych. `env_file` jest opcjonalną
+ścieżką wewnątrz projektu (bez `..` i symlinków), dostępną tylko dla lokalnych MCP.
+Plik env może zawierać np. `STAGE_DATABASE_URL=...`; dodaj go do projektowego
+`.gitignore`. Instalator nie tworzy, nie nadpisuje ani nie usuwa tych plików.
+`mcp/local.example.json` jest przykładem do ręcznego skopiowania, nie częścią instalacji.
+Nie umieszczaj haseł w konfiguracji lokalnej; używaj referencji do środowiska.
+
+Kolejność wartości: środowisko odziedziczone → wskazany plik env → mapowanie
+`environment`. Referencje `{env:NAZWA}` w mapowaniu są rozwiązywane przez adapter
+po odczycie pliku. Brak wymaganej zmiennej lub wskazanego pliku zatrzymuje start MCP.
+Parser obsługuje pojedyncze linie `KEY=value`, cudzysłowy, komentarze i `export`;
+nie wykonuje kodu powłoki ani interpolacji `$VAR`/`${VAR}`, nie obsługuje wartości wieloliniowych.
+
+Obiekty są scalane po kluczach, natomiast tablice (np. `command`) zastępowane w całości.
+Można nadpisać m.in. `command`, `environment`, `cwd`, `enabled`/`disabled`, `timeout`,
+a dla zdalnego MCP także `url`, `headers` i `oauth`. Nie można zmienić typu transportu
+ani skonfigurować tym plikiem MCP niezarządzanego przez profil — takie serwery
+konfiguruj niezależnie w OpenCode.
+
+`update` nakłada lokalne ustawienia na aktualną definicję centralną. Gdy upstream
+zmienia nadpisane pole, wyświetla ostrzeżenie bez ujawniania wartości; lokalne ustawienie
+wygrywa. Zmiany pliku lokalnego nie są konfliktem. Nie edytuj wygenerowanych wpisów
+w `opencode.json`: ich ręczne modyfikacje nadal blokują update.
+Przy wycofaniu serwera lub zmianie profilu usuń/przenieś niepasujące nadpisanie;
+menedżer zgłosi je przed zapisem, zamiast je ignorować. `uninstall` zachowuje plik lokalny.
+
+Instalator dodaje zarządzany adapter `.opencode/ai-profile-mcp.py`, który odczytuje
+definicje MCP z `mcp_base` w `.opencode/ai-profile-state.json` i nakłada lokalne
+nadpisania. Osobny `ai-profile-mcp.json` nie jest potrzebny; update usuwa jego
+wcześniej zarządzaną kopię. Adapter uruchamia komendę bez powłoki, przekazuje
+stdio i rozwiązuje środowisko wyłącznie dla procesu MCP. Nie zmienia środowiska OpenCode.
+Zdalne MCP pozostają uruchamiane natywnie przez OpenCode (bez `env_file`).
+Po zmianie pliku env lub mapowania zrestartuj MCP. Po zmianie ustawień OpenCode
+(np. `enabled`, `url`) wykonaj `update` i zrestartuj sesję. Adapter wymaga Python 3.10+;
+sam pakiet i zależności serwera MCP muszą być dostępne niezależnie.
 
 ## Tworzenie profili i zarządzanie skillami
 
@@ -37,7 +93,6 @@ profiles/<nazwa>/
 └── skills/<nazwa-skilla>/SKILL.md
 common/
 ├── skills/
-├── plugins/approval-gate.js
 └── workflow-rules.md
 ```
 
@@ -72,7 +127,8 @@ wszystkich profili. Nie używaj symlinków ani kolidujących nazw skilli.
 
 ## Wersje i publikowanie
 
-Każdy profil ma niezależną wersję `MAJOR.MINOR.PATCH`, zwiększaną **ręcznie**:
+Każdy profil ma niezależną wersję `MAJOR.MINOR.PATCH`. Numer wylicza i zapisuje
+komenda `bump`, bez ręcznej edycji `profile.json`. Wybierasz rodzaj wydania:
 
 - **MAJOR**: zmiana niekompatybilna, np. usunięcie wymaganego skilla lub zmiana kontraktu.
 - **MINOR**: kompatybilne rozszerzenie, np. dodanie nowych skilli.
@@ -81,16 +137,26 @@ Każdy profil ma niezależną wersję `MAJOR.MINOR.PATCH`, zwiększaną **ręczn
 Obsługiwane są stabilne wersje z trzema liczbami bez zer wiodących.
 Wersje prerelease i metadane build nie są obsługiwane. Porównanie jest numeryczne:
 `1.10.0` jest nowsze od `1.9.0`. Zmiana pliku nie zwiększa wersji automatycznie.
-Przy publikowaniu zmian wspólnych zwiększ odpowiednio wersje wszystkich dotkniętych profili.
+Przy publikowaniu zmian wspólnych wykonaj bump dla wszystkich dotkniętych profili.
+
+```bash
+make bump PROFILE=backend-go PART=patch
+make bump PROFILE=backend-go PART=minor
+make bump PROFILE=backend-go PART=major
+```
+
+To trzy alternatywy — wybierz jedną dla danego wydania. Domyślne `PART` to `patch`.
+`minor` zeruje PATCH, a `major` zeruje MINOR i PATCH. Bump zmienia tylko metadane
+wybranego profilu; nie aktualizuje projektów, nie wykonuje commitów ani nie tworzy tagów.
+Bez Make: `python3 profile.py bump backend-go --part patch`.
 
 ```bash
 make validate
 make test
+make bump PROFILE=backend-go PART=minor
 git add profiles common mcp README.md profile.py tests
-git commit -m 'Release backend-go 1.1.0'
-git tag backend-go-v1.1.0
+git commit -m 'Release backend-go'
 git push
-git push origin backend-go-v1.1.0
 ```
 
 Tag jest opcjonalną etykietą wydania; menedżer czyta `profile.json` w aktualnym
@@ -115,7 +181,8 @@ Nowszy numer wersji nie oznacza automatycznie zmiany plików.
 
 `.opencode/ai-profile-state.json` zachowuje format 1 i zapisuje:
 `profile`, `version`, `source_commit`, mapę `files` (ścieżka → SHA-256),
-zarządzane wpisy `mcp` oraz informacje potrzebne do bezpiecznego usuwania.
+zarządzane wygenerowane wpisy `mcp`, definicję centralną `mcp_base`, hash lokalnych
+nadpisań `mcp_local_hash` oraz informacje potrzebne do bezpiecznego usuwania.
 Zmiany źródeł są rozpoznawane przez porównanie pełnych map plików i konfiguracji,
 nie przez sam numer wersji ani SHA commita. Uwzględniane są też pliki wspólne.
 
@@ -128,7 +195,7 @@ wartość `null`, a status pokazuje `UNKNOWN`; hashe plików nadal działają.
 
 `update` dodaje nowe pliki, synchronizuje istniejące skille, konfigurację i pluginy
 oraz usuwa wycofane pliki zarządzane. Zachowuje obce pliki i konfigurację.
-Ponowienie aktualizacji bez zmian daje tę samą zawartość; bramka nadal jest blokowana.
+Ponowienie aktualizacji bez zmian daje tę samą zawartość.
 Downgrade tego samego profilu jest odrzucany. `switch` pozwala wybrać inny profil
 z jego niezależną wersją.
 
@@ -140,7 +207,8 @@ nadpisanie lokalnych zmian. Zapis stanu następuje dopiero po zapisaniu plików 
 Przy konflikcie:
 
 1. Zrób kopię lokalnych zmian lub commit projektu.
-2. Przenieś potrzebne zmiany do źródeł `ai-profiles` i opublikuj nową wersję.
+2. Przenieś zmiany wspólne do `ai-profiles`, a projektowe ustawienia MCP do
+   `.opencode/ai-profile.local.json`.
 3. Przywróć w projekcie zarządzany plik do zainstalowanej wersji (lub wpis MCP
    do wartości ze stanu), następnie ponów `update`.
 
@@ -154,6 +222,8 @@ przed większą aktualizacją wykonaj commit lub kopię projektu.
 Stan formatu 1 z hashami, ale bez wersji i SHA commita, jest obsługiwany bez
 dodatkowych kroków. `status` pokaże `VERSION UNKNOWN`; udany `update` sprawdzi
 dotychczasowe hashe i uzupełni metadane bieżącego profilu. Nie zgaduje historycznej wersji.
+Dotychczasowe stany bez `mcp_base` są również obsługiwane: po sprawdzeniu starej
+konfiguracji update instaluje adapter i zapisuje nowy podział konfiguracji.
 
 Starsze MVP bez hashy wymaga świadomego przejęcia plików po ich przeglądzie i backupie:
 

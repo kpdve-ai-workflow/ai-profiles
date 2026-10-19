@@ -12,6 +12,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import profile as manager  # noqa: E402
+import mcp_runtime
 
 
 class ProfileTests(unittest.TestCase):
@@ -26,6 +27,12 @@ class ProfileTests(unittest.TestCase):
         self.override = patch.object(manager, "ROOT", self.source)
         self.override.start()
         self.addCleanup(self.override.stop)
+        # Keep version scenarios independent of the current published release.
+        self.set_version("1.0.0")
+        metadata_path = self.source / "profiles/frontend-react/profile.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["version"] = "1.0.0"
+        metadata_path.write_text(json.dumps(metadata))
 
     def state(self):
         return json.loads((self.project / manager.STATE).read_text())
@@ -48,6 +55,60 @@ class ProfileTests(unittest.TestCase):
     def snapshot(self):
         return {p.relative_to(self.project).as_posix(): p.read_bytes()
                 for p in self.project.rglob("*") if p.is_file()}
+
+    def test_bump_semver_parts_and_profile_independence(self):
+        frontend = self.source / "profiles/frontend-react/profile.json"
+        other_before = frontend.read_bytes()
+        path = self.source / "profiles/backend-go/profile.json"
+        for part, expected in (("patch", "1.9.10"), ("minor", "1.10.0"), ("major", "2.0.0")):
+            with self.subTest(part=part):
+                self.set_version("1.9.9")
+                metadata = json.loads(path.read_text())
+                metadata["custom"] = {"keep": True}
+                path.write_text(json.dumps(metadata))
+                self.assertEqual(manager.bump_profile("backend-go", part), expected)
+                changed = json.loads(path.read_text())
+                self.assertEqual(changed, {**metadata, "version": expected})
+                self.assertEqual(frontend.read_bytes(), other_before)
+                self.assertEqual(list(path.parent.glob(".profile-*.tmp")), [])
+
+    def test_bump_rejects_invalid_input_without_writes(self):
+        path = self.source / "profiles/backend-go/profile.json"
+        before = path.read_bytes()
+        for profile, part in (("missing", "patch"), ("../backend-go", "major"), ("backend-go", "invalid")):
+            with self.assertRaises(manager.ProfileError):
+                manager.bump_profile(profile, part)
+            self.assertEqual(path.read_bytes(), before)
+        self.set_version("01.0.0")
+        before = path.read_bytes()
+        with self.assertRaisesRegex(manager.ProfileError, "wersja"):
+            manager.bump_profile("backend-go")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_bump_write_failure_preserves_metadata(self):
+        path = self.source / "profiles/backend-go/profile.json"
+        before = path.read_bytes()
+        with patch.object(Path, "replace", side_effect=OSError("Simulated write failure")):
+            with self.assertRaises(OSError):
+                manager.bump_profile("backend-go")
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(path.parent.glob(".profile-*.tmp")), [])
+
+    def test_bump_cli_and_make_adapter(self):
+        cmd = [sys.executable, str(self.source / "profile.py"), "bump"]
+        result = subprocess.run(cmd + ["backend-go"], cwd=self.source,
+                                check=True, capture_output=True, text=True)
+        self.assertIn("1.0.0 -> 1.0.1", result.stdout)
+        result = subprocess.run(["make", "bump", "PROFILE=backend-go", "PART=minor"],
+                                cwd=self.source, check=True, capture_output=True, text=True)
+        self.assertIn("1.0.1 -> 1.1.0", result.stdout)
+        before = (self.source / "profiles/backend-go/profile.json").read_bytes()
+        for args in ([], ["backend-go", "--part", "invalid"],
+                     ["backend-go", "--project", str(self.project)]):
+            result = subprocess.run(cmd + args, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.source / "profiles/backend-go/profile.json").read_bytes(), before)
+        self.assertEqual(self.snapshot(), {})
 
     def test_versions_install_update_and_idempotence(self):
         with patch.object(manager, "source_commit", return_value="a" * 40):
@@ -164,18 +225,18 @@ class ProfileTests(unittest.TestCase):
             manager.apply_profile(self.project, "backend-go")
         self.assertEqual(before, self.snapshot())
 
-    def test_update_common_plugin_and_mcp(self):
+    def test_update_common_rules_and_mcp(self):
         manager.apply_profile(self.project, "backend-go")
-        plugin = self.source / "common/plugins/approval-gate.js"
-        plugin.write_text(plugin.read_text() + "\n// Updated plugin\n")
+        rules = self.source / "common/workflow-rules.md"
+        rules.write_text(rules.read_text() + "\nUpdated guidance\n")
         mcp_path = self.source / "profiles/backend-go/mcp.json"
         mcp = json.loads(mcp_path.read_text())
         mcp["postgres"]["enabled"] = False
         mcp_path.write_text(json.dumps(mcp))
         manager.apply_profile(self.project, "backend-go")
-        self.assertEqual((self.project / ".opencode/plugins/approval-gate.js").read_bytes(),
-                         plugin.read_bytes())
-        self.assertEqual(self.cfg()["mcp"]["postgres"], mcp["postgres"])
+        self.assertEqual((self.project / manager.RULE).read_bytes(), rules.read_bytes())
+        expected, _ = manager.configured_mcp(self.project, mcp)
+        self.assertEqual(self.cfg()["mcp"]["postgres"], expected["postgres"])
         self.assertIn("UP TO DATE", self.status_output())
 
     def test_install_update_add_remove_skills_preserve_custom_and_uninstall(self):
@@ -226,7 +287,8 @@ class ProfileTests(unittest.TestCase):
         self.assertFalse((self.project / ".opencode/skills/react-frontend").exists())
         self.assertTrue((self.project / ".opencode/skills/user-skill/SKILL.md").exists())
         self.assertEqual(self.cfg(), custom_cfg)
-        self.assertNotIn(manager.GATE, (self.project / ".gitignore").read_text())
+        ignore = self.project / ".gitignore"
+        self.assertNotIn(manager.GATE, ignore.read_text() if ignore.exists() else "")
 
     def test_conflict_before_any_writes(self):
         manager.apply_profile(self.project, "backend-go")
@@ -280,15 +342,52 @@ class ProfileTests(unittest.TestCase):
             (skill / "SKILL.md").write_bytes(content)
         state_path = self.project / manager.STATE
         state_path.write_text(json.dumps({"profile": "backend-go", "skill": "go-backend", "mcp": "postgres"}))
-        (self.project / ".opencode/ai-profile-gate.py").unlink()  # absent in old MVP
+        plugin = self.project / ".opencode/plugins/approval-gate.js"
+        plugin.parent.mkdir(parents=True)
+        plugin.write_text("// Historical approval gate fixture\n")
+        (self.project / mcp_runtime.LAUNCHER).unlink()
         with self.assertRaisesRegex(manager.ProfileError, "--accept-existing"):
             manager.migrate_legacy(self.project, accept_existing=False)
         manager.migrate_legacy(self.project, accept_existing=True)
         self.assertEqual(self.state()["format"], 1)
         manager.apply_profile(self.project, "backend-go")
-        self.assertIn(".opencode/ai-profile-gate.py", self.state()["files"])
+        self.assertNotIn(".opencode/ai-profile-gate.py", self.state()["files"])
+        self.assertFalse(plugin.exists())
         self.assertTrue((skills / "make-plan/SKILL.md").is_file())
         self.assertFalse(legacy_skill.exists())
+
+    def test_install_and_update_do_not_require_approval(self):
+        manager.apply_profile(self.project, "backend-go")
+        for relative in (".opencode/plugins/approval-gate.js", ".opencode/ai-profile-gate.py", manager.GATE):
+            self.assertFalse((self.project / relative).exists())
+        manager.apply_profile(self.project, "backend-go")
+        self.assertNotIn("LOCKED", self.status_output())
+        self.assertIn("Approval gate: not installed", self.status_output())
+
+    def test_update_retires_owned_gate_and_preserves_unrelated_plugins(self):
+        manager.apply_profile(self.project, "backend-go")
+        state = self.state()
+        for relative in (".opencode/plugins/approval-gate.js", ".opencode/ai-profile-gate.py"):
+            path = self.project / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("historical gate\n")
+            state["files"][relative] = manager.sha(path.read_bytes())
+        (self.project / manager.GATE).write_text('{"approved": true, "task": "TASK-001"}\n')
+        (self.project / ".gitignore").write_text("custom-entry\n" + manager.GATE + "\n")
+        state["gitignore_added"] = True
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        custom = self.project / ".opencode/plugins/custom.js"
+        custom.write_text("// user plugin\n")
+        self.assertIn("legacy installation", self.status_output())
+        manager.apply_profile(self.project, "backend-go")
+        self.assertTrue(custom.exists())
+        self.assertFalse((self.project / ".opencode/plugins/approval-gate.js").exists())
+        self.assertFalse((self.project / ".opencode/ai-profile-gate.py").exists())
+        self.assertFalse((self.project / manager.GATE).exists())
+        self.assertEqual((self.project / ".gitignore").read_text(), "custom-entry\n")
+        self.assertFalse(self.state()["gitignore_added"])
+        manager.apply_profile(self.project, "backend-go")
+        self.assertIn("Approval gate: not installed", self.status_output())
 
     def test_validate_example_mirrors_all_profiles(self):
         manager.validate_sources()
@@ -298,6 +397,263 @@ class ProfileTests(unittest.TestCase):
         example.write_text(json.dumps(data))
         with self.assertRaisesRegex(manager.ProfileError, "mcp/example.json"):
             manager.validate_sources()
+
+    def test_postgres_command_has_no_dependency_workarounds_or_credentials(self):
+        postgres = manager.desired_mcp("backend-go")["postgres"]
+        self.assertEqual(postgres["command"], [
+            "docker", "run", "-i", "--rm", "-e", "DATABASE_URI",
+            "crystaldba/postgres-mcp", "--access-mode=restricted"
+        ])
+        self.assertEqual(postgres["environment"], {"DATABASE_URI": "{env:DATABASE_URI}"})
+
+    def test_docker_network_override_passes_connection_only_in_environment(self):
+        example = json.loads((self.source / "mcp/local.example.json").read_text())
+        local = self.project / mcp_runtime.LOCAL
+        local.parent.mkdir()
+        local.write_text(json.dumps(example))
+        uri = "postgresql://user:test-secret@postgres:5432/testdb"
+        (self.project / ".env.stage").write_text(f"STAGE_DATABASE_URL={uri}\n")
+        manager.apply_profile(self.project, "backend-go")
+        with patch.object(mcp_runtime.os, "chdir"), patch.object(mcp_runtime.os, "execvpe") as execute:
+            mcp_runtime.launch(self.project, "postgres")
+        executable, command, environment = execute.call_args.args
+        self.assertEqual(executable, "docker")
+        self.assertEqual(command[command.index("--network") + 1], "my-project_default")
+        self.assertLess(command.index("--network"), command.index("crystaldba/postgres-mcp"))
+        self.assertEqual(command[command.index("-e") + 1], "DATABASE_URI")
+        self.assertEqual(environment["DATABASE_URI"], uri)
+        self.assertNotIn("test-secret", " ".join(command))
+        self.assertNotIn(".env.stage", " ".join(command))
+
+    def local_config(self, postgres):
+        path = self.project / mcp_runtime.LOCAL
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"mcp": {"postgres": postgres}}))
+        return path
+
+    def test_local_overrides_survive_update_and_uninstall(self):
+        path = self.local_config({
+            "env_file": ".env.stage",
+            "environment": {"DATABASE_URI": "{env:STAGE_DB}"},
+            "command": ["custom-server", "--read-only"],
+        })
+        env = self.project / ".env.stage"
+        env.write_text("STAGE_DB=postgresql://local-secret\n")
+        original = path.read_bytes(), env.read_bytes()
+        manager.apply_profile(self.project, "backend-go")
+        old = self.state()
+        self.assertEqual(old["mcp_base"]["postgres"], manager.desired_mcp("backend-go")["postgres"])
+        mcp_path = self.source / "profiles/backend-go/mcp.json"
+        base = json.loads(mcp_path.read_text())
+        base["postgres"]["command"].append("--new-upstream-flag")
+        base["postgres"]["environment"]["DATABASE_URI"] = "{env:UPSTREAM_DB}"
+        base["postgres"]["enabled"] = False
+        mcp_path.write_text(json.dumps(base))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertIn("postgres.command", output.getvalue())
+        self.assertIn("postgres.environment.DATABASE_URI", output.getvalue())
+        self.assertNotIn("local-secret", output.getvalue())
+        self.assertFalse(self.cfg()["mcp"]["postgres"]["enabled"])
+        effective, _ = mcp_runtime.resolve(self.project, self.state()["mcp_base"])
+        self.assertEqual(effective["postgres"]["command"], ["custom-server", "--read-only"])
+        self.assertEqual((path.read_bytes(), env.read_bytes()), original)
+        for rel in [manager.STATE, "opencode.json"]:
+            self.assertNotIn("local-secret", (self.project / rel).read_text())
+        manager.uninstall(self.project)
+        self.assertEqual((path.read_bytes(), env.read_bytes()), original)
+
+    def test_local_changes_are_not_managed_conflicts(self):
+        manager.apply_profile(self.project, "backend-go")
+        self.local_config({"environment": {"DATABASE_URI": "{env:OTHER_DATABASE}"}})
+        self.assertIn("MCP local configuration: changed", self.status_output())
+        self.assertIn("Local modifications: none", self.status_output())
+        manager.apply_profile(self.project, "backend-go")
+        self.assertNotIn("MCP local configuration: changed", self.status_output())
+        self.assertIn("MCP local overrides: postgres", self.status_output())
+
+    def test_invalid_local_settings_fail_before_writes(self):
+        manager.apply_profile(self.project, "backend-go")
+        for override in ({"command": []}, {"environment": {"DATABASE_URI": 5}},
+                         {"env_file": "../outside.env"}, {"env_file": "/tmp/env"},
+                         {"env_file": None}, {"env_flie": ".env"}, {"enabled": "yes"},
+                         {"environment": {"INVALID-NAME": "value"}},
+                         {"timeout": "slow"}, {"timeout": {"startup": -1}},
+                         {"type": "remote", "url": "https://example.org/mcp"}):
+            self.local_config(override)
+            before = self.snapshot()
+            with self.assertRaises(mcp_runtime.ConfigError):
+                manager.apply_profile(self.project, "backend-go")
+            self.assertEqual(before, self.snapshot())
+        path = self.project / mcp_runtime.LOCAL
+        path.write_text(json.dumps({"mcp": {"unknown": {"enabled": False}}}))
+        before = self.snapshot()
+        with self.assertRaisesRegex(mcp_runtime.ConfigError, "unmanaged"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_previous_state_without_base_migrates(self):
+        manager.apply_profile(self.project, "backend-go")
+        state = self.state()
+        state["mcp"] = state.pop("mcp_base")
+        state.pop("mcp_local_hash")
+        for rel in (mcp_runtime.LAUNCHER,):
+            del state["files"][rel]
+            (self.project / rel).unlink()
+        cfg = self.cfg()
+        cfg["mcp"] = state["mcp"]
+        (self.project / "opencode.json").write_text(json.dumps(cfg))
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        self.local_config({"env_file": ".env.stage", "environment": {"DATABASE_URI": "{env:STAGE_URL}"}})
+        manager.apply_profile(self.project, "backend-go")
+        self.assertIn("mcp_base", self.state())
+        self.assertTrue((self.project / mcp_runtime.LAUNCHER).exists())
+
+    def test_update_removes_managed_manifest_and_launches_from_state(self):
+        self.local_config({"command": ["test-server"], "environment": {"DATABASE_URI": "{env:TEST_DB}"}})
+        manager.apply_profile(self.project, "backend-go")
+        state = self.state()
+        relative = ".opencode/ai-profile-mcp.json"
+        obsolete = self.project / relative
+        obsolete.write_text(json.dumps({"servers": state["mcp_base"]}))
+        state["files"][relative] = manager.sha(obsolete.read_bytes())
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        local_before = (self.project / mcp_runtime.LOCAL).read_bytes()
+        manager.apply_profile(self.project, "backend-go")
+        self.assertFalse(obsolete.exists())
+        self.assertNotIn(relative, self.state()["files"])
+        self.assertEqual((self.project / mcp_runtime.LOCAL).read_bytes(), local_before)
+        with patch.dict(mcp_runtime.os.environ, {"TEST_DB": "test-value"}), \
+                patch.object(mcp_runtime.os, "chdir"), patch.object(mcp_runtime.os, "execvpe") as execute:
+            mcp_runtime.launch(self.project, "postgres")
+        executable, command, environment = execute.call_args.args
+        self.assertEqual((executable, command), ("test-server", ["test-server"]))
+        self.assertEqual(environment["DATABASE_URI"], "test-value")
+        before = self.snapshot()
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_modified_obsolete_manifest_still_protected(self):
+        manager.apply_profile(self.project, "backend-go")
+        state = self.state()
+        relative = ".opencode/ai-profile-mcp.json"
+        obsolete = self.project / relative
+        obsolete.write_text('{}\n')
+        state["files"][relative] = manager.sha(obsolete.read_bytes())
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        obsolete.write_text('{"user": "changed"}\n')
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Konflikt"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_runtime_rejects_state_without_base_instead_of_using_rendered_command(self):
+        manager.apply_profile(self.project, "backend-go")
+        state = self.state()
+        del state["mcp_base"]
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        with patch.object(mcp_runtime.os, "execvpe") as execute:
+            with self.assertRaisesRegex(mcp_runtime.ConfigError, "run ai-profiles update"):
+                mcp_runtime.launch(self.project, "postgres")
+        execute.assert_not_called()
+
+    def test_runtime_loads_custom_env_and_maps_names_without_shell(self):
+        self.local_config({
+            "env_file": ".env.stage",
+            "environment": {"DATABASE_URI": "{env:STAGE_URL}"},
+            "command": [sys.executable, "-c",
+                        "import os,sys,json; print(json.dumps([os.environ['DATABASE_URI'], sys.stdin.readline().strip(), os.getcwd()]))"],
+        })
+        (self.project / ".env.stage").write_text('STAGE_URL="literal-$(never-execute)#value"\n')
+        manager.apply_profile(self.project, "backend-go")
+        command = self.cfg()["mcp"]["postgres"]["command"]
+        # Launch from outside the project, with an unrelated inherited value.
+        result = subprocess.run(command, cwd=self.base, input="stdio-preserved\n",
+                                text=True, capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout),
+                         ["literal-$(never-execute)#value", "stdio-preserved", str(self.project)])
+        # Runtime reads the local file again, without requiring update.
+        (self.project / ".env.stage").write_text("STAGE_URL=changed\n")
+        result = subprocess.run(command, input="next\n", text=True, capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)[0], "changed")
+        self.local_config({"env_file": ".env.stage", "environment": {"DATABASE_URI": "{env:MISSING_TEST_VARIABLE}"}})
+        result = subprocess.run(command, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn("literal-", result.stderr)
+
+    def test_runtime_dotenv_precedence_and_validation(self):
+        path = self.project / ".env.custom"
+        path.write_text("# comment\nexport CUSTOM='from-file' # comment\nEMPTY=\nURI=postgresql://host/db#fragment\n")
+        entry = {"env_file": ".env.custom", "environment": {"DATABASE_URI": "{env:CUSTOM}"}}
+        inherited = {"CUSTOM": "inherited", "KEEP": "keep"}
+        result = mcp_runtime.environment_for(self.project, entry, inherited)
+        self.assertEqual(result["DATABASE_URI"], "from-file")
+        self.assertEqual(result["KEEP"], "keep")
+        self.assertEqual(result["URI"], "postgresql://host/db#fragment")
+        self.assertEqual(inherited["CUSTOM"], "inherited")
+        path.write_text('CUSTOM="secret-unclosed\n')
+        with self.assertRaises(mcp_runtime.ConfigError) as error:
+            mcp_runtime.environment_for(self.project, entry, {})
+        self.assertNotIn("secret-unclosed", str(error.exception))
+
+    def test_local_merge_arrays_and_idempotence(self):
+        self.local_config({"command": ["replacement"], "environment": {"EXTRA": "extra"}})
+        base = manager.desired_mcp("backend-go")
+        effective, _ = mcp_runtime.resolve(self.project, base)
+        self.assertEqual(effective["postgres"]["command"], ["replacement"])
+        self.assertEqual(effective["postgres"]["environment"], {
+            "DATABASE_URI": "{env:DATABASE_URI}", "EXTRA": "extra"
+        })
+        self.assertEqual(base["postgres"]["command"][0], "docker")
+        manager.apply_profile(self.project, "backend-go")
+        before = self.snapshot()
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_orphaned_override_blocks_switch_without_writes(self):
+        self.local_config({"env_file": ".env.stage"})
+        manager.apply_profile(self.project, "backend-go")
+        before = self.snapshot()
+        with self.assertRaisesRegex(mcp_runtime.ConfigError, "removed MCP"):
+            manager.apply_profile(self.project, "frontend-react")
+        self.assertEqual(before, self.snapshot())
+
+    def test_remote_override_remains_native(self):
+        path = self.project / mcp_runtime.LOCAL
+        path.parent.mkdir()
+        path.write_text(json.dumps({"mcp": {"figma": {
+            "url": "https://example.org/custom-mcp", "headers": {"X-Key": "{env:FIGMA_KEY}"}
+        }}}))
+        manager.apply_profile(self.project, "frontend-react")
+        entry = self.cfg()["mcp"]["figma"]
+        self.assertEqual(entry["url"], "https://example.org/custom-mcp")
+        self.assertEqual(entry["headers"], {"X-Key": "{env:FIGMA_KEY}"})
+        self.assertNotIn("command", entry)
+        path.write_text(json.dumps({"mcp": {"figma": {"env_file": ".env"}}}))
+        before = self.snapshot()
+        with self.assertRaisesRegex(mcp_runtime.ConfigError, "only for local"):
+            manager.apply_profile(self.project, "frontend-react")
+        self.assertEqual(before, self.snapshot())
+
+    def test_missing_env_file_and_symlinks_fail_safely(self):
+        self.local_config({"env_file": ".env.missing"})
+        manager.apply_profile(self.project, "backend-go")
+        command = self.cfg()["mcp"]["postgres"]["command"]
+        result = subprocess.run(command, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        outside = self.base / "private-env"
+        outside.write_text("DATABASE_URI=private-secret\n")
+        (self.project / ".env.missing").symlink_to(outside)
+        before = self.snapshot()
+        with self.assertRaisesRegex(mcp_runtime.ConfigError, "Symlinks"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+        result = subprocess.run(command, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("private-secret", result.stderr)
 
     def test_cli_and_makefile(self):
         cmd = [sys.executable, str(ROOT / "profile.py")]

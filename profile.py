@@ -10,14 +10,17 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
+
+import mcp_runtime
 
 ROOT = Path(__file__).resolve().parent
 PROFILES = {"backend-go": "go-backend", "frontend-react": "react-frontend"}
 RULE = ".opencode/workflow-rules.md"
 GATE = ".opencode/workflow-approval.json"
-STATE = ".opencode/ai-profile-state.json"
+STATE = mcp_runtime.STATE
 IGNORE_LINE = GATE
 SCHEMA = "https://opencode.ai/config.json"
 
@@ -44,6 +47,38 @@ def profile_metadata(profile: str) -> dict:
         raise ProfileError(f"Nieprawidłowy profile.json: {profile}")
     version_tuple(metadata.get("version"))
     return metadata
+
+
+def bump_profile(profile: str, part: str = "patch") -> str:
+    """Explicit release step; never triggered by install/update or file changes."""
+    if profile not in profile_names():
+        raise ProfileError(f"Nieznany profil: {profile}")
+    if part not in ("major", "minor", "patch"):
+        raise ProfileError(f"Nieprawidłowy rodzaj bump: {part}")
+    path = file_path(ROOT, f"profiles/{profile}/profile.json")
+    metadata = profile_metadata(profile)
+    previous = metadata["version"]
+    major, minor, patch = version_tuple(previous)
+    if part == "major":
+        version = f"{major + 1}.0.0"
+    elif part == "minor":
+        version = f"{major}.{minor + 1}.0"
+    else:
+        version = f"{major}.{minor}.{patch + 1}"
+    metadata["version"] = version
+    # Publish the complete metadata in one replacement, preserving other fields.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".profile-", suffix=".tmp", delete=False) as output:
+            temporary = Path(output.name)
+            output.write(json_bytes(metadata))
+        temporary.chmod(path.stat().st_mode & 0o777)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    print(f"OK: {profile}: {previous} -> {version}")
+    return version
 
 
 def source_commit() -> str | None:
@@ -150,9 +185,8 @@ def desired_files(profile: str) -> dict[str, bytes]:
                     if rel in files:
                         raise ProfileError(f"Duplikat pliku skilla: {rel}")
                     files[rel] = source.read_bytes()
-    files[".opencode/plugins/approval-gate.js"] = (ROOT / "common/plugins/approval-gate.js").read_bytes()
     files[RULE] = (ROOT / "common/workflow-rules.md").read_bytes()
-    files[".opencode/ai-profile-gate.py"] = (ROOT / "gate.py").read_bytes()
+    files[mcp_runtime.LAUNCHER] = (ROOT / "mcp_runtime.py").read_bytes()
     return files
 
 
@@ -160,7 +194,17 @@ def desired_mcp(profile: str) -> dict:
     value = read_json(ROOT / "profiles" / profile / "mcp.json")
     if not isinstance(value, dict) or not value:
         raise ProfileError(f"Nieprawidłowe MCP dla {profile}")
+    mcp_runtime.validate_servers(value)
     return value
+
+
+def configured_mcp(project: Path, base: dict) -> tuple[dict, dict]:
+    effective, overrides = mcp_runtime.resolve(project, base)
+    rendered = mcp_runtime.render(effective)
+    for name, entry in rendered.items():
+        if effective[name]["type"] == "local":
+            entry["command"][1] = str(project / mcp_runtime.LAUNCHER)
+    return rendered, overrides
 
 
 def check_files(project: Path, old: dict | None, next_files: dict[str, bytes]) -> None:
@@ -186,16 +230,6 @@ def check_mcp(cfg: dict, old: dict | None, new: dict) -> None:
     for key in new:
         if key in current and key not in prior:
             raise ProfileError(f"MCP '{key}' już istnieje i nie należy do managera.")
-
-
-def ensure_gitignore(project: Path, old: dict | None) -> bool:
-    ignore = file_path(project, ".gitignore")
-    original = ignore.read_text(encoding="utf-8") if ignore.exists() else ""
-    if IGNORE_LINE in original.splitlines():
-        return bool(old and old.get("gitignore_added"))
-    trailing = "\n" if original and not original.endswith("\n") else ""
-    ignore.write_text(original + trailing + IGNORE_LINE + "\n", encoding="utf-8")
-    return True
 
 
 def remove_gitignore_line(project: Path, old: dict) -> None:
@@ -240,10 +274,16 @@ def apply_profile(project: Path, profile: str) -> None:
             and version_tuple(old["version"]) > version_tuple(metadata["version"])):
         raise ProfileError("Downgrade niedozwolony: zainstalowana wersja jest wyższa od dostępnej")
     files = desired_files(profile)
-    mcp = desired_mcp(profile)
+    base_mcp = desired_mcp(profile)
+    mcp, overrides = configured_mcp(project, base_mcp)
     cfg, existed = config_for(project)
     check_files(project, old, files)
     check_mcp(cfg, old, mcp)
+    prior_base = old.get("mcp_base", old.get("mcp", {})) if old else {}
+    for name, override in overrides.items():
+        if name in prior_base:
+            for path in mcp_runtime.changed_override_paths(prior_base[name], base_mcp[name], override):
+                print(f"WARNING: upstream changed overridden field {name}.{path}; local override wins.")
     # Preflight every destination before changing any managed file.
     for rel in [*files, STATE, GATE, ".gitignore", "opencode.json"]:
         destination = file_path(project, rel)
@@ -277,7 +317,8 @@ def apply_profile(project: Path, profile: str) -> None:
     for rel, content in files.items():
         write_bytes(file_path(project, rel), content)
     write_bytes(file_path(project, "opencode.json"), json_bytes(cfg))
-    ignore_added = ensure_gitignore(project, old)
+    if old:
+        remove_gitignore_line(project, old)
     updated_state = {
         "format": 1,
         "profile": profile,
@@ -285,15 +326,18 @@ def apply_profile(project: Path, profile: str) -> None:
         "source_commit": commit,
         "files": {key: sha(value) for key, value in files.items()},
         "mcp": mcp,
+        "mcp_base": base_mcp,
+        "mcp_local_hash": sha(json_bytes(overrides)),
         "had_config": old.get("had_config", existed) if old else existed,
-        "gitignore_added": ignore_added,
+        "gitignore_added": False,
         "instructions_added": old.get("instructions_added", originally_missing_rule) if old else originally_missing_rule,
     }
-    file_path(project, GATE).unlink(missing_ok=True)  # force fresh human approval
+    if old:
+        file_path(project, GATE).unlink(missing_ok=True)  # retire the old gate marker
     if old:
         cleanup_empty_directories(project, [k for k in old["files"] if k not in files])
     write_bytes(file_path(project, STATE), json_bytes(updated_state))
-    print(f"OK: profil {profile} w {project}; gate LOCKED. Zrestartuj OpenCode.")
+    print(f"OK: profil {profile} w {project}. Zrestartuj OpenCode.")
 
 
 def uninstall(project: Path) -> None:
@@ -345,7 +389,8 @@ def status(project: Path) -> None:
     installed = old.get("version")
     files = desired_files(old["profile"])
     content_changed = (old["files"] != {key: sha(value) for key, value in files.items()}
-                       or old["mcp"] != desired_mcp(old["profile"]))
+                       or old.get("mcp_base", old["mcp"]) != desired_mcp(old["profile"]))
+    _, overrides = configured_mcp(project, desired_mcp(old["profile"]))
     cfg, _ = config_for(project)
     mcp_modified = [key for key, expected in old["mcp"].items()
                     if cfg.get("mcp", {}).get(key) != expected]
@@ -366,15 +411,11 @@ def status(project: Path) -> None:
     print(f"Source commit: {old.get('source_commit') or 'UNKNOWN'}")
     print(f"Content: {'CHANGED' if content_changed else 'UNCHANGED'}")
     print("Local modifications: " + (", ".join(mismatches + [f"MCP:{key}" for key in mcp_modified]) or "none"))
-    gate = file_path(project, GATE)
-    if gate.exists():
-        try:
-            approval = read_json(gate)
-            print(f"Approval: {approval.get('task') if approval.get('approved') else 'LOCKED'}")
-        except (ProfileError, AttributeError):
-            print("Approval: LOCKED")
-    else:
-        print("Approval: LOCKED")
+    print("MCP local overrides: " + (", ".join(sorted(overrides)) or "none"))
+    if old.get("mcp_local_hash") != sha(json_bytes(overrides)):
+        print("MCP local configuration: changed; run update to synchronize generated settings")
+    legacy_gate = ".opencode/plugins/approval-gate.js" in old["files"]
+    print("Approval gate: " + ("legacy installation; removed on update" if legacy_gate else "not installed"))
 
 
 def validate_sources() -> None:
@@ -431,7 +472,7 @@ def migrate_legacy(project: Path, accept_existing: bool) -> None:
         "had_config": True, "gitignore_added": False,
         "instructions_added": False,
     }
-    # Existing gate is left locked for the subsequent update.
+    # Retire any legacy approval marker during migration.
     write_bytes(state_path, json_bytes(old_state))
     file_path(project, GATE).unlink(missing_ok=True)
     print(f"OK: zaadoptowano stary profil {profile}; teraz uruchom update")
@@ -439,12 +480,20 @@ def migrate_legacy(project: Path, accept_existing: bool) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Zarządzanie profilami OpenCode z lokalnego ai-profiles")
-    parser.add_argument("action", choices=["install", "update", "uninstall", "switch", "status", "validate", "migrate-legacy"])
+    parser.add_argument("action", choices=["install", "update", "uninstall", "switch", "status", "validate", "migrate-legacy", "bump"])
     parser.add_argument("profile", nargs="?", choices=profile_names())
     parser.add_argument("--project", type=Path, help="Katalog projektu (domyślnie bieżący katalog)")
     parser.add_argument("--accept-existing", action="store_true", help="Świadomie przejmij pliki starego instalatora")
+    parser.add_argument("--part", choices=["major", "minor", "patch"], help="Składnik wersji zwiększany przez bump (domyślnie patch)")
     opts = parser.parse_args()
+    if opts.part is not None and opts.action != "bump":
+        parser.error("--part jest dostępne tylko dla bump")
     try:
+        if opts.action == "bump":
+            if not opts.profile or opts.project is not None or opts.accept_existing:
+                parser.error("bump wymaga nazwy profilu źródłowego; nie używa --project ani --accept-existing")
+            bump_profile(opts.profile, opts.part or "patch")
+            return 0
         if opts.action == "validate":
             validate_sources()
             return 0
@@ -470,7 +519,7 @@ def main() -> int:
         else:
             status(project)
         return 0
-    except (ProfileError, OSError, ValueError, TypeError, KeyError) as e:
+    except (ProfileError, mcp_runtime.ConfigError, OSError, ValueError, TypeError, KeyError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 

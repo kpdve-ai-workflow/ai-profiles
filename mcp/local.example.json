@@ -1,0 +1,16 @@
+{
+  "mcp": {
+    "postgres": {
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "--network", "my-project_default",
+        "-e", "DATABASE_URI",
+        "crystaldba/postgres-mcp", "--access-mode=restricted"
+      ],
+      "env_file": ".env.stage",
+      "environment": {
+        "DATABASE_URI": "{env:STAGE_DATABASE_URL}"
+      }
+    }
+  }
+}
