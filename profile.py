@@ -49,7 +49,7 @@ def create_profile(profile: str, description: str | None = None) -> None:
             "name": profile, "version": "1.0.0",
             "description": description.strip() if description is not None else f"Profil {profile}",
         }))
-        (staged / "mcp.json").write_bytes(json_bytes({}))
+        (staged / "mcp.json").write_bytes(json_bytes({"servers": []}))
         # Git does not track empty directories; preserve skills after cloning.
         (staged / "skills" / ".gitkeep").touch()
         destination.mkdir()
@@ -223,12 +223,29 @@ def desired_files(profile: str) -> dict[str, bytes]:
     return files
 
 
+def mcp_definition(name: str) -> dict:
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        raise ProfileError("Nieprawidłowa nazwa definicji MCP; użyj małych liter/cyfr i pojedynczych myślników")
+    path = file_path(ROOT, f"mcp/servers/{name}.json")
+    if not path.is_file():
+        raise ProfileError(f"Brak definicji MCP: {name} (mcp/servers/{name}.json)")
+    entry = read_json(path)
+    mcp_runtime.validate_servers({name: entry})
+    return entry
+
+
 def desired_mcp(profile: str) -> dict:
-    value = read_json(ROOT / "profiles" / profile / "mcp.json")
-    if not isinstance(value, dict):
-        raise ProfileError(f"Nieprawidłowe MCP dla {profile}")
-    mcp_runtime.validate_servers(value)
-    return value
+    value = read_json(file_path(ROOT, f"profiles/{profile}/mcp.json"))
+    if (not isinstance(value, dict) or set(value) != {"servers"}
+            or not isinstance(value["servers"], list)):
+        raise ProfileError(f"Nieprawidłowe MCP dla {profile}: oczekiwano listy servers z nazwami z mcp/servers/")
+    servers = {}
+    for name in value["servers"]:
+        entry = mcp_definition(name)
+        if name in servers:
+            raise ProfileError(f"Powielona nazwa MCP w profilu {profile}: {name}")
+        servers[name] = entry
+    return servers
 
 
 def configured_mcp(project: Path, base: dict) -> tuple[dict, dict]:
@@ -453,43 +470,34 @@ def status(project: Path) -> None:
     print("Approval gate: " + ("legacy installation; removed on update" if legacy_gate else "not installed"))
 
 
-def comparable_mcp(entry: dict) -> dict:
-    """Compare shared definitions including the legacy enabled spelling."""
-    result = dict(entry)
-    if "enabled" in result:
-        enabled = result.pop("enabled")
-        result["disabled"] = result.get("disabled", False) or not enabled
-    return result
-
-
 def validate_sources(profile: str | None = None) -> None:
     """Validate one profile, or the complete source layout and MCP union."""
     if profile is not None and profile not in profile_names():
         raise ProfileError(f"Nieznany profil: {profile}")
+    if profile is None:
+        registry = file_path(ROOT, "mcp/servers")
+        for path in sorted(registry.iterdir()):
+            if path.suffix == ".json":
+                mcp_definition(path.stem)
     all_mcp: dict = {}
     for selected_profile in ([profile] if profile is not None else profile_names()):
         profile_metadata(selected_profile)
         desired_files(selected_profile)
         mcp = desired_mcp(selected_profile)
-        for name, entry in mcp.items():
-            normalized = comparable_mcp(entry)
-            if name in all_mcp and all_mcp[name] != normalized:
-                raise ProfileError(f"Powielona nazwa MCP z różnymi definicjami: {name}")
-            all_mcp[name] = normalized
+        all_mcp.update(mcp)
     example = read_json(ROOT / "mcp/example.json")
     if (not isinstance(example, dict) or set(example) != {"mcp"}
             or not isinstance(example["mcp"], dict)
             or any(not isinstance(entry, dict) for entry in example["mcp"].values())):
         raise ProfileError("Nieprawidłowy mcp/example.json")
-    example = {"mcp": {name: comparable_mcp(entry) for name, entry in example["mcp"].items()}}
     if profile is not None:
         if any(name not in example["mcp"] or example["mcp"][name] != entry
                for name, entry in all_mcp.items()):
-            raise ProfileError(f"mcp/example.json różni się od profiles/{profile}/mcp.json")
+            raise ProfileError(f"mcp/example.json różni się od MCP wybranych przez profil {profile}")
         print(f"OK: profil {profile}, wspólne skille i definicje MCP są spójne")
         return
     if example != {"mcp": all_mcp}:
-        raise ProfileError("mcp/example.json różni się od profiles/*/mcp.json")
+        raise ProfileError("mcp/example.json różni się od definicji MCP wybranych przez profile")
     print("OK: wszystkie skille i definicje MCP są spójne")
 
 
@@ -564,7 +572,7 @@ UTRZYMANIE REPOZYTORIUM
     Sprawdza wszystkie profile, skille i konfigurację MCP.
   make validate PROFILE=NAZWA
     Sprawdza tylko wybrany profil, wspólne skille i jego wpisy w mcp/example.json.
-    Kolizje między profilami i nadmiarowe wpisy MCP sprawdza pełne make validate.
+    Cały rejestr MCP i nadmiarowe wpisy sprawdza pełne make validate.
   make test
     Uruchamia testy w tymczasowych kopiach repozytorium.
   make help

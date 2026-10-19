@@ -22,9 +22,11 @@ make test
 ```
 
 `make validate PROFILE=<nazwa>` sprawdza metadane i wersję wybranego profilu,
-jego skille wraz ze wspólnymi oraz zgodność jego definicji MCP z `mcp/example.json`.
+jego skille wraz ze wspólnymi, wybór serwerów z `mcp/servers/` i zgodność
+wybranych definicji MCP z `mcp/example.json`.
 Nie sprawdza innych profili. Bez `PROFILE`, `make validate` sprawdza całe repozytorium,
-w tym kolizje nazw MCP i nadmiarowe wpisy w pliku przykładowym.
+w tym wszystkie definicje rejestru (również niewybrane) i nadmiarowe wpisy
+w pliku przykładowym.
 Bez Make: `python3 profile.py validate <nazwa>` (lub bez nazwy dla wszystkich).
 
 `make help` (również `python3 profile.py help` lub `./ai-profile --help`) opisuje
@@ -134,6 +136,10 @@ profiles/<nazwa>/
 common/
 ├── skills/
 └── workflow-rules.md
+mcp/
+├── servers/<nazwa-mcp>.json
+├── example.json
+└── local.example.json
 ```
 
 Nowy profil utworzysz bez ręcznego pisania metadanych:
@@ -146,7 +152,8 @@ python3 profile.py create backend-python --description "Backend Python developme
 
 Nazwa jest wymagana i może zawierać małe litery/cyfry rozdzielone pojedynczymi
 myślnikami. Opis jest opcjonalny (domyślnie `Profil <nazwa>`). Komenda tworzy
-`profile.json` z wersją `1.0.0`, pusty `mcp.json` (`{}`) i `skills/.gitkeep`,
+`profile.json` z wersją `1.0.0`, `mcp.json` z pustą listą (`{"servers": []}`)
+i `skills/.gitkeep`,
 aby Git zachował pusty katalog skilli. Nie nadpisuje istniejącego profilu,
 nie instaluje go w projekcie ani nie zmienia innych profili.
 
@@ -161,13 +168,44 @@ utworzyć powyższą strukturę oraz metadane:
 }
 ```
 
-`name` musi odpowiadać nazwie katalogu. `mcp.json` zawiera obiekt
-definicji z unikalnymi nazwami w danym profilu (może być pusty dla profilu bez MCP);
-ich wspólna suma musi odpowiadać `mcp/example.json`. Po dodaniu definicji MCP
-uzupełnij również ten plik przykładowy. Nowy pusty profil tego nie wymaga.
-Różne profile mogą współdzielić nazwę MCP, jeśli definicje są zgodne (np. `figma`).
-Walidacja traktuje historyczne `enabled: true` tak samo jak `disabled: false`;
-różniące się definicje o tej samej nazwie nadal są błędem.
+`name` musi odpowiadać nazwie katalogu. Profil wybiera MCP w `mcp.json`:
+
+```json
+{"servers": ["figma", "novamira"]}
+```
+
+Każda nazwa wskazuje **jedną centralną definicję** `mcp/servers/<nazwa>.json`.
+Na przykład `mcp/servers/figma.json` zawiera pojedynczy obiekt serwera:
+
+```json
+{
+  "type": "remote",
+  "url": "https://mcp.figma.com/mcp",
+  "disabled": false
+}
+```
+
+React wybiera `figma`, WordPress `figma` i `novamira`, backend-go tylko `postgres`.
+Sama obecność pliku w rejestrze nie instaluje serwera w żadnym profilu.
+`common/` nadal zawiera wyłącznie elementy wspólne dla wszystkich profili.
+Nie kopiuj definicji do profili: `servers` to lista unikalnych nazw, bez definicji
+inline ani nadpisań. Nazwy odpowiadają plikom i zawierają małe litery/cyfry
+rozdzielone pojedynczymi myślnikami. Profil bez MCP ma `{"servers": []}`.
+Nieznane nazwy, duplikaty, symlinki i nieprawidłowe definicje powodują błąd.
+
+`mcp/example.json` jest kontrolnym zestawieniem sumy MCP wybranych przez profile,
+nie źródłem konfiguracji instalatora. Po zmianie centralnej definicji lub dodaniu
+nowego wyboru uzupełnij to zestawienie i uruchom `make validate`.
+Niewybrane definicje nie muszą się w nim znajdować.
+
+Ustawienia projektu pozostają w `.opencode/ai-profile.local.json`; menedżer
+nakłada je na rozwinięte definicje z rejestru. Stan instalacji nadal przechowuje
+pełne `mcp_base`, nie odwołania do plików repozytorium, więc adapter działa bez
+dostępu do źródłowego `ai-profiles`.
+
+Własne profile ze starym formatem inline przenieś do rejestru i zastąp ich `mcp.json`
+listą `servers`. Istniejących instalacji projektowych nie trzeba migrować ręcznie:
+zwykłe `make update` zachowuje lokalne ustawienia i dotychczasowe kontrole konfliktów.
 
 Dodaj skill jako `profiles/<profil>/skills/<skill>/SKILL.md` z frontmatter:
 
@@ -197,6 +235,9 @@ Obsługiwane są stabilne wersje z trzema liczbami bez zer wiodących.
 Wersje prerelease i metadane build nie są obsługiwane. Porównanie jest numeryczne:
 `1.10.0` jest nowsze od `1.9.0`. Zmiana pliku nie zwiększa wersji automatycznie.
 Przy publikowaniu zmian wspólnych wykonaj bump dla wszystkich dotkniętych profili.
+Zmiana definicji w `mcp/servers/` dotyczy tylko profili, które ją wybierają:
+np. zmiana Figmy wymaga świadomego bump Reacta i WordPressa, nie backend-go.
+Nie zwiększa wersji automatycznie i nie zmienia projektów przed ich `update`.
 
 ```bash
 make bump PROFILE=backend-go PART=patch

@@ -80,6 +80,8 @@ class ProfileTests(unittest.TestCase):
         })
         self.assertTrue((self.source / "profiles/backend-python/skills/.gitkeep").is_file())
         self.assertEqual(manager.desired_mcp("backend-python"), {})
+        self.assertEqual(json.loads((self.source / "profiles/backend-python/mcp.json").read_text()),
+                         {"servers": []})
         manager.validate_sources()
         self.assertEqual((self.source / "mcp/example.json").read_bytes(), example)
         manager.apply_profile(self.project, "backend-python")
@@ -250,9 +252,9 @@ class ProfileTests(unittest.TestCase):
 
     def test_mcp_content_and_conflict(self):
         manager.apply_profile(self.project, "backend-go")
-        source = self.source / "profiles/backend-go/mcp.json"
+        source = self.source / "mcp/servers/postgres.json"
         mcp = json.loads(source.read_text())
-        mcp["postgres"]["enabled"] = False
+        mcp["enabled"] = False
         source.write_text(json.dumps(mcp))
         self.assertIn("CONTENT CHANGED WITHOUT VERSION BUMP", self.status_output())
         cfg = self.cfg()
@@ -294,13 +296,13 @@ class ProfileTests(unittest.TestCase):
         manager.apply_profile(self.project, "backend-go")
         rules = self.source / "common/workflow-rules.md"
         rules.write_text(rules.read_text() + "\nUpdated guidance\n")
-        mcp_path = self.source / "profiles/backend-go/mcp.json"
+        mcp_path = self.source / "mcp/servers/postgres.json"
         mcp = json.loads(mcp_path.read_text())
-        mcp["postgres"]["enabled"] = False
+        mcp["enabled"] = False
         mcp_path.write_text(json.dumps(mcp))
         manager.apply_profile(self.project, "backend-go")
         self.assertEqual((self.project / manager.RULE).read_bytes(), rules.read_bytes())
-        expected, _ = manager.configured_mcp(self.project, mcp)
+        expected, _ = manager.configured_mcp(self.project, {"postgres": mcp})
         self.assertEqual(self.cfg()["mcp"]["postgres"], expected["postgres"])
         self.assertIn("UP TO DATE", self.status_output())
 
@@ -571,15 +573,15 @@ class ProfileTests(unittest.TestCase):
                 mcp_runtime.launch(self.project, "novamira")
             execute.assert_not_called()
 
-    def test_validate_accepts_shared_figma_but_rejects_conflicting_definitions(self):
+    def test_validate_profiles_resolve_shared_figma_and_example_detects_changes(self):
         manager.validate_sources()
         manager.validate_sources("wordpress")
         manager.validate_sources("frontend-react")
-        path = self.source / "profiles/wordpress/mcp.json"
+        path = self.source / "mcp/servers/figma.json"
         data = json.loads(path.read_text())
-        data["figma"]["url"] = "https://different.example/mcp"
+        data["url"] = "https://different.example/mcp"
         path.write_text(json.dumps(data))
-        with self.assertRaisesRegex(manager.ProfileError, "Powielona nazwa MCP"):
+        with self.assertRaisesRegex(manager.ProfileError, "mcp/example.json"):
             manager.validate_sources()
 
     def test_switch_from_react_to_wordpress_preserves_shared_figma(self):
@@ -589,6 +591,93 @@ class ProfileTests(unittest.TestCase):
         manager.apply_profile(self.project, "frontend-react")
         self.assertEqual(set(self.cfg()["mcp"]), {"figma"})
         self.assertFalse((self.project / ".opencode/ai-profile/README.md").exists())
+
+    def test_registry_selects_only_explicit_servers_and_never_installs_everything(self):
+        self.assertEqual(set(manager.desired_mcp("backend-go")), {"postgres"})
+        self.assertEqual(set(manager.desired_mcp("frontend-react")), {"figma"})
+        self.assertEqual(set(manager.desired_mcp("wordpress")), {"figma", "novamira"})
+        self.assertEqual(manager.desired_mcp("wordpress")["figma"],
+                         manager.desired_mcp("frontend-react")["figma"])
+        manager.create_profile("no-mcp")
+        self.assertEqual(manager.desired_mcp("no-mcp"), {})
+        # An unused definition is available for selection, not installed implicitly.
+        (self.source / "mcp/servers/unused.json").write_text(json.dumps({
+            "type": "remote", "url": "https://unused.example/mcp",
+        }))
+        manager.validate_sources()
+        manager.apply_profile(self.project, "frontend-react")
+        self.assertEqual(set(self.cfg()["mcp"]), {"figma"})
+        manager.apply_profile(self.project, "no-mcp")
+        self.assertEqual(self.cfg().get("mcp", {}), {})
+
+    def test_shared_registry_change_updates_only_consumers_preserving_local_settings(self):
+        manager.apply_profile(self.project, "frontend-react")
+        local = self.project / mcp_runtime.LOCAL
+        local.write_text(json.dumps({"mcp": {"figma": {"headers": {"X-Project": "project-only"}}}}))
+        manager.apply_profile(self.project, "frontend-react")
+        local_before = local.read_bytes()
+        path = self.source / "mcp/servers/figma.json"
+        data = json.loads(path.read_text())
+        data["url"] = "https://updated.example/mcp"
+        path.write_text(json.dumps(data))
+        self.assertIn("CONTENT CHANGED WITHOUT VERSION BUMP", self.status_output())
+        for profile in ("frontend-react", "wordpress"):
+            self.assertEqual(manager.desired_mcp(profile)["figma"]["url"], data["url"])
+            self.assertNotIn("headers", manager.desired_mcp(profile)["figma"])
+        self.assertNotIn("figma", manager.desired_mcp("backend-go"))
+        manager.apply_profile(self.project, "frontend-react")
+        self.assertEqual(self.cfg()["mcp"]["figma"]["url"], data["url"])
+        self.assertEqual(self.cfg()["mcp"]["figma"]["headers"], {"X-Project": "project-only"})
+        self.assertEqual(local.read_bytes(), local_before)
+        self.assertEqual(json.loads(path.read_text()), data)
+
+    def test_mcp_manifest_rejects_invalid_references_without_project_writes(self):
+        path = self.source / "profiles/frontend-react/mcp.json"
+        for value in ({}, [], {"servers": "figma"}, {"servers": ["figma", "figma"]},
+                      {"servers": ["missing"]}, {"servers": ["../figma"]},
+                      {"servers": ["/figma"]}, {"servers": [None]},
+                      {"servers": [{}]}, {"servers": ["figma"], "figma": {}},
+                      {"figma": {"type": "remote", "url": "https://inline.example/mcp"}}):
+            with self.subTest(value=value):
+                path.write_text(json.dumps(value))
+                with self.assertRaises(manager.ProfileError):
+                    manager.apply_profile(self.project, "frontend-react")
+                self.assertEqual(self.snapshot(), {})
+
+    def test_registry_rejects_symlinks_and_invalid_definitions(self):
+        path = self.source / "mcp/servers/figma.json"
+        for entry in ({}, [], {"type": "local", "command": []}):
+            with self.subTest(entry=entry):
+                path.write_text(json.dumps(entry))
+                with self.assertRaises(mcp_runtime.ConfigError):
+                    manager.apply_profile(self.project, "frontend-react")
+                self.assertEqual(self.snapshot(), {})
+        path.unlink()
+        path.symlink_to(self.source / "mcp/servers/novamira.json")
+        with self.assertRaisesRegex(manager.ProfileError, "symlink"):
+            manager.desired_mcp("frontend-react")
+
+    def test_scoped_validation_ignores_unselected_registry_definitions(self):
+        path = self.source / "mcp/servers/postgres.json"
+        path.write_text("{}")
+        manager.validate_sources("wordpress")
+        with self.assertRaises(mcp_runtime.ConfigError):
+            manager.validate_sources()
+
+    def test_existing_expanded_mcp_state_remains_updateable(self):
+        # Installed state stores complete definitions, never registry references.
+        manager.apply_profile(self.project, "frontend-react")
+        config = self.cfg()
+        config["mcp"]["figma"].pop("disabled")
+        config["mcp"]["figma"]["enabled"] = True
+        (self.project / "opencode.json").write_text(json.dumps(config))
+        state = self.state()
+        state["mcp"]["figma"] = config["mcp"]["figma"]
+        state["mcp_base"]["figma"] = config["mcp"]["figma"]
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        manager.apply_profile(self.project, "frontend-react")
+        self.assertFalse(self.cfg()["mcp"]["figma"]["disabled"])
+        self.assertNotIn("servers", self.state()["mcp_base"])
 
     def test_postgres_command_has_no_dependency_workarounds_or_credentials(self):
         postgres = manager.desired_mcp("backend-go")["postgres"]
@@ -684,9 +773,9 @@ class ProfileTests(unittest.TestCase):
         local = self.local_config({"access_mode": "restricted"})
         before = local.read_bytes()
         manager.apply_profile(self.project, "backend-go")
-        mcp_path = self.source / "profiles/backend-go/mcp.json"
+        mcp_path = self.source / "mcp/servers/postgres.json"
         base = json.loads(mcp_path.read_text())
-        base["postgres"]["command"].append("--transport=stdio")
+        base["command"].append("--transport=stdio")
         mcp_path.write_text(json.dumps(base))
         manager.apply_profile(self.project, "backend-go")
         self.assertEqual(local.read_bytes(), before)
@@ -719,11 +808,11 @@ class ProfileTests(unittest.TestCase):
         manager.apply_profile(self.project, "backend-go")
         old = self.state()
         self.assertEqual(old["mcp_base"]["postgres"], manager.desired_mcp("backend-go")["postgres"])
-        mcp_path = self.source / "profiles/backend-go/mcp.json"
+        mcp_path = self.source / "mcp/servers/postgres.json"
         base = json.loads(mcp_path.read_text())
-        base["postgres"]["command"].append("--new-upstream-flag")
-        base["postgres"]["environment"]["DATABASE_URI"] = "{env:UPSTREAM_DB}"
-        base["postgres"]["enabled"] = False
+        base["command"].append("--new-upstream-flag")
+        base["environment"]["DATABASE_URI"] = "{env:UPSTREAM_DB}"
+        base["enabled"] = False
         mcp_path.write_text(json.dumps(base))
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

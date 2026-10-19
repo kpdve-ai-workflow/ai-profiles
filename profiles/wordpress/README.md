@@ -2,6 +2,9 @@
 
 Jedna instalacja profilu, następnie konfiguracja połączeń dla Twojego projektu.
 Nie używamy Pi. Novamira korzysta z loginu i **hasła aplikacyjnego WordPressa**, bez OAuth.
+Profil wybiera `novamira` i `figma` w swoim `mcp.json`; ich jedyne definicje
+znajdują się w `mcp/servers/`. Figma jest współdzielona z profilem React,
+ale każdy projekt zachowuje własne lokalne ustawienia i połączenie.
 
 ## 1. Zainstaluj profil
 
