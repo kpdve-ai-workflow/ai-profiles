@@ -15,7 +15,7 @@ make install PROFILE=backend-go PROJECT=~/projects/my-api
 make install PROFILE=frontend-react PROJECT=~/projects/my-web
 ```
 
-Profile: `backend-go` (Go + PostgreSQL MCP) i `frontend-react` (React + Figma MCP). W obu automatycznie instalowane są wspólne skille `implementation-breakdown`, `refine-plan` i plugin blokujący zapis.
+Profile: `backend-go` (Go + PostgreSQL MCP) i `frontend-react` (React + Figma MCP). W obu automatycznie instalowane są wspólne skille `make-plan`, `refine-plan` i plugin blokujący zapis.
 
 Instalator tworzy/aktualizuje w **projekcie docelowym**: `.opencode/skills/`, `.opencode/plugins/`, `.opencode/workflow-rules.md`, `.opencode/ai-profile-gate.py`, `.opencode/ai-profile-state.json`, `opencode.json` oraz wpis w `.gitignore`. Innych skilli i MCP nie usuwa. Restartuj sesję OpenCode po zmianie profilu.
 
@@ -33,7 +33,7 @@ ai-profiles/
 │       ├── skills/react-frontend/SKILL.md
 │       └── mcp.json
 ├── common/
-│   ├── skills/implementation-breakdown/SKILL.md
+│   ├── skills/make-plan/SKILL.md
 │   ├── skills/refine-plan/SKILL.md
 │   ├── plugins/approval-gate.js
 │   └── workflow-rules.md
@@ -92,7 +92,7 @@ Bez Makefile działa też: `python3 ~/ai-profiles/profile.py update --project ~/
 
 ## 5. Akceptowanie tasków
 
-`implementation-breakdown` i `refine-plan` przygotowują i doprecyzowują taski **w czacie**. Zapis pozostaje zablokowany, dopóki **Ty** nie otworzysz go w osobnym terminalu:
+`make-plan` i `refine-plan` przygotowują i doprecyzowują taski **w czacie**. Zapis pozostaje zablokowany, dopóki **Ty** nie otworzysz go w osobnym terminalu:
 
 ```bash
 cd ~/ai-profiles

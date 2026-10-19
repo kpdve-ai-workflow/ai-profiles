@@ -21,7 +21,7 @@ export const ApprovalGate = async ({ directory }) => {
       }
       if (!approved) {
         throw new Error(
-          `PLAN_GATE: ${input.tool} blocked. First run implementation-breakdown and refine-plan; ` +
+          `PLAN_GATE: ${input.tool} blocked. First run make-plan and refine-plan; ` +
           `then ask the human to approve a specific TASK in a separate terminal.`
         )
       }

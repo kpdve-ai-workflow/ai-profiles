@@ -11,4 +11,4 @@ metadata:
 - Define API contracts, validation, error behavior, logging and tests before implementation.
 - Propose DB migrations and SQL separately, and obtain explicit approval before any migration.
 - Treat the PostgreSQL MCP as **read-only** context; never perform database writes or schema changes from MCP.
-- Respect the common `implementation-breakdown` -> `refine-plan` -> manual approval workflow.
+- Respect the common `make-plan` -> `refine-plan` -> manual approval workflow.

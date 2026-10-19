@@ -118,6 +118,19 @@ class ProfileTests(unittest.TestCase):
 
     def test_legacy_migration_then_update(self):
         manager.apply_profile(self.project, "backend-go")
+        skills = self.project / ".opencode/skills"
+        legacy_skill = skills / "implementation-breakdown"
+        legacy_skill.mkdir()
+        (legacy_skill / "SKILL.md").write_text(
+            "---\nname: implementation-breakdown\ndescription: Legacy planning skill\n---\n"
+        )
+        shutil.rmtree(skills / "make-plan")
+        # The old MVP installed only SKILL.md, without supporting assets.
+        for skill in (skills / "refine-plan", skills / "go-backend"):
+            content = (skill / "SKILL.md").read_bytes()
+            shutil.rmtree(skill)
+            skill.mkdir()
+            (skill / "SKILL.md").write_bytes(content)
         state_path = self.project / manager.STATE
         state_path.write_text(json.dumps({"profile": "backend-go", "skill": "go-backend", "mcp": "postgres"}))
         (self.project / ".opencode/ai-profile-gate.py").unlink()  # absent in old MVP
@@ -127,6 +140,8 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(self.state()["format"], 1)
         manager.apply_profile(self.project, "backend-go")
         self.assertIn(".opencode/ai-profile-gate.py", self.state()["files"])
+        self.assertTrue((skills / "make-plan/SKILL.md").is_file())
+        self.assertFalse(legacy_skill.exists())
 
     def test_validate_example_mirrors_all_profiles(self):
         manager.validate_sources()
