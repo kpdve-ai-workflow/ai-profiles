@@ -8,6 +8,8 @@ wybranego profilu. Wymagania: Python 3.10+, Git i opcjonalnie Make.
 Uruchamiaj z katalogu sklonowanego `ai-profiles`:
 
 ```bash
+make help
+make create PROFILE=backend-python DESCRIPTION="Backend Python development profile"
 make install PROFILE=backend-go PROJECT=~/projects/my-api
 make status PROJECT=~/projects/my-api
 make update PROJECT=~/projects/my-api
@@ -15,8 +17,23 @@ make pull-update PROJECT=~/projects/my-api
 make switch PROFILE=frontend-react PROJECT=~/projects/my-api
 make uninstall PROJECT=~/projects/my-api
 make validate
+make validate PROFILE=wordpress
 make test
 ```
+
+`make validate PROFILE=<nazwa>` sprawdza metadane i wersję wybranego profilu,
+jego skille wraz ze wspólnymi oraz zgodność jego definicji MCP z `mcp/example.json`.
+Nie sprawdza innych profili. Bez `PROFILE`, `make validate` sprawdza całe repozytorium,
+w tym kolizje nazw MCP i nadmiarowe wpisy w pliku przykładowym.
+Bez Make: `python3 profile.py validate <nazwa>` (lub bez nazwy dla wszystkich).
+
+`make help` (również `python3 profile.py help` lub `./ai-profile --help`) opisuje
+komendy Make oraz wymagane i opcjonalne argumenty, pogrupowane według zastosowania.
+Samo `make` pokazuje tę samą pomoc. W przykładach pomocy zastąp `NAZWA` nazwą
+profilu, a `KATALOG` ścieżką do projektu; `DESCRIPTION` i `PART` są opcjonalne.
+Nie ma domyślnej nazwy profilu: `create`, `install`, `switch` i `bump` wymagają
+jawnego `PROFILE` (w CLI: argumentu nazwy). Make wymaga również `PROJECT` dla
+komend projektowych; CLI domyślnie korzysta z bieżącego katalogu.
 
 `pull-update` wykonuje `git pull --ff-only`, a następnie zwykłe `update`.
 `status` i `update` korzystają z lokalnych źródeł — same nie pobierają zmian z sieci.
@@ -30,6 +47,13 @@ wymaga odblokowania zadania. Aktualizacja usuwa stare zarządzane pliki bramki;
 `approve`, `lock` i `gate-status` są wyłącznie zgodnościowymi aliasami informacyjnymi.
 
 ## Lokalne ustawienia MCP
+
+Profil `wordpress` dostarcza MCP Novamira (Application Password, bez OAuth)
+i Figma. Instalację pluginu w WordPressie wykonujesz ręcznie. Pełna instrukcja:
+[`profiles/wordpress/README.md`](profiles/wordpress/README.md); po instalacji
+również `.opencode/ai-profile/README.md` w projekcie. Novamira pozostaje wyłączona
+do czasu skonfigurowania połączenia. Profile z własnym `README.md` dostarczają
+go jako zarządzany plik `.opencode/ai-profile/README.md`.
 
 Profil zarządza definicją serwera, a projekt własnymi połączeniami i zmiennymi.
 Opcjonalny plik `.opencode/ai-profile.local.json` jest odczytywany przez menedżer
@@ -112,8 +136,22 @@ common/
 └── workflow-rules.md
 ```
 
-Każdy katalog w `profiles/` jest wykrywany automatycznie. Dodając profil,
-utwórz powyższą strukturę oraz metadane:
+Nowy profil utworzysz bez ręcznego pisania metadanych:
+
+```bash
+make create PROFILE=backend-python DESCRIPTION="Backend Python development profile"
+# Bez Make:
+python3 profile.py create backend-python --description "Backend Python development profile"
+```
+
+Nazwa jest wymagana i może zawierać małe litery/cyfry rozdzielone pojedynczymi
+myślnikami. Opis jest opcjonalny (domyślnie `Profil <nazwa>`). Komenda tworzy
+`profile.json` z wersją `1.0.0`, pusty `mcp.json` (`{}`) i `skills/.gitkeep`,
+aby Git zachował pusty katalog skilli. Nie nadpisuje istniejącego profilu,
+nie instaluje go w projekcie ani nie zmienia innych profili.
+
+Każdy katalog w `profiles/` jest wykrywany automatycznie. Możesz też ręcznie
+utworzyć powyższą strukturę oraz metadane:
 
 ```json
 {
@@ -123,8 +161,13 @@ utwórz powyższą strukturę oraz metadane:
 }
 ```
 
-`name` musi odpowiadać nazwie katalogu. `mcp.json` zawiera niepusty obiekt
-definicji z unikalnymi nazwami; ich wspólna suma musi odpowiadać `mcp/example.json`.
+`name` musi odpowiadać nazwie katalogu. `mcp.json` zawiera obiekt
+definicji z unikalnymi nazwami w danym profilu (może być pusty dla profilu bez MCP);
+ich wspólna suma musi odpowiadać `mcp/example.json`. Po dodaniu definicji MCP
+uzupełnij również ten plik przykładowy. Nowy pusty profil tego nie wymaga.
+Różne profile mogą współdzielić nazwę MCP, jeśli definicje są zgodne (np. `figma`).
+Walidacja traktuje historyczne `enabled: true` tak samo jak `disabled: false`;
+różniące się definicje o tej samej nazwie nadal są błędem.
 
 Dodaj skill jako `profiles/<profil>/skills/<skill>/SKILL.md` z frontmatter:
 

@@ -33,6 +33,34 @@ def profile_names() -> list[str]:
     return sorted(p.name for p in (ROOT / "profiles").iterdir() if p.is_dir())
 
 
+def create_profile(profile: str, description: str | None = None) -> None:
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", profile):
+        raise ProfileError("Nazwa profilu musi zawierać małe litery/cyfry rozdzielone pojedynczymi myślnikami")
+    if description is not None and not description.strip():
+        raise ProfileError("Opis profilu nie może być pusty")
+    destination = file_path(ROOT, f"profiles/{profile}")
+    if destination.exists():
+        raise ProfileError(f"Profil już istnieje: {profile}")
+    # Stage the complete scaffold; never merge into an existing profile.
+    with tempfile.TemporaryDirectory(dir=destination.parent, prefix=".create-") as temporary:
+        staged = Path(temporary) / profile
+        (staged / "skills").mkdir(parents=True)
+        (staged / "profile.json").write_bytes(json_bytes({
+            "name": profile, "version": "1.0.0",
+            "description": description.strip() if description is not None else f"Profil {profile}",
+        }))
+        (staged / "mcp.json").write_bytes(json_bytes({}))
+        # Git does not track empty directories; preserve skills after cloning.
+        (staged / "skills" / ".gitkeep").touch()
+        destination.mkdir()
+        try:
+            for source in staged.iterdir():
+                source.rename(destination / source.name)
+        except OSError:
+            raise ProfileError(f"Nie udało się utworzyć profilu: {destination}; sprawdź jego zawartość")
+    print(f"OK: utworzono profil {profile} (1.0.0)")
+
+
 def version_tuple(version: str) -> tuple[int, int, int]:
     if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
         raise ProfileError(f"Nieprawidłowa wersja MAJOR.MINOR.PATCH: {version!r}")
@@ -164,6 +192,8 @@ def desired_files(profile: str) -> dict[str, bytes]:
         if not folder.is_dir():
             raise ProfileError(f"Brak katalogu skills: {folder}")
         for skill in sorted(folder.iterdir()):
+            if skill.name == ".gitkeep" and skill.is_file() and not skill.is_symlink():
+                continue
             if not skill.is_dir() or skill.is_symlink():
                 raise ProfileError(f"Nieprawidłowy katalog skilla: {skill}")
             skill_file = skill / "SKILL.md"
@@ -187,12 +217,15 @@ def desired_files(profile: str) -> dict[str, bytes]:
                     files[rel] = source.read_bytes()
     files[RULE] = (ROOT / "common/workflow-rules.md").read_bytes()
     files[mcp_runtime.LAUNCHER] = (ROOT / "mcp_runtime.py").read_bytes()
+    readme = file_path(ROOT, f"profiles/{profile}/README.md")
+    if readme.is_file():
+        files[".opencode/ai-profile/README.md"] = readme.read_bytes()
     return files
 
 
 def desired_mcp(profile: str) -> dict:
     value = read_json(ROOT / "profiles" / profile / "mcp.json")
-    if not isinstance(value, dict) or not value:
+    if not isinstance(value, dict):
         raise ProfileError(f"Nieprawidłowe MCP dla {profile}")
     mcp_runtime.validate_servers(value)
     return value
@@ -338,6 +371,8 @@ def apply_profile(project: Path, profile: str) -> None:
         cleanup_empty_directories(project, [k for k in old["files"] if k not in files])
     write_bytes(file_path(project, STATE), json_bytes(updated_state))
     print(f"OK: profil {profile} w {project}. Zrestartuj OpenCode.")
+    if ".opencode/ai-profile/README.md" in files:
+        print(f"Instrukcja konfiguracji: {project / '.opencode/ai-profile/README.md'}")
 
 
 def uninstall(project: Path) -> None:
@@ -418,18 +453,41 @@ def status(project: Path) -> None:
     print("Approval gate: " + ("legacy installation; removed on update" if legacy_gate else "not installed"))
 
 
-def validate_sources() -> None:
-    """Verify source layout and that mcp/example.json mirrors actual profile MCPs."""
+def comparable_mcp(entry: dict) -> dict:
+    """Compare shared definitions including the legacy enabled spelling."""
+    result = dict(entry)
+    if "enabled" in result:
+        enabled = result.pop("enabled")
+        result["disabled"] = result.get("disabled", False) or not enabled
+    return result
+
+
+def validate_sources(profile: str | None = None) -> None:
+    """Validate one profile, or the complete source layout and MCP union."""
+    if profile is not None and profile not in profile_names():
+        raise ProfileError(f"Nieznany profil: {profile}")
     all_mcp: dict = {}
-    for profile in profile_names():
-        profile_metadata(profile)
-        desired_files(profile)
-        mcp = desired_mcp(profile)
+    for selected_profile in ([profile] if profile is not None else profile_names()):
+        profile_metadata(selected_profile)
+        desired_files(selected_profile)
+        mcp = desired_mcp(selected_profile)
         for name, entry in mcp.items():
-            if name in all_mcp:
-                raise ProfileError(f"Powielona nazwa MCP: {name}")
-            all_mcp[name] = entry
+            normalized = comparable_mcp(entry)
+            if name in all_mcp and all_mcp[name] != normalized:
+                raise ProfileError(f"Powielona nazwa MCP z różnymi definicjami: {name}")
+            all_mcp[name] = normalized
     example = read_json(ROOT / "mcp/example.json")
+    if (not isinstance(example, dict) or set(example) != {"mcp"}
+            or not isinstance(example["mcp"], dict)
+            or any(not isinstance(entry, dict) for entry in example["mcp"].values())):
+        raise ProfileError("Nieprawidłowy mcp/example.json")
+    example = {"mcp": {name: comparable_mcp(entry) for name, entry in example["mcp"].items()}}
+    if profile is not None:
+        if any(name not in example["mcp"] or example["mcp"][name] != entry
+               for name, entry in all_mcp.items()):
+            raise ProfileError(f"mcp/example.json różni się od profiles/{profile}/mcp.json")
+        print(f"OK: profil {profile}, wspólne skille i definicje MCP są spójne")
+        return
     if example != {"mcp": all_mcp}:
         raise ProfileError("mcp/example.json różni się od profiles/*/mcp.json")
     print("OK: wszystkie skille i definicje MCP są spójne")
@@ -478,24 +536,96 @@ def migrate_legacy(project: Path, accept_existing: bool) -> None:
     print(f"OK: zaadoptowano stary profil {profile}; teraz uruchom update")
 
 
+COMMAND_HELP = """ai-profiles — zarządzanie profilami
+
+TWORZENIE PROFILU
+  make create PROFILE=NAZWA
+    Tworzy profil 1.0.0 z pustym MCP i katalogiem skilli. Nie nadpisuje plików.
+    Opcjonalny opis: DESCRIPTION="Opis profilu"
+
+PRACA Z PROJEKTEM
+  make install PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
+    Instaluje profil w projekcie, który jeszcze go nie ma.
+  make switch PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
+    Zmienia zainstalowany profil na inny.
+  make status PROJECT=SCIEZKA_DO_PROJEKTU
+    Pokazuje wersje i lokalne zmiany.
+  make update PROJECT=SCIEZKA_DO_PROJEKTU
+    Aktualizuje profil z lokalnych źródeł, bez pobierania zmian z sieci.
+  make pull-update PROJECT=SCIEZKA_DO_PROJEKTU
+    Pobiera źródła przez git pull --ff-only, potem aktualizuje profil.
+  make uninstall PROJECT=SCIEZKA_DO_PROJEKTU
+    Usuwa profil, zachowując własne pliki i ustawienia użytkownika.
+
+UTRZYMANIE REPOZYTORIUM
+  make bump PROFILE=NAZWA
+    Zwiększa wersję profilu. Opcjonalnie: PART=patch|minor|major (domyślnie patch).
+  make validate
+    Sprawdza wszystkie profile, skille i konfigurację MCP.
+  make validate PROFILE=NAZWA
+    Sprawdza tylko wybrany profil, wspólne skille i jego wpisy w mcp/example.json.
+    Kolizje między profilami i nadmiarowe wpisy MCP sprawdza pełne make validate.
+  make test
+    Uruchamia testy w tymczasowych kopiach repozytorium.
+  make help
+    Pokazuje pomoc. Samo make również pokazuje pomoc.
+
+ARGUMENTY
+  PROFILE      Wymagany tam, gdzie podano. Nie ma domyślnego profilu.
+               create: nowa nazwa, małe litery/cyfry i pojedyncze myślniki.
+               install/switch/bump/validate: nazwa istniejącego profilu.
+               validate: PROFILE jest opcjonalny; bez niego sprawdza wszystko.
+  PROJECT      Wymagany tam, gdzie podano: istniejący katalog poza ai-profiles.
+  DESCRIPTION  Opcjonalny opis dla create; domyślnie „Profil NAZWA”.
+  PART         Opcjonalny rodzaj zmiany wersji dla bump.
+
+"""
+
+
+class ProfileArgumentParser(argparse.ArgumentParser):
+    def format_help(self) -> str:
+        return COMMAND_HELP
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Zarządzanie profilami OpenCode z lokalnego ai-profiles")
-    parser.add_argument("action", choices=["install", "update", "uninstall", "switch", "status", "validate", "migrate-legacy", "bump"])
-    parser.add_argument("profile", nargs="?", choices=profile_names())
+    parser = ProfileArgumentParser(
+        description="Zarządzanie profilami OpenCode z lokalnego ai-profiles",
+        usage="%(prog)s KOMENDA [NAZWA] [opcje] (pomoc: make help)")
+    parser.add_argument("action", nargs="?", choices=["create", "help", "install", "update", "uninstall", "switch", "status", "validate", "migrate-legacy", "bump"], help="Komenda (domyślnie help)")
+    parser.add_argument("profile", nargs="?", help="Nazwa profilu; wymagana przez create/install/switch/bump")
     parser.add_argument("--project", type=Path, help="Katalog projektu (domyślnie bieżący katalog)")
     parser.add_argument("--accept-existing", action="store_true", help="Świadomie przejmij pliki starego instalatora")
     parser.add_argument("--part", choices=["major", "minor", "patch"], help="Składnik wersji zwiększany przez bump (domyślnie patch)")
+    parser.add_argument("--description", help="Opis nowego profilu (tylko create)")
     opts = parser.parse_args()
     if opts.part is not None and opts.action != "bump":
         parser.error("--part jest dostępne tylko dla bump")
+    if opts.description is not None and opts.action != "create":
+        parser.error("--description jest dostępne tylko dla create")
+    if opts.profile is not None and opts.action not in ("create", "install", "switch", "bump", "validate"):
+        parser.error("Ta komenda nie przyjmuje nazwy profilu")
+    if opts.project is not None and opts.action in (None, "help", "create", "bump", "validate"):
+        parser.error("Ta komenda nie używa --project")
+    if opts.accept_existing and opts.action != "migrate-legacy":
+        parser.error("--accept-existing jest dostępne tylko dla migrate-legacy")
     try:
+        if opts.action in (None, "help"):
+            parser.print_help()
+            return 0
+        if opts.action in ("create", "install", "switch", "bump") and not opts.profile:
+            parser.error(f"{opts.action} wymaga nazwy profilu")
+        if opts.action in ("install", "switch", "bump") and opts.profile not in profile_names():
+            parser.error(f"Nieznany profil: {opts.profile}")
+        if opts.action == "create":
+            create_profile(opts.profile, opts.description)
+            return 0
         if opts.action == "bump":
             if not opts.profile or opts.project is not None or opts.accept_existing:
                 parser.error("bump wymaga nazwy profilu źródłowego; nie używa --project ani --accept-existing")
             bump_profile(opts.profile, opts.part or "patch")
             return 0
         if opts.action == "validate":
-            validate_sources()
+            validate_sources(opts.profile)
             return 0
         project = selected_project(opts.project)
         if opts.action in ("install", "switch"):

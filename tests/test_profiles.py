@@ -72,6 +72,71 @@ class ProfileTests(unittest.TestCase):
                 self.assertEqual(frontend.read_bytes(), other_before)
                 self.assertEqual(list(path.parent.glob(".profile-*.tmp")), [])
 
+    def test_create_profile_is_valid_installable_and_tracked(self):
+        example = (self.source / "mcp/example.json").read_bytes()
+        manager.create_profile("backend-python", "Python backend")
+        self.assertEqual(manager.profile_metadata("backend-python"), {
+            "name": "backend-python", "version": "1.0.0", "description": "Python backend",
+        })
+        self.assertTrue((self.source / "profiles/backend-python/skills/.gitkeep").is_file())
+        self.assertEqual(manager.desired_mcp("backend-python"), {})
+        manager.validate_sources()
+        self.assertEqual((self.source / "mcp/example.json").read_bytes(), example)
+        manager.apply_profile(self.project, "backend-python")
+        self.assertEqual(self.state()["profile"], "backend-python")
+        self.assertFalse((self.project / ".opencode/skills/.gitkeep").exists())
+        manager.apply_profile(self.project, "backend-python")
+        manager.uninstall(self.project)
+
+    def test_create_rejects_invalid_existing_and_symlink_profiles(self):
+        before = {p.relative_to(self.source): p.read_bytes()
+                  for p in (self.source / "profiles").rglob("*") if p.is_file()}
+        for name in ("backend-go", "../outside", "", "Backend", "bad_name", "a/b", "-bad", "bad--name"):
+            with self.subTest(name=name), self.assertRaises(manager.ProfileError):
+                manager.create_profile(name)
+        with self.assertRaises(manager.ProfileError):
+            manager.create_profile("blank", "  ")
+        self.assertEqual(before, {p.relative_to(self.source): p.read_bytes()
+                                for p in (self.source / "profiles").rglob("*") if p.is_file()})
+        (self.source / "profiles/linked").symlink_to(self.project, target_is_directory=True)
+        with self.assertRaisesRegex(manager.ProfileError, "symlink"):
+            manager.create_profile("linked")
+        self.assertEqual(self.snapshot(), {})
+
+    def test_create_and_help_cli_and_make(self):
+        cli = [sys.executable, str(self.source / "profile.py")]
+        for args in (["create", "python-cli"],):
+            subprocess.run(cli + args, cwd=self.source, check=True, capture_output=True, text=True)
+        self.assertEqual(manager.profile_metadata("python-cli")["description"], "Profil python-cli")
+        subprocess.run(["make", "create", "PROFILE=python-make", "DESCRIPTION=Python Make"],
+                       cwd=self.source, check=True, capture_output=True, text=True)
+        self.assertEqual(manager.profile_metadata("python-make")["description"], "Python Make")
+        for command in (cli + ["help"], cli + ["--help"], cli + ["-h"], cli,
+                        ["make", "help"], ["make"]):
+            result = subprocess.run(command, cwd=self.source, check=True, capture_output=True, text=True)
+            self.assertIn("ai-profiles — zarządzanie profilami\n", result.stdout)
+            for noise in ("usage:", "positional arguments:", "options:", "Make:"):
+                self.assertNotIn(noise, result.stdout)
+            for action in ("create", "install", "switch", "status", "update", "pull-update",
+                           "uninstall", "bump", "validate", "test", "help"):
+                self.assertIn(f"make {action}", result.stdout)
+            for text in ("create", "install", "switch", "bump", "pull-update",
+                         "DESCRIPTION", "PART", "PROFILE", "PROJECT"):
+                self.assertIn(text, result.stdout)
+        for action in ("create", "install", "switch", "bump"):
+            for command in (cli + [action], ["make", action, "PROJECT=" + str(self.project), "PROFILE="]):
+                result = subprocess.run(command, cwd=self.source, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+        for args in (["create", "python-cli"], ["create", "../bad"],
+                     ["create", "bad", "--project", str(self.project)],
+                     ["create", "bad", "--part", "patch"],
+                     ["validate", "unknown"], ["help", "--accept-existing"],
+                     ["install", "unknown", "--project", str(self.project)],
+                     ["bump", "python-cli", "--description", "bad"]):
+            result = subprocess.run(cli + args, cwd=self.source, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.snapshot(), {})
+
     def test_bump_rejects_invalid_input_without_writes(self):
         path = self.source / "profiles/backend-go/profile.json"
         before = path.read_bytes()
@@ -389,6 +454,41 @@ class ProfileTests(unittest.TestCase):
         manager.apply_profile(self.project, "backend-go")
         self.assertIn("Approval gate: not installed", self.status_output())
 
+    def test_validate_one_profile_cli_and_make(self):
+        cli = [sys.executable, str(self.source / "profile.py"), "validate"]
+        for command in (cli + ["backend-go"], ["make", "validate", "PROFILE=backend-go"]):
+            result = subprocess.run(command, cwd=self.source, check=True, capture_output=True, text=True)
+            self.assertIn("OK: profil backend-go", result.stdout)
+        for name in ("missing", "../backend-go"):
+            with self.assertRaisesRegex(manager.ProfileError, "Nieznany profil"):
+                manager.validate_sources(name)
+        # A broken unrelated profile must not block scoped validation.
+        (self.source / "profiles/frontend-react/profile.json").write_text("{}")
+        manager.validate_sources("backend-go")
+        with self.assertRaises(manager.ProfileError):
+            manager.validate_sources()
+
+    def test_validate_one_profile_checks_shared_skills_and_mcp_example(self):
+        path = self.source / "mcp/example.json"
+        example = json.loads(path.read_text())
+        name = next(iter(manager.desired_mcp("backend-go")))
+        del example["mcp"][name]
+        path.write_text(json.dumps(example))
+        with self.assertRaisesRegex(manager.ProfileError, "mcp/example.json"):
+            manager.validate_sources("backend-go")
+        example["mcp"][name] = {"type": "local", "command": ["wrong"]}
+        path.write_text(json.dumps(example))
+        with self.assertRaisesRegex(manager.ProfileError, "mcp/example.json"):
+            manager.validate_sources("backend-go")
+        example["mcp"][name] = manager.desired_mcp("backend-go")[name]
+        path.write_text(json.dumps(example))
+        manager.create_profile("empty-profile")
+        manager.validate_sources("empty-profile")
+        skill = next((self.source / "common/skills").glob("*/SKILL.md"))
+        skill.write_text("invalid frontmatter")
+        with self.assertRaisesRegex(manager.ProfileError, "frontmatter"):
+            manager.validate_sources("empty-profile")
+
     def test_validate_example_mirrors_all_profiles(self):
         manager.validate_sources()
         example = self.source / "mcp/example.json"
@@ -397,6 +497,98 @@ class ProfileTests(unittest.TestCase):
         example.write_text(json.dumps(data))
         with self.assertRaisesRegex(manager.ProfileError, "mcp/example.json"):
             manager.validate_sources()
+
+    def test_wordpress_install_delivers_mcp_skills_docs_without_plugin_changes(self):
+        plugin = self.project / "wp-content/plugins/novamira/novamira.php"
+        plugin.parent.mkdir(parents=True)
+        plugin.write_text("existing user-owned plugin")
+        manager.apply_profile(self.project, "wordpress")
+        self.assertEqual(set(self.cfg()["mcp"]), {"novamira", "figma"})
+        self.assertTrue(self.cfg()["mcp"]["novamira"]["disabled"])
+        self.assertFalse(self.cfg()["mcp"]["figma"]["disabled"])
+        for skill in ("mcp-novamira", "mcp-figma", "acf", "styling"):
+            self.assertTrue((self.project / f".opencode/skills/{skill}/SKILL.md").is_file())
+        self.assertEqual((self.project / ".opencode/ai-profile/README.md").read_bytes(),
+                         (self.source / "profiles/wordpress/README.md").read_bytes())
+        self.assertTrue((self.project / ".opencode/skills/mcp-novamira/examples/novamira.env.example").is_file())
+        self.assertFalse((self.project / mcp_runtime.LOCAL).exists())
+        self.assertFalse((self.project / ".env.novamira").exists())
+        with patch.object(mcp_runtime.os, "execvpe") as execute:
+            with self.assertRaisesRegex(mcp_runtime.ConfigError, "disabled"):
+                mcp_runtime.launch(self.project, "novamira")
+            execute.assert_not_called()
+        manager.apply_profile(self.project, "wordpress")
+        manager.uninstall(self.project)
+        self.assertEqual(plugin.read_text(), "existing user-owned plugin")
+
+    def test_wordpress_private_credentials_launch_and_survive_update_uninstall(self):
+        manager.apply_profile(self.project, "wordpress")
+        examples = self.project / ".opencode/skills/mcp-novamira/examples"
+        local = self.project / mcp_runtime.LOCAL
+        local.write_bytes((examples / "ai-profile.local.example.json").read_bytes())
+        private = self.project / ".env.novamira"
+        secret = "abcd efgh test-secret ijkl"
+        private.write_text('WP_API_URL=https://example.test/wp-json/mcp/novamira\n'
+                           'WP_API_USERNAME=operator\n'
+                           f'WP_API_PASSWORD="{secret}"\n')
+        private.chmod(0o600)
+        local_before, env_before = local.read_bytes(), private.read_bytes()
+        manager.apply_profile(self.project, "wordpress")
+        command = ["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"]
+        self.assertEqual(self.state()["mcp_base"]["novamira"]["command"], command)
+        self.assertFalse(self.cfg()["mcp"]["novamira"]["disabled"])
+        self.assertNotIn("environment", self.cfg()["mcp"]["novamira"])
+        with patch.dict(mcp_runtime.os.environ, {}, clear=True), \
+                patch.object(mcp_runtime.os, "chdir"), \
+                patch.object(mcp_runtime.os, "execvpe") as execute:
+            mcp_runtime.launch(self.project, "novamira")
+        executable, args, environment = execute.call_args.args
+        self.assertEqual((executable, args), ("npx", command))
+        self.assertEqual(environment["WP_API_PASSWORD"], secret)
+        self.assertEqual(environment["WP_API_USERNAME"], "operator")
+        self.assertEqual(environment["WP_API_URL"], "https://example.test/wp-json/mcp/novamira")
+        self.assertEqual(environment["OAUTH_ENABLED"], "false")
+        self.assertEqual(environment["NODE_OPTIONS"], "--use-system-ca")
+        for rel in (*self.state()["files"], manager.STATE, "opencode.json"):
+            self.assertNotIn(secret.encode(), (self.project / rel).read_bytes())
+        manager.apply_profile(self.project, "wordpress")
+        manager.uninstall(self.project)
+        self.assertEqual(local.read_bytes(), local_before)
+        self.assertEqual(private.read_bytes(), env_before)
+        self.assertEqual(private.stat().st_mode & 0o777, 0o600)
+
+    def test_wordpress_missing_credentials_fail_before_bridge_starts(self):
+        manager.apply_profile(self.project, "wordpress")
+        local = self.project / mcp_runtime.LOCAL
+        local.write_text(json.dumps({"mcp": {"novamira": {"disabled": False, "env_file": ".env.novamira"}}}))
+        private = self.project / ".env.novamira"
+        with patch.dict(mcp_runtime.os.environ, {}, clear=True), \
+                patch.object(mcp_runtime.os, "execvpe") as execute:
+            with self.assertRaisesRegex(mcp_runtime.ConfigError, "Cannot read env file"):
+                mcp_runtime.launch(self.project, "novamira")
+            private.write_text('WP_API_URL=https://example.test/wp-json/mcp/novamira\nWP_API_USERNAME=operator\n')
+            with self.assertRaisesRegex(mcp_runtime.ConfigError, "WP_API_PASSWORD"):
+                mcp_runtime.launch(self.project, "novamira")
+            execute.assert_not_called()
+
+    def test_validate_accepts_shared_figma_but_rejects_conflicting_definitions(self):
+        manager.validate_sources()
+        manager.validate_sources("wordpress")
+        manager.validate_sources("frontend-react")
+        path = self.source / "profiles/wordpress/mcp.json"
+        data = json.loads(path.read_text())
+        data["figma"]["url"] = "https://different.example/mcp"
+        path.write_text(json.dumps(data))
+        with self.assertRaisesRegex(manager.ProfileError, "Powielona nazwa MCP"):
+            manager.validate_sources()
+
+    def test_switch_from_react_to_wordpress_preserves_shared_figma(self):
+        manager.apply_profile(self.project, "frontend-react")
+        manager.apply_profile(self.project, "wordpress")
+        self.assertEqual(set(self.cfg()["mcp"]), {"novamira", "figma"})
+        manager.apply_profile(self.project, "frontend-react")
+        self.assertEqual(set(self.cfg()["mcp"]), {"figma"})
+        self.assertFalse((self.project / ".opencode/ai-profile/README.md").exists())
 
     def test_postgres_command_has_no_dependency_workarounds_or_credentials(self):
         postgres = manager.desired_mcp("backend-go")["postgres"]

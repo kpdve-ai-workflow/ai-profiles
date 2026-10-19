@@ -1,0 +1,21 @@
+// Plain DOMContentLoaded — no Alpine needed unless the Blade template exposes reactive state
+// (x-show, x-text bound to slide index etc.). If it does, use the Alpine pattern from js-alpine.js.tmpl
+// and move Swiper init inside the Alpine component's init() / $nextTick().
+import { Swiper, Navigation, Pagination } from '@utils/swiper.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.{KEBAB_NAME}').forEach((section) => {
+        const swiperEl = section.querySelector('.swiper');
+        if (!swiperEl) return;
+
+        const total = parseInt(section.dataset.total) || 0;
+
+        new Swiper(swiperEl, {
+            modules: [Navigation, Pagination],
+            loop: total > 1,
+            slidesPerView: 1,
+            spaceBetween: 24,
+            // breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } },
+        });
+    });
+});

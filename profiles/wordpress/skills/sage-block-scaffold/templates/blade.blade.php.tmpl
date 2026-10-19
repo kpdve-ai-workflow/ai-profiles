@@ -1,0 +1,20 @@
+<?php
+/** @var bool $is_preview */
+/** @var string $heading */
+// Add @var declarations for every variable returned by {PASCAL_NAME}Service::getData()
+$is_preview = $is_preview ?? false;
+$atts = ($is_preview) ? '' : ' ' . get_block_wrapper_attributes();
+?>
+<div<?php echo $atts; ?>>
+  <section class="{KEBAB_NAME} flex flex-col gap-6 lg:gap-8">
+
+    @if ($heading)
+      <h2 class="text-3xl font-medium leading-none text-dark lg:text-4xl">
+        {{ $heading }}
+      </h2>
+    @endif
+
+    {{-- TODO: add block content here --}}
+
+  </section>
+</div>

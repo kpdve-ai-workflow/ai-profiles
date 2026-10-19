@@ -10,7 +10,19 @@
     "figma": {
       "type": "remote",
       "url": "https://mcp.figma.com/mcp",
-      "enabled": true
+      "disabled": false
+    },
+    "novamira": {
+      "type": "local",
+      "command": ["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"],
+      "disabled": true,
+      "environment": {
+        "WP_API_URL": "{env:WP_API_URL}",
+        "WP_API_USERNAME": "{env:WP_API_USERNAME}",
+        "WP_API_PASSWORD": "{env:WP_API_PASSWORD}",
+        "OAUTH_ENABLED": "false",
+        "NODE_OPTIONS": "--use-system-ca"
+      }
     }
   }
 }

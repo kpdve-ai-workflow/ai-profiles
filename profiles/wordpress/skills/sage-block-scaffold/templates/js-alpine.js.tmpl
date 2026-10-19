@@ -1,0 +1,8 @@
+// Add x-data="{CAMEL_NAME}" to the root element in the Blade template.
+document.addEventListener('alpine:init', () => {
+  window.Alpine.data('{CAMEL_NAME}', () => ({
+    init() {
+      // Runs once when Alpine initializes the component.
+    },
+  }));
+});

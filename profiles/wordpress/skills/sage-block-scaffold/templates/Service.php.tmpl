@@ -1,0 +1,54 @@
+<?php
+
+namespace App\Services;
+
+class {PASCAL_NAME}Service
+{
+    public function getData(): array
+    {
+        return [
+            'heading' => $this->getString('heading'),
+            // Add more fields — use helpers below; delete unused ones.
+        ];
+    }
+
+    private function getString(string $field): string
+    {
+        $value = get_field($field);
+
+        return is_string($value) ? trim($value) : '';
+    }
+
+    private function getImage(string $field): array
+    {
+        $image = get_field($field);
+        if (! is_array($image)) {
+            return ['url' => '', 'alt' => ''];
+        }
+
+        return [
+            'url' => is_string($image['url'] ?? null) ? esc_url($image['url']) : '',
+            'alt' => is_string($image['alt'] ?? null) ? $image['alt'] : '',
+        ];
+    }
+
+    private function normalizeButton(mixed $btn): array
+    {
+        if (! is_array($btn)) {
+            return ['label' => '', 'url' => '', 'open_in_new_tab' => false];
+        }
+
+        return [
+            'label'           => is_string($btn['label'] ?? null) ? trim($btn['label']) : '',
+            'url'             => is_string($btn['url'] ?? null) ? trim($btn['url']) : '',
+            'open_in_new_tab' => filter_var($btn['open_in_new_tab'] ?? false, FILTER_VALIDATE_BOOLEAN),
+        ];
+    }
+
+    private function getRepeater(string $field, callable $normalize): array
+    {
+        $rows = get_field($field);
+
+        return is_array($rows) ? array_map($normalize, $rows) : [];
+    }
+}

@@ -1,0 +1,8 @@
+{
+  "mcp": {
+    "novamira": {
+      "disabled": false,
+      "env_file": ".env.novamira"
+    }
+  }
+}
