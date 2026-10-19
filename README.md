@@ -58,6 +58,11 @@ włączonego MCP, potem używa cache Docker. Pełna instrukcja:
 również `.opencode/ai-profile/README.md` w projekcie. Novamira i MariaDB pozostają wyłączone
 do czasu skonfigurowania połączenia. Profile z własnym `README.md` dostarczają
 go jako zarządzany plik `.opencode/ai-profile/README.md`.
+WordPress dostarcza również `.opencode/ai-profile/scripts/restore-updraft.py`
+do importu pobranej bazy UpdraftPlus do lokalnego DDEV. Domyślnie pokazuje plan;
+zapis wymaga `--apply`, potwierdzenia projektu i poprawnego backupu lokalnej bazy.
+WP-CLI działa w kontenerze DDEV — nie wymaga instalacji na hoście. Szczegóły
+i ograniczenia multisite są w README profilu.
 
 Profil zarządza definicją serwera, a projekt własnymi połączeniami i zmiennymi.
 Opcjonalny plik `.opencode/ai-profile.local.json` jest odczytywany przez menedżer
@@ -210,6 +215,10 @@ Instalator dostarcza je do `.opencode/mcp/<nazwa>/` tylko profilom wybierającym
 serwer. Pliki podlegają tym samym hashom, kontroli konfliktów i usuwaniu co skille.
 Nie przechowuj tam sekretów, cache ani artefaktów budowy. Rejestr pozostaje źródłem
 wyboru serwerów; obecność launchera nie włącza MCP automatycznie.
+Narzędzia użytkownika należące do konkretnego profilu umieszczaj w
+`profiles/<profil>/scripts/`; są dostarczane do `.opencode/ai-profile/scripts/`
+z kontrolą hashy i bez automatycznego wykonywania. Nie umieszczaj narzędzi
+administracyjnych ani szablonów konfiguracji w skillach.
 
 Własne profile ze starym formatem inline przenieś do rejestru i zastąp ich `mcp.json`
 listą `servers`. Istniejących instalacji projektowych nie trzeba migrować ręcznie:

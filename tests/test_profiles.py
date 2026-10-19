@@ -676,6 +676,36 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(manager.ProfileError, "symlink"):
             manager.desired_files("wordpress")
 
+    def test_wordpress_scripts_are_installed_without_running_and_protected(self):
+        relative = ".opencode/ai-profile/scripts/restore-updraft.py"
+        self.assertNotIn(relative, manager.desired_files("frontend-react"))
+        manager.apply_profile(self.project, "wordpress")
+        script = self.project / relative
+        self.assertTrue(script.is_file())
+        for helper in ("local-guard.php", "local-safety.php"):
+            self.assertTrue((script.parent / helper).is_file())
+        result = subprocess.run([sys.executable, str(script), "--help"], cwd=self.base,
+                                capture_output=True, text=True, check=True)
+        self.assertIn("--apply", result.stdout)
+        self.assertIn("--map", result.stdout)
+        self.assertFalse((self.project / "wp-content/mu-plugins/ai-profile-local-safety.php").exists())
+        original = script.read_bytes()
+        script.write_bytes(original + b"\n# user change\n")
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Konflikt"):
+            manager.apply_profile(self.project, "wordpress")
+        self.assertEqual(self.snapshot(), before)
+        script.write_bytes(original)
+        manager.apply_profile(self.project, "frontend-react")
+        self.assertFalse(script.exists())
+
+    def test_profile_scripts_reject_symlinks(self):
+        script = self.source / "profiles/wordpress/scripts/local-guard.php"
+        script.unlink()
+        script.symlink_to(self.source / "profile.py")
+        with self.assertRaisesRegex(manager.ProfileError, "symlink"):
+            manager.desired_files("wordpress")
+
     def test_validate_profiles_resolve_shared_figma_and_example_detects_changes(self):
         manager.validate_sources()
         manager.validate_sources("wordpress")

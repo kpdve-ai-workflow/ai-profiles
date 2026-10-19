@@ -235,6 +235,18 @@ def desired_files(profile: str) -> dict[str, bytes]:
             if argument.startswith(".opencode/mcp/") and argument not in files:
                 raise ProfileError(f"Brak zarządzanego pliku launchera MCP: {argument}")
     readme = file_path(ROOT, f"profiles/{profile}/README.md")
+    scripts = file_path(ROOT, f"profiles/{profile}/scripts")
+    if scripts.exists():
+        if not scripts.is_dir():
+            raise ProfileError(f"Nieprawidłowy katalog scripts: {profile}")
+        for source in sorted(scripts.rglob("*")):
+            if source.is_symlink():
+                raise ProfileError(f"Skrypt profilu używa symlinka: {source}")
+            if "__pycache__" in source.relative_to(scripts).parts or source.suffix == ".pyc":
+                continue
+            if source.is_file():
+                rel = (Path(".opencode/ai-profile/scripts") / source.relative_to(scripts)).as_posix()
+                files[rel] = source.read_bytes()
     if readme.is_file():
         files[".opencode/ai-profile/README.md"] = readme.read_bytes()
     return files

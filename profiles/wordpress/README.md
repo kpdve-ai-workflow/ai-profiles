@@ -26,7 +26,8 @@ Instalacja dostarcza:
 - launcher MariaDB `.opencode/mcp/mariadb/launch.py`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
 - tę instrukcję wraz z przykładami konfiguracji w `.opencode/ai-profile/README.md`;
-- skill SQL w `.opencode/skills/mcp-mariadb/`.
+- skill SQL w `.opencode/skills/mcp-mariadb/`;
+- skrypt importu UpdraftPlus i jego pliki pomocnicze w `.opencode/ai-profile/scripts/`.
 
 **Novamira i MariaDB są początkowo wyłączone**, aby instalacja działała bez sekretów
 i uruchomionego WordPressa. Figma jest skonfigurowana, ale wymaga autoryzacji.
@@ -327,7 +328,151 @@ Novamiry czy kluczy embeddingów. Administratorzy demona Docker mogą odczytać
 SQL i parametry: nie umieszczaj sekretów w zapytaniach ani nie publikuj pełnych logów.
 Serwer WWW musi blokować dostęp HTTP do `.env*` i `.opencode/`.
 
-## 9. Aktualizacje, odinstalowanie i diagnostyka
+## 9. Import bazy UpdraftPlus do lokalnego DDEV
+
+Profil dostarcza skrypt **`restore-updraft.py`**. Pobierasz plik bazy z UpdraftPlus
+ręcznie, wskazujesz jego ścieżkę, a narzędzie wykonuje lokalny backup, import
+i dostosowanie URL. To **zastąpienie całej bazy `db`**, nie dopisanie rekordów
+ani synchronizacja wybranych tabel. Nie używa MCP i nie pobiera nic z produkcji.
+Sama instalacja/aktualizacja profilu nigdy nie uruchamia importu.
+
+### Wymagania
+
+- Python 3.10+ na hoście Linux/macOS, Docker i DDEV oraz uruchomiony projekt.
+- **Nie instalujesz globalnie WP-CLI.** Korzystamy z WP-CLI w kontenerze `web`:
+  `ddev exec -- wp ...`. Standardowy obraz webowy DDEV dostarcza WP-CLI.
+- Zainstalowany/zaktualizowany profil WordPress i standardowy WordPress
+  z `wp-config.php` oraz `wp-content/` w docroot DDEV.
+- Istniejąca, zainicjalizowana lokalna baza WordPressa `db`, na usłudze `db`
+  (`DB_HOST=db` lub `db:3306`). Skrypt nie działa z produkcyjnym/remote DB_HOST.
+- `WP_ENVIRONMENT_TYPE` ustawione na `local` w lokalnym wp-config lub środowisku.
+  Skrypt nie zmienia sam plików konfiguracyjnych WordPressa.
+- Pełny, **zaufany i nieszyfrowany** backup bazy `.sql` lub `.gz`. Nie ZIP z plikami,
+  nie `.crypt`, nie pojedynczy fragment podzielonej bazy. Prefiks tabel i tryb
+  single-site/multisite muszą odpowiadać lokalnej instalacji.
+- Każdy docelowy host musi już występować w `ddev describe`, również host BIP.
+  Skrypt nie dodaje hostów i nie zmienia topologii/config DDEV.
+
+Ta wersja nie obsługuje pustej bazy startowej, automatycznej zmiany prefiksu,
+Bedrock ani niestandardowych ścieżek WP_CONTENT_DIR/WPMU_PLUGIN_DIR.
+SQL z backupu jest kodem wykonywanym w lokalnej bazie: kontrola formatu nie jest
+sandboxem ani pełnym audytem bezpieczeństwa dumpa. Nie importuj nieznanych plików.
+
+### Najpierw plan — bez importu
+
+W katalogu projektu, po aktualizacji profilu:
+
+```bash
+python3 .opencode/ai-profile/scripts/restore-updraft.py \
+  ~/Downloads/backup-twoja-strona-db.gz \
+  --project "$PWD" \
+  --map https://twoja-strona.pl=https://moj-wordpress.ddev.site
+```
+
+Dla multisite podaj **każdą witrynę**, np. dodatkowo:
+
+```bash
+python3 .opencode/ai-profile/scripts/restore-updraft.py \
+  ~/Downloads/backup-twoja-strona-db.gz \
+  --project "$PWD" \
+  --map https://twoja-strona.pl=https://moj-wordpress.ddev.site \
+  --map https://bip.twoja-strona.pl=https://bip-moj-wordpress.ddev.site
+```
+
+Mapowanie obejmuje origin URL (schemat + host + opcjonalny port), bez ścieżek.
+Ścieżki witryn są zachowywane. Jeśli źródło używa HTTP i HTTPS, podaj oba warianty
+jako osobne `--map`. Jedna domena źródłowa nie może wskazywać różnych hostów,
+a różne domeny nie mogą zostać scalone pod jednym hostem. Nie używaj mapowań,
+w których nowy URL zawiera stary lub prowadzi do kolejnej zamiany.
+
+Plan sprawdza projekt, połączenie, prefiks/tryb dumpa, integralność gzip i pokazuje
+mapowania. **Nie importuje SQL, nie tworzy backupu i nie zapisuje ochrony MU.**
+To nie jest symulacja wykonania całego SQL: pełna topologia i kompletność mapowań
+home/siteurl są weryfikowane dopiero po imporcie. Brakujące mapowanie przerywa
+dalsze zmiany — lokalna baza jest wtedy już zastąpiona, a backup pozostaje dostępny.
+
+### Wykonanie
+
+Do tej samej komendy dopisz `--apply`. Skrypt pokaże cel i poprosi o wpisanie
+**nazwy projektu DDEV**. Nie ma flagi pomijającej potwierdzenie.
+
+Następnie:
+
+1. Ponownie sprawdzi źródło/cel i zablokuje równoległy import tym samym skryptem.
+2. Skopiuje wejściowy dump do prywatnego katalogu, sprawdzając SHA-256.
+3. Wykona `ddev export-db` i zweryfikuje backup przed uruchomieniem `import-db`.
+4. Doda lokalną ochronę MU (poniżej) i zastąpi całą lokalną bazę `db`.
+5. Odczyta faktyczne witryny i sieci multisite oraz sprawdzi wszystkie mapowania.
+6. Dostosuje strukturalne domeny/home/siteurl; resztę URL zmieni przez
+   `wp search-replace --precise --all-tables-with-prefix --skip-columns=guid`.
+   WP-CLI obsługuje serializowane dane — nie robimy ślepej zamiany w pliku SQL.
+7. Sprawdzi zamiany przez kolejne `--dry-run`, zweryfikuje URL/blogi/sieci,
+   wyłączy indeksowanie (`blog_public=0`) i sprawdzi `wp core is-installed`.
+
+Nie edytuje `wp-config.php`, stałych WP_HOME/WP_SITEURL/DOMAIN_CURRENT_SITE,
+grantów SQL, motywu, uploadów ani kodu pluginu Novamira. Nie resetuje dodatkowo
+haseł; konta i hasła WordPressa są jednak zastępowane zawartością dumpa.
+Stałe konfiguracyjne i ścieżki sieci muszą pasować do planowanej lokalnej topologii.
+GUID-y pozostają bez zmian. Nie ma gwarancji naprawienia każdego cache/pluginowego
+formatu danych; przed rozpoczęciem zwykłej pracy sprawdź frontend i panel.
+
+### Ochrona przed lokalną wysyłką
+
+Skrypt tworzy `wp-content/mu-plugins/ai-profile-local-safety.php`. Plik:
+
+- jest aktywny wyłącznie przy `IS_DDEV_PROJECT=true`;
+- blokuje `wp_mail`, zaplanowane zadania WP-Cron i zewnętrzne żądania przez
+  WordPress HTTP API, w tym webhooki używające tego API;
+- pozostaje po imporcie, aby samo otwarcie witryny nie uruchomiło tych integracji.
+
+Nie nadpisujemy pliku o innej zawartości. Dodaj lokalny plik do projektowego
+`.gitignore`, jeśli nie chcesz go wersjonować:
+
+```gitignore
+/wp-content/mu-plugins/ai-profile-local-safety.php
+```
+
+To nie jest firewall: osobne workery, systemowy cron, drop-iny i pluginy używające
+bezpośrednio cURL/SMTP mogą ominąć filtry WP. Przed importem zatrzymaj lokalne
+workery i nie otwieraj witryny w trakcie operacji. Sprawdź również lokalne
+ustawienia Redis/cache i usług zewnętrznych. Skrypt nie wykonuje globalnego
+`wp cache flush`, który mógłby naruszyć współdzielony cache.
+
+### Backup i przerwany import
+
+Backup pozostaje poza repozytorium/docroot:
+`$XDG_STATE_HOME/ai-profiles/wordpress-backups/<projekt>/restore-*/before-import.sql.gz`
+(domyślnie `~/.local/state/ai-profiles/wordpress-backups/`). Katalog pojedynczego
+importu ma prawa `700`, plik backupu `600`. Ścieżka jest wypisywana przed importem.
+Kopia wejściowego dumpa jest usuwana po zakończeniu/przerwaniu operacji.
+Oryginalnego pliku w Downloads nie zmieniamy.
+
+Import nie jest transakcją. Przy błędzie **nie ma automatycznego rollbacku**:
+skrypt wypisze konkretną komendę odtworzenia zachowanego backupu, np.:
+
+```bash
+cd /sciezka/do/projektu
+ddev import-db --database=db --file=/prywatna/sciezka/before-import.sql.gz
+```
+
+Blokada chroni tylko przed drugim uruchomieniem tego skryptu, nie przed innym
+klientem SQL czy importem. Nie uruchamiaj równolegle innych operacji zapisu.
+Przy awarii procesu/systemu kopia wejściowa może pozostać w prywatnym katalogu.
+Backupów nie commituj ani nie publikuj — zawierają dane i sekrety witryny.
+
+### Po imporcie
+
+- Sprawdź wszystkie lokalne hosty, panel, media, linki i cache projektu.
+- Pliki uploadów, pluginów i motywu nie są odtwarzane przez backup samej bazy.
+- W panelu Novamiry ponownie włącz AI Abilities dla lokalnej domeny.
+- Import może zastąpić lokalne konta i hasła aplikacyjne. Utwórz nowe lokalne
+  Application Password i uzupełnij `.env.novamira`; skrypt nie kopiuje sekretów
+  kont ani nie tworzy automatycznie użytkowników.
+- Zweryfikuj lokalną ochronę mail/HTTP/cron przed ewentualnym usunięciem MU-pluginu.
+- `make uninstall` usuwa skrypt dostarczony z profilem, ale nie usuwa backupów
+  ani ochrony MU, którą importer utworzył poza zarządzanymi plikami profilu.
+
+## 10. Aktualizacje, odinstalowanie i diagnostyka
 
 ```bash
 make status PROJECT=/sciezka/do/projektu
