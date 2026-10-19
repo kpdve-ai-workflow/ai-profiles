@@ -1,0 +1,8 @@
+{
+  "postgres": {
+    "type": "local",
+    "command": ["uvx", "postgres-mcp", "--access-mode=restricted"],
+    "enabled": true,
+    "environment": {"DATABASE_URI": "{env:DATABASE_URI}"}
+  }
+}
