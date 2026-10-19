@@ -67,6 +67,22 @@ a dla zdalnego MCP także `url`, `headers` i `oauth`. Nie można zmienić typu t
 ani skonfigurować tym plikiem MCP niezarządzanego przez profil — takie serwery
 konfiguruj niezależnie w OpenCode.
 
+PostgreSQL MCP domyślnie używa `unrestricted` (read/write, w granicach uprawnień
+użytkownika bazy). Lokalny wybór trybu nie wymaga nadpisania komendy:
+
+```json
+{"mcp": {"postgres": {"access_mode": "restricted"}}}
+```
+
+Dozwolone są `restricted` i `unrestricted`. Jedynym źródłem trybu jest pole
+`access_mode`, domyślnie `unrestricted`. Adapter usuwa stary argument trybu
+z `command` i przekazuje dokładnie jeden `--access-mode=...` wyliczony z tego pola.
+Także stare lokalne `--access-mode=restricted` zostaje zastąpione; aby wybrać
+read-only, ustaw jawnie `access_mode: "restricted"`. Pole `access_mode` jest
+ustawieniem ai-profiles, nie polem OpenCode. Powielone argumenty oraz błędne
+wartości powodują błąd przed zapisem lub uruchomieniem.
+Read/write nie oznacza zgody na niezamówione operacje destrukcyjne ani migracje.
+
 `update` nakłada lokalne ustawienia na aktualną definicję centralną. Gdy upstream
 zmienia nadpisane pole, wyświetla ostrzeżenie bez ujawniania wartości; lokalne ustawienie
 wygrywa. Zmiany pliku lokalnego nie są konfliktem. Nie edytuj wygenerowanych wpisów

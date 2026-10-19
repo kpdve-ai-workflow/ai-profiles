@@ -402,8 +402,9 @@ class ProfileTests(unittest.TestCase):
         postgres = manager.desired_mcp("backend-go")["postgres"]
         self.assertEqual(postgres["command"], [
             "docker", "run", "-i", "--rm", "-e", "DATABASE_URI",
-            "crystaldba/postgres-mcp", "--access-mode=restricted"
+            "crystaldba/postgres-mcp"
         ])
+        self.assertEqual(postgres["access_mode"], "unrestricted")
         self.assertEqual(postgres["environment"], {"DATABASE_URI": "{env:DATABASE_URI}"})
 
     def test_docker_network_override_passes_connection_only_in_environment(self):
@@ -431,6 +432,89 @@ class ProfileTests(unittest.TestCase):
         path.write_text(json.dumps({"mcp": {"postgres": postgres}}))
         return path
 
+    def test_postgres_access_mode_default_and_local_settings(self):
+        base = manager.desired_mcp("backend-go")
+        effective, _ = mcp_runtime.resolve(self.project, base)
+        self.assertEqual(effective["postgres"]["command"][-1], "--access-mode=unrestricted")
+        for mode in ("restricted", "unrestricted"):
+            with self.subTest(mode=mode):
+                self.local_config({"access_mode": mode})
+                effective, _ = mcp_runtime.resolve(self.project, base)
+                flags = [arg for arg in effective["postgres"]["command"] if arg.startswith("--access-mode")]
+                self.assertEqual(flags, [f"--access-mode={mode}"])
+                manager.apply_profile(self.project, "backend-go")
+                self.assertNotIn("access_mode", self.cfg()["mcp"]["postgres"])
+
+    def test_legacy_command_mode_is_replaced_by_default(self):
+        for arguments in (["--access-mode=restricted"], ["--access-mode", "restricted"],
+                          ["--access-mode=unrestricted"], []):
+            with self.subTest(arguments=arguments):
+                self.local_config({"command": ["postgres-mcp", *arguments]})
+                effective, _ = mcp_runtime.resolve(self.project, manager.desired_mcp("backend-go"))
+                self.assertEqual(effective["postgres"]["command"], ["postgres-mcp", "--access-mode=unrestricted"])
+        self.local_config({"access_mode": "restricted", "command": ["postgres-mcp", "--access-mode", "restricted"]})
+        effective, _ = mcp_runtime.resolve(self.project, manager.desired_mcp("backend-go"))
+        self.assertEqual(effective["postgres"]["command"], ["postgres-mcp", "--access-mode=restricted"])
+
+    def test_access_mode_overrides_legacy_command_argument(self):
+        for mode, old_argument in (("unrestricted", "restricted"), ("restricted", "unrestricted")):
+            with self.subTest(mode=mode):
+                self.local_config({"access_mode": mode, "command": ["postgres-mcp", "--access-mode", old_argument]})
+                manager.apply_profile(self.project, "backend-go")
+                with patch.dict(mcp_runtime.os.environ, {"DATABASE_URI": "test-connection"}), \
+                        patch.object(mcp_runtime.os, "chdir"), patch.object(mcp_runtime.os, "execvpe") as execute:
+                    mcp_runtime.launch(self.project, "postgres")
+                self.assertEqual(execute.call_args.args[1], ["postgres-mcp", f"--access-mode={mode}"])
+
+    def test_invalid_access_mode_never_writes_or_launches(self):
+        manager.apply_profile(self.project, "backend-go")
+        invalid = [
+            {"access_mode": value} for value in ("invalid", "", None, 1, True, [], {})
+        ] + [
+            {"command": ["postgres-mcp", "--access-mode=invalid"]},
+            {"command": ["postgres-mcp", "--access-mode"]},
+            {"command": ["postgres-mcp", "--access-mode=restricted", "--access-mode=unrestricted"]},
+            {"command": ["postgres-mcp", "--access-mode=restricted", "--access-mode=restricted"]},
+        ]
+        for override in invalid:
+            with self.subTest(override=override):
+                self.local_config(override)
+                before = self.snapshot()
+                with self.assertRaises(mcp_runtime.ConfigError):
+                    manager.apply_profile(self.project, "backend-go")
+                self.assertEqual(before, self.snapshot())
+                with patch.object(mcp_runtime.os, "execvpe") as execute:
+                    with self.assertRaises(mcp_runtime.ConfigError):
+                        mcp_runtime.launch(self.project, "postgres")
+                    execute.assert_not_called()
+
+    def test_access_mode_survives_update_and_runtime_receives_single_flag(self):
+        local = self.local_config({"access_mode": "restricted"})
+        before = local.read_bytes()
+        manager.apply_profile(self.project, "backend-go")
+        mcp_path = self.source / "profiles/backend-go/mcp.json"
+        base = json.loads(mcp_path.read_text())
+        base["postgres"]["command"].append("--transport=stdio")
+        mcp_path.write_text(json.dumps(base))
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(local.read_bytes(), before)
+        with patch.dict(mcp_runtime.os.environ, {"DATABASE_URI": "test-connection"}), \
+                patch.object(mcp_runtime.os, "chdir"), patch.object(mcp_runtime.os, "execvpe") as execute:
+            mcp_runtime.launch(self.project, "postgres")
+        command = execute.call_args.args[1]
+        self.assertEqual(command[-1], "--access-mode=restricted")
+        self.assertEqual(sum(arg.startswith("--access-mode") for arg in command), 1)
+        self.assertIn("--transport=stdio", command)
+
+    def test_access_mode_only_supported_for_local_postgres(self):
+        local = self.project / mcp_runtime.LOCAL
+        local.parent.mkdir()
+        local.write_text(json.dumps({"mcp": {"figma": {"access_mode": "unrestricted"}}}))
+        before = self.snapshot()
+        with self.assertRaisesRegex(mcp_runtime.ConfigError, "only for local postgres"):
+            manager.apply_profile(self.project, "frontend-react")
+        self.assertEqual(before, self.snapshot())
+
     def test_local_overrides_survive_update_and_uninstall(self):
         path = self.local_config({
             "env_file": ".env.stage",
@@ -457,7 +541,7 @@ class ProfileTests(unittest.TestCase):
         self.assertNotIn("local-secret", output.getvalue())
         self.assertFalse(self.cfg()["mcp"]["postgres"]["enabled"])
         effective, _ = mcp_runtime.resolve(self.project, self.state()["mcp_base"])
-        self.assertEqual(effective["postgres"]["command"], ["custom-server", "--read-only"])
+        self.assertEqual(effective["postgres"]["command"], ["custom-server", "--read-only", "--access-mode=unrestricted"])
         self.assertEqual((path.read_bytes(), env.read_bytes()), original)
         for rel in [manager.STATE, "opencode.json"]:
             self.assertNotIn("local-secret", (self.project / rel).read_text())
@@ -528,7 +612,7 @@ class ProfileTests(unittest.TestCase):
                 patch.object(mcp_runtime.os, "chdir"), patch.object(mcp_runtime.os, "execvpe") as execute:
             mcp_runtime.launch(self.project, "postgres")
         executable, command, environment = execute.call_args.args
-        self.assertEqual((executable, command), ("test-server", ["test-server"]))
+        self.assertEqual((executable, command), ("test-server", ["test-server", "--access-mode=unrestricted"]))
         self.assertEqual(environment["DATABASE_URI"], "test-value")
         before = self.snapshot()
         manager.apply_profile(self.project, "backend-go")
@@ -602,7 +686,7 @@ class ProfileTests(unittest.TestCase):
         self.local_config({"command": ["replacement"], "environment": {"EXTRA": "extra"}})
         base = manager.desired_mcp("backend-go")
         effective, _ = mcp_runtime.resolve(self.project, base)
-        self.assertEqual(effective["postgres"]["command"], ["replacement"])
+        self.assertEqual(effective["postgres"]["command"], ["replacement", "--access-mode=unrestricted"])
         self.assertEqual(effective["postgres"]["environment"], {
             "DATABASE_URI": "{env:DATABASE_URI}", "EXTRA": "extra"
         })

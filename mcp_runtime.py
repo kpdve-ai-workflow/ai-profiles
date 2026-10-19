@@ -15,7 +15,8 @@ STATE = ".opencode/ai-profile-state.json"
 LAUNCHER = ".opencode/ai-profile-mcp.py"
 ENV_REFERENCE = re.compile(r"\{env:([A-Za-z_][A-Za-z0-9_]*)\}")
 FIELDS = {"type", "command", "environment", "env_file", "enabled", "disabled",
-          "cwd", "url", "headers", "oauth", "timeout", "codemode", "protocol"}
+           "cwd", "url", "headers", "oauth", "timeout", "codemode", "protocol", "access_mode"}
+ACCESS_MODES = ("restricted", "unrestricted")
 
 
 class ConfigError(Exception):
@@ -68,6 +69,38 @@ def merge(base: dict, override: dict) -> dict:
     return result
 
 
+def split_access_mode(command: list[str]) -> tuple[list[str], str | None]:
+    """Accept both CLI spellings; reject ambiguous or malformed mode arguments."""
+    remaining = []
+    modes = []
+    index = 0
+    while index < len(command):
+        argument = command[index]
+        if argument == "--access-mode":
+            index += 1
+            if index == len(command):
+                raise ConfigError("Missing PostgreSQL --access-mode value")
+            modes.append(command[index])
+        elif argument.startswith("--access-mode="):
+            modes.append(argument.split("=", 1)[1])
+        else:
+            remaining.append(argument)
+        index += 1
+    if len(modes) > 1:
+        raise ConfigError("Duplicate PostgreSQL --access-mode arguments; specify exactly one mode")
+    if modes and modes[0] not in ACCESS_MODES:
+        raise ConfigError("PostgreSQL --access-mode must be restricted or unrestricted")
+    return remaining, modes[0] if modes else None
+
+
+def apply_access_mode(entry: dict) -> None:
+    # The dedicated setting is the only authority. Old CLI arguments are removed
+    # rather than silently retaining a different mode in project overrides.
+    command, _ = split_access_mode(entry["command"])
+    mode = entry.get("access_mode", "unrestricted")
+    entry["command"] = [*command, f"--access-mode={mode}"]
+
+
 def validate_servers(servers: dict, project: Path | None = None) -> None:
     for name, entry in servers.items():
         if not isinstance(entry, dict) or entry.get("type") not in ("local", "remote"):
@@ -78,6 +111,13 @@ def validate_servers(servers: dict, project: Path | None = None) -> None:
                 raise ConfigError(f"MCP command must be a nonempty string array: {name}")
         elif not isinstance(entry.get("url"), str) or not entry["url"]:
             raise ConfigError(f"Missing remote MCP URL: {name}")
+        if "access_mode" in entry:
+            if name != "postgres" or entry["type"] != "local":
+                raise ConfigError("access_mode is supported only for local postgres MCP")
+            if entry["access_mode"] not in ACCESS_MODES:
+                raise ConfigError("PostgreSQL access_mode must be restricted or unrestricted")
+        if name == "postgres" and entry["type"] == "local":
+            split_access_mode(entry["command"])
         for field in ("environment", "headers"):
             value = entry.get(field, {})
             if not isinstance(value, dict) or any(not isinstance(v, str) for v in value.values()):
@@ -110,6 +150,9 @@ def resolve(project: Path, base: dict) -> tuple[dict, dict]:
     overrides = load_local(project, base)
     effective = {name: merge(entry, overrides.get(name, {})) for name, entry in base.items()}
     validate_servers(effective, project)
+    for name, entry in effective.items():
+        if name == "postgres" and entry["type"] == "local":
+            apply_access_mode(entry)
     return effective, overrides
 
 
@@ -118,7 +161,7 @@ def render(effective: dict) -> dict:
     result = copy.deepcopy(effective)
     for name, entry in result.items():
         if entry["type"] == "local":
-            for field in ("env_file", "environment", "cwd"):
+            for field in ("env_file", "environment", "cwd", "access_mode"):
                 entry.pop(field, None)
             # Absolute paths are supplied by the installer for nested workspaces.
             entry["command"] = ["python3", LAUNCHER, name]

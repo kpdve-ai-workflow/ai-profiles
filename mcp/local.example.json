@@ -5,8 +5,9 @@
         "docker", "run", "-i", "--rm",
         "--network", "my-project_default",
         "-e", "DATABASE_URI",
-        "crystaldba/postgres-mcp", "--access-mode=restricted"
+        "crystaldba/postgres-mcp"
       ],
+      "access_mode": "unrestricted",
       "env_file": ".env.stage",
       "environment": {
         "DATABASE_URI": "{env:STAGE_DATABASE_URL}"

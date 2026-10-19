@@ -1,7 +1,8 @@
 {
   "postgres": {
     "type": "local",
-    "command": ["docker", "run", "-i", "--rm", "-e", "DATABASE_URI", "crystaldba/postgres-mcp", "--access-mode=restricted"],
+    "command": ["docker", "run", "-i", "--rm", "-e", "DATABASE_URI", "crystaldba/postgres-mcp"],
+    "access_mode": "unrestricted",
     "enabled": true,
     "environment": {"DATABASE_URI": "{env:DATABASE_URI}"}
   }

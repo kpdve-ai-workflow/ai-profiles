@@ -1,0 +1,7 @@
+# Repository guide
+
+- Python 3.10+; runtime and tests use only the standard library. Core entrypoints are `profile.py` (profile management/validation) and `mcp_runtime.py` (local MCP overrides and stdio adapter); `ai-profile` is a thin CLI wrapper.
+- Verify source/profile changes with `make validate` and `make test` (equivalent test command: `python3 -m unittest discover -s tests -v`). Tests copy the repo into temporary directories and exercise project installation there; do not test against a real project.
+- Profiles are discovered from `profiles/<name>/`; keep `profile.json`'s `name` equal to the directory. The manager combines profile MCP definitions and common/profile skills into generated project files. `make validate` checks profile sources, including that their MCP server names collectively match `mcp/example.json`.
+- Put shared skills in `common/skills/` and profile-specific skills in `profiles/<name>/skills/<skill>/`. Shared changes affect every profile; bump each affected profile deliberately with `make bump PROFILE=<name> PART=patch|minor|major` (versions are independent and are not bumped automatically).
+- `README.md` documents the project-facing install/update workflow, local MCP overrides, and safety/ownership behavior. In particular, project `.opencode/ai-profile.local.json` is user-owned; do not replace it with generated profile configuration. Avoid editing generated entries in a project's `opencode.json` by hand.
