@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,35 @@ SCHEMA = "https://opencode.ai/config.json"
 
 class ProfileError(Exception):
     pass
+
+
+def profile_names() -> list[str]:
+    return sorted(p.name for p in (ROOT / "profiles").iterdir() if p.is_dir())
+
+
+def version_tuple(version: str) -> tuple[int, int, int]:
+    if not isinstance(version, str) or not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version):
+        raise ProfileError(f"Nieprawidłowa wersja MAJOR.MINOR.PATCH: {version!r}")
+    return tuple(map(int, version.split(".")))
+
+
+def profile_metadata(profile: str) -> dict:
+    metadata = read_json(ROOT / "profiles" / profile / "profile.json")
+    if (not isinstance(metadata, dict) or metadata.get("name") != profile
+            or not isinstance(metadata.get("description"), str)
+            or not metadata["description"].strip()):
+        raise ProfileError(f"Nieprawidłowy profile.json: {profile}")
+    version_tuple(metadata.get("version"))
+    return metadata
+
+
+def source_commit() -> str | None:
+    try:
+        result = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                                check=True, capture_output=True, text=True)
+        return result.stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 def sha(content: bytes) -> str:
@@ -69,8 +99,10 @@ def state_for(project: Path) -> dict | None:
     value = read_json(p)
     if (not isinstance(value, dict) or value.get("format") != 1
             or not isinstance(value.get("files"), dict) or not isinstance(value.get("mcp"), dict)
-            or value.get("profile") not in PROFILES):
+            or value.get("profile") not in profile_names()):
         raise ProfileError("Nieobsługiwany stan profilu. Nie nadpisuję obcych plików: " + str(p))
+    if value.get("version") is not None:
+        version_tuple(value["version"])
     return value
 
 
@@ -203,11 +235,28 @@ def cleanup_empty_directories(project: Path, paths: list[str]) -> None:
 
 def apply_profile(project: Path, profile: str) -> None:
     old = state_for(project)
+    metadata = profile_metadata(profile)
+    if (old and old["profile"] == profile and old.get("version") is not None
+            and version_tuple(old["version"]) > version_tuple(metadata["version"])):
+        raise ProfileError("Downgrade niedozwolony: zainstalowana wersja jest wyższa od dostępnej")
     files = desired_files(profile)
     mcp = desired_mcp(profile)
     cfg, existed = config_for(project)
     check_files(project, old, files)
     check_mcp(cfg, old, mcp)
+    # Preflight every destination before changing any managed file.
+    for rel in [*files, STATE, GATE, ".gitignore", "opencode.json"]:
+        destination = file_path(project, rel)
+        if destination.exists() and not destination.is_file():
+            raise ProfileError(f"Konflikt: ścieżka nie jest plikiem: {rel}")
+        for parent in destination.parents:
+            if parent == project:
+                break
+            if parent.exists() and not parent.is_dir():
+                raise ProfileError(f"Konflikt: ścieżka nie jest katalogiem: {parent}")
+    if file_path(project, ".gitignore").exists():
+        file_path(project, ".gitignore").read_text(encoding="utf-8")
+    commit = source_commit()
     current = dict(cfg.get("mcp", {}))
     for k in (old.get("mcp", {}) if old else {}):
         current.pop(k)
@@ -232,16 +281,18 @@ def apply_profile(project: Path, profile: str) -> None:
     updated_state = {
         "format": 1,
         "profile": profile,
+        "version": metadata["version"],
+        "source_commit": commit,
         "files": {key: sha(value) for key, value in files.items()},
         "mcp": mcp,
         "had_config": old.get("had_config", existed) if old else existed,
         "gitignore_added": ignore_added,
         "instructions_added": old.get("instructions_added", originally_missing_rule) if old else originally_missing_rule,
     }
-    write_bytes(file_path(project, STATE), json_bytes(updated_state))
     file_path(project, GATE).unlink(missing_ok=True)  # force fresh human approval
     if old:
         cleanup_empty_directories(project, [k for k in old["files"] if k not in files])
+    write_bytes(file_path(project, STATE), json_bytes(updated_state))
     print(f"OK: profil {profile} w {project}; gate LOCKED. Zrestartuj OpenCode.")
 
 
@@ -290,8 +341,31 @@ def status(project: Path) -> None:
         p = file_path(project, rel)
         if not p.is_file() or sha(p.read_bytes()) != expected:
             mismatches.append(rel)
-    print(f"{project}: {old['profile']}, plików zarządzanych: {len(old['files'])}")
-    print("Zmodyfikowane/usunięte pliki: " + (", ".join(mismatches) if mismatches else "brak"))
+    available = profile_metadata(old["profile"])["version"]
+    installed = old.get("version")
+    files = desired_files(old["profile"])
+    content_changed = (old["files"] != {key: sha(value) for key, value in files.items()}
+                       or old["mcp"] != desired_mcp(old["profile"]))
+    cfg, _ = config_for(project)
+    mcp_modified = [key for key, expected in old["mcp"].items()
+                    if cfg.get("mcp", {}).get(key) != expected]
+    if installed is None:
+        label = "VERSION UNKNOWN (legacy installation)"
+    elif version_tuple(installed) < version_tuple(available):
+        label = "UPDATE AVAILABLE"
+    elif version_tuple(installed) > version_tuple(available):
+        label = "INSTALLED NEWER (downgrade blocked)"
+    elif content_changed:
+        label = "CONTENT CHANGED WITHOUT VERSION BUMP"
+    else:
+        label = "UP TO DATE"
+    print(f"Profile: {old['profile']}")
+    print(f"Installed: {installed or 'UNKNOWN'}")
+    print(f"Available: {available}")
+    print(f"Status: {label}")
+    print(f"Source commit: {old.get('source_commit') or 'UNKNOWN'}")
+    print(f"Content: {'CHANGED' if content_changed else 'UNCHANGED'}")
+    print("Local modifications: " + (", ".join(mismatches + [f"MCP:{key}" for key in mcp_modified]) or "none"))
     gate = file_path(project, GATE)
     if gate.exists():
         try:
@@ -306,7 +380,8 @@ def status(project: Path) -> None:
 def validate_sources() -> None:
     """Verify source layout and that mcp/example.json mirrors actual profile MCPs."""
     all_mcp: dict = {}
-    for profile in PROFILES:
+    for profile in profile_names():
+        profile_metadata(profile)
         desired_files(profile)
         mcp = desired_mcp(profile)
         for name, entry in mcp.items():
@@ -365,7 +440,7 @@ def migrate_legacy(project: Path, accept_existing: bool) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Zarządzanie profilami OpenCode z lokalnego ai-profiles")
     parser.add_argument("action", choices=["install", "update", "uninstall", "switch", "status", "validate", "migrate-legacy"])
-    parser.add_argument("profile", nargs="?", choices=list(PROFILES))
+    parser.add_argument("profile", nargs="?", choices=profile_names())
     parser.add_argument("--project", type=Path, help="Katalog projektu (domyślnie bieżący katalog)")
     parser.add_argument("--accept-existing", action="store_true", help="Świadomie przejmij pliki starego instalatora")
     opts = parser.parse_args()

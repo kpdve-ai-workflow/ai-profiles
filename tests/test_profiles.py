@@ -1,4 +1,6 @@
 import json
+import contextlib
+import io
 import shutil
 import subprocess
 import sys
@@ -30,6 +32,151 @@ class ProfileTests(unittest.TestCase):
 
     def cfg(self):
         return json.loads((self.project / "opencode.json").read_text())
+
+    def set_version(self, version):
+        path = self.source / "profiles/backend-go/profile.json"
+        metadata = json.loads(path.read_text())
+        metadata["version"] = version
+        path.write_text(json.dumps(metadata))
+
+    def status_output(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            manager.status(self.project)
+        return output.getvalue()
+
+    def snapshot(self):
+        return {p.relative_to(self.project).as_posix(): p.read_bytes()
+                for p in self.project.rglob("*") if p.is_file()}
+
+    def test_versions_install_update_and_idempotence(self):
+        with patch.object(manager, "source_commit", return_value="a" * 40):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(self.state()["version"], "1.0.0")
+        self.assertEqual(self.state()["source_commit"], "a" * 40)
+        for name in ("go-testing", "go-database"):
+            skill = self.source / "profiles/backend-go/skills" / name
+            skill.mkdir()
+            (skill / "SKILL.md").write_text(f"---\nname: {name}\ndescription: Testing\n---\n")
+        self.set_version("1.1.0")
+        self.assertIn("UPDATE AVAILABLE", self.status_output())
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(self.state()["version"], "1.1.0")
+        for name in ("go-testing", "go-database"):
+            self.assertTrue((self.project / f".opencode/skills/{name}/SKILL.md").exists())
+        self.assertIn("UP TO DATE", self.status_output())
+        before = self.snapshot()
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+        shutil.rmtree(self.source / "profiles/backend-go/skills/go-testing")
+        self.set_version("2.0.0")
+        manager.apply_profile(self.project, "backend-go")
+        self.assertFalse((self.project / ".opencode/skills/go-testing").exists())
+
+    def test_unversioned_content_and_local_conflict(self):
+        manager.apply_profile(self.project, "backend-go")
+        source = self.source / "profiles/backend-go/skills/go-backend/SKILL.md"
+        source.write_text(source.read_text() + "\nUpstream change\n")
+        self.assertIn("CONTENT CHANGED WITHOUT VERSION BUMP", self.status_output())
+        local = self.project / ".opencode/skills/go-backend/SKILL.md"
+        local.write_text(local.read_text() + "\nUser change\n")
+        self.assertIn(".opencode/skills/go-backend/SKILL.md", self.status_output())
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Konflikt"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+        local.write_bytes(source.read_bytes().replace(b"\nUpstream change\n", b""))
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(local.read_bytes(), source.read_bytes())
+        self.assertIn("UP TO DATE", self.status_output())
+
+    def test_old_hashed_state_migration(self):
+        manager.apply_profile(self.project, "backend-go")
+        state = self.state()
+        del state["version"]
+        del state["source_commit"]
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        self.assertIn("VERSION UNKNOWN", self.status_output())
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(self.state()["version"], "1.0.0")
+        self.assertIn("source_commit", self.state())
+
+    def test_invalid_version_numeric_comparison_and_downgrade(self):
+        manager.apply_profile(self.project, "backend-go")
+        before = self.snapshot()
+        for version in ("1.0", "01.0.0", "1.0.0-beta", "invalid", None):
+            self.set_version(version)
+            with self.assertRaisesRegex(manager.ProfileError, "wersja"):
+                manager.apply_profile(self.project, "backend-go")
+            self.assertEqual(before, self.snapshot())
+        self.set_version("1.9.0")
+        manager.apply_profile(self.project, "backend-go")
+        self.set_version("1.10.0")
+        self.assertIn("UPDATE AVAILABLE", self.status_output())
+        manager.apply_profile(self.project, "backend-go")
+        self.assertIn("Content: UNCHANGED", self.status_output())
+        self.set_version("1.9.0")
+        self.assertIn("INSTALLED NEWER", self.status_output())
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Downgrade"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_mcp_content_and_conflict(self):
+        manager.apply_profile(self.project, "backend-go")
+        source = self.source / "profiles/backend-go/mcp.json"
+        mcp = json.loads(source.read_text())
+        mcp["postgres"]["enabled"] = False
+        source.write_text(json.dumps(mcp))
+        self.assertIn("CONTENT CHANGED WITHOUT VERSION BUMP", self.status_output())
+        cfg = self.cfg()
+        cfg["mcp"]["postgres"]["custom"] = True
+        (self.project / "opencode.json").write_text(json.dumps(cfg))
+        self.assertIn("MCP:postgres", self.status_output())
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Konflikt"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_new_profile_discovery_and_independent_versions(self):
+        new = self.source / "profiles/custom-profile"
+        shutil.copytree(self.source / "profiles/backend-go", new)
+        (new / "profile.json").write_text(json.dumps({
+            "name": "custom-profile", "version": "3.2.1", "description": "Custom profile"
+        }))
+        self.assertIn("custom-profile", manager.profile_names())
+        manager.apply_profile(self.project, "custom-profile")
+        self.assertEqual(self.state()["version"], "3.2.1")
+        manager.apply_profile(self.project, "frontend-react")
+        self.assertEqual(self.state()["version"], "1.0.0")
+        manager.uninstall(self.project)
+        self.assertFalse((self.project / manager.STATE).exists())
+
+    def test_path_collision_preflight(self):
+        manager.apply_profile(self.project, "backend-go")
+        self.set_version("1.1.0")
+        asset = self.source / "profiles/backend-go/skills/go-backend/new-assets"
+        asset.mkdir()
+        (asset / "notes.md").write_text("new notes")
+        (self.project / ".opencode/skills/go-backend/new-assets").write_text("user file")
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Konflikt"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_update_common_plugin_and_mcp(self):
+        manager.apply_profile(self.project, "backend-go")
+        plugin = self.source / "common/plugins/approval-gate.js"
+        plugin.write_text(plugin.read_text() + "\n// Updated plugin\n")
+        mcp_path = self.source / "profiles/backend-go/mcp.json"
+        mcp = json.loads(mcp_path.read_text())
+        mcp["postgres"]["enabled"] = False
+        mcp_path.write_text(json.dumps(mcp))
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual((self.project / ".opencode/plugins/approval-gate.js").read_bytes(),
+                         plugin.read_bytes())
+        self.assertEqual(self.cfg()["mcp"]["postgres"], mcp["postgres"])
+        self.assertIn("UP TO DATE", self.status_output())
 
     def test_install_update_add_remove_skills_preserve_custom_and_uninstall(self):
         custom_cfg = {
