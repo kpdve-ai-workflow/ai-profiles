@@ -1,0 +1,15 @@
+{
+  "name": "ai-profiles-opencode-tooling",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.0.32"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,19 @@
+// Reveal-on-scroll driven by Locomotive Scroll.
+// Mark animated elements in Blade with data-animate. The hidden->visible transition is
+// defined in the block CSS (data-animate = hidden state, .is-inview = visible state).
+// Locomotive Scroll owns the page scroll, so we hook its scroll event through the shared
+// observer util (it falls back to native scroll when LS is inactive, e.g. the admin bar).
+// The editor guard skips the effect inside Gutenberg previews.
+import { onEnterView } from '@utils/scroll-observer.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.{KEBAB_NAME}').forEach((el) => {
+        if (el.closest('.block-editor-block-list__block, [data-is-preview]')) return;
+
+        onEnterView(
+            el.querySelectorAll('[data-animate]'),
+            (target) => target.classList.add('is-inview'),
+            { threshold: 0.85 },
+        );
+    });
+});

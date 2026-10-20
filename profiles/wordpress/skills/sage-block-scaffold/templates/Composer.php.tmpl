@@ -1,0 +1,44 @@
+<?php
+
+namespace App\View\Composers;
+
+use App\Services\{PASCAL_NAME}Service;
+use Illuminate\Support\Facades\Vite;
+use Roots\Acorn\View\Composer;
+
+class {PASCAL_NAME} extends Composer
+{
+    public function __construct(private {PASCAL_NAME}Service $service)
+    {
+        add_action('enqueue_block_assets', [$this, 'enqueueAssets'], 100);
+    }
+
+    public function enqueueAssets(): void
+    {
+        // If this block uses Swiper, enqueue the shared CSS first (WordPress deduplicates by handle):
+        // wp_enqueue_style(
+        //     'sage-swiper',
+        //     Vite::asset('resources/css/common/swiper.css'),
+        // );
+
+        // Block-specific CSS (animations, pseudo-elements, third-party overrides):
+        // wp_enqueue_style(
+        //     '{KEBAB_NAME}-style',
+        //     Vite::asset('resources/css/blocks/{KEBAB_NAME}.css'),
+        //     ['sage-swiper'], // add dependency if this file overrides Swiper styles
+        // );
+
+        // Block JS (Alpine / Swiper / Locomotive Scroll):
+        // wp_enqueue_script_module(
+        //     '{KEBAB_NAME}-scripts',
+        //     Vite::asset('resources/js/blocks/{KEBAB_NAME}.js'),
+        // );
+    }
+
+    protected static $views = ['blocks.{KEBAB_NAME}'];
+
+    public function with(): array
+    {
+        return $this->service->getData();
+    }
+}

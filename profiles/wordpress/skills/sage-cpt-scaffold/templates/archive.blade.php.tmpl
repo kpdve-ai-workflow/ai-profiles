@@ -1,0 +1,32 @@
+@extends('layouts.app')
+
+@section('content')
+  @include('partials.page-header')
+
+  <div class="container mx-auto px-4 mb-20">
+    @if (have_posts())
+      <div class="grid gap-8">
+        @while (have_posts())
+          @php(the_post())
+          <article @php(post_class())>
+            <h2 class="text-2xl font-bold">
+              <a href="{{ get_permalink() }}">{{ get_the_title() }}</a>
+            </h2>
+            @if (has_post_thumbnail())
+              <a href="{{ get_permalink() }}">
+                {!! get_the_post_thumbnail(null, 'medium') !!}
+              </a>
+            @endif
+            <div class="mt-2">
+              {!! get_the_excerpt() !!}
+            </div>
+          </article>
+        @endwhile
+      </div>
+
+      {!! get_the_posts_pagination() !!}
+    @else
+      <p>{{ __('No {PLURAL_LABEL} found.', 'sage') }}</p>
+    @endif
+  </div>
+@endsection

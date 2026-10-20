@@ -1,0 +1,29 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+class {PASCAL_NAME}Controller
+{
+    /**
+     * Registers global WordPress hooks for the {TITLE} block.
+     * Composers are loaded lazily (only on render) — put anything that must
+     * run on every request here instead.
+     */
+    public function __construct()
+    {
+        // add_action('admin_menu', [$this, 'addOptionsPage']);
+    }
+
+    // public function addOptionsPage(): void
+    // {
+    //     acf_add_options_sub_page([
+    //         'menu'       => '{TITLE}',
+    //         'title'      => '{TITLE}',
+    //         'slug'       => 'sage_{SNAKE_NAME}_options',
+    //         'parent'     => 'sage_config_options',
+    //         'capability' => 'manage_options',
+    //     ]);
+    // }
+}

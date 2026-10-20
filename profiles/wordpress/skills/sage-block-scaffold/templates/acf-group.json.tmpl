@@ -1,0 +1,29 @@
+{
+    "key": "group_{SNAKE_NAME}_main",
+    "title": "Block: {TITLE}",
+    "fields": [
+        {
+            "key": "field_{SNAKE_NAME}_heading",
+            "label": "Heading",
+            "name": "heading",
+            "type": "text",
+            "required": 0,
+            "default_value": ""
+        }
+    ],
+    "location": [
+        [
+            {
+                "param": "block",
+                "operator": "==",
+                "value": "sage\/{KEBAB_NAME}"
+            }
+        ]
+    ],
+    "menu_order": 0,
+    "position": "normal",
+    "active": true
+}
+
+// Keys: group_{SNAKE_NAME}_main | field_{SNAKE_NAME}_{field} | field_{SNAKE_NAME}_{parent}_{field}
+// Field type syntax → see conventions.md "ACF field types"

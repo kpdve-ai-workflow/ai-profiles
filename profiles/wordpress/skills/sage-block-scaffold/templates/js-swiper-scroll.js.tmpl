@@ -1,0 +1,34 @@
+// Swiper + reveal-on-scroll (Locomotive Scroll) — plain DOMContentLoaded, no Alpine needed.
+// Swiper won't init in the editor (DOMContentLoaded fires before Gutenberg injects previews)
+// and the reveal is skipped there too via the editor guard.
+// Mark animated elements in Blade with data-animate; style the hidden->.is-inview transition
+// in the block CSS.
+import { Swiper, Navigation, Pagination } from '@utils/swiper.js';
+import { onEnterView } from '@utils/scroll-observer.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.{KEBAB_NAME}').forEach((section) => {
+        const swiperEl = section.querySelector('.swiper');
+        if (!swiperEl) return;
+
+        const isEditor = section.closest('.block-editor-block-list__block, [data-is-preview]');
+
+        const total = parseInt(section.dataset.total) || 0;
+
+        new Swiper(swiperEl, {
+            modules: [Navigation, Pagination],
+            loop: total > 1,
+            slidesPerView: 1,
+            spaceBetween: 24,
+            // breakpoints: { 768: { slidesPerView: 2 }, 1024: { slidesPerView: 3 } },
+        });
+
+        if (!isEditor) {
+            onEnterView(
+                section.querySelectorAll('[data-animate]'),
+                (target) => target.classList.add('is-inview'),
+                { threshold: 0.85 },
+            );
+        }
+    });
+});

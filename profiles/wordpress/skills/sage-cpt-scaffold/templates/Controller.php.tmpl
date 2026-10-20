@@ -1,0 +1,98 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+class {PLURAL_PASCAL}Controller
+{
+    public function __construct()
+    {
+        add_action('init', [$this, 'register_post_type']);
+{IF_TAXONOMY}        add_action('init', [$this, 'register_taxonomy']);
+{/IF_TAXONOMY}    }
+
+    public function register_post_type(): void
+    {
+        register_post_type('{PLURAL_SLUG}', [
+            'labels' => [
+                'name'                  => __('{PLURAL_LABEL}', 'sage'),
+                'singular_name'         => __('{SINGULAR_LABEL}', 'sage'),
+                'menu_name'             => __('{PLURAL_LABEL}', 'sage'),
+                'add_new'               => __('Add new {SINGULAR_LABEL}', 'sage'),
+                'add_new_item'          => __('Add new {SINGULAR_LABEL}', 'sage'),
+                'edit_item'             => __('Edit {SINGULAR_LABEL}', 'sage'),
+                'new_item'              => __('New {SINGULAR_LABEL}', 'sage'),
+                'view_item'             => __('View {SINGULAR_LABEL}', 'sage'),
+                'search_items'          => __('Search {PLURAL_LABEL}', 'sage'),
+                'not_found'             => __('No {SINGULAR_LABEL} found', 'sage'),
+                'not_found_in_trash'    => __('No {PLURAL_LABEL} found in trash', 'sage'),
+                'parent_item_colon'     => __('Parent {SINGULAR_LABEL}:', 'sage'),
+                'all_items'             => __('All {PLURAL_LABEL}', 'sage'),
+                'archives'              => __('{PLURAL_LABEL} archives', 'sage'),
+                'attributes'            => __('{PLURAL_LABEL} attributes', 'sage'),
+                'insert_into_item'      => __('Insert into {SINGULAR_LABEL}', 'sage'),
+                'uploaded_to_this_item' => __('Uploaded to this {SINGULAR_LABEL}', 'sage'),
+                'featured_image'        => __('Featured image', 'sage'),
+                'set_featured_image'    => __('Set featured image', 'sage'),
+                'remove_featured_image' => __('Remove featured image', 'sage'),
+                'use_featured_image'    => __('Use as featured image', 'sage'),
+                'filter_items_list'     => __('Filter {PLURAL_LABEL} list', 'sage'),
+                'items_list_navigation' => __('{PLURAL_LABEL} list navigation', 'sage'),
+                'items_list'            => __('{PLURAL_LABEL} list', 'sage'),
+                'item_published'        => __('{SINGULAR_LABEL} published.', 'sage'),
+                'item_published_privately' => __('{SINGULAR_LABEL} published privately.', 'sage'),
+                'item_reverted_to_draft' => __('{SINGULAR_LABEL} reverted to draft.', 'sage'),
+                'item_scheduled'        => __('{SINGULAR_LABEL} scheduled.', 'sage'),
+                'item_updated'          => __('{SINGULAR_LABEL} updated.', 'sage'),
+            ],
+            'public'        => true,
+            'has_archive'   => true,
+            'rewrite'       => ['slug' => '{PLURAL_SLUG}'],
+            'supports'      => {SUPPORTS},
+            'menu_icon'     => '{DASHICON}',
+            'menu_position' => 5,
+            'show_in_rest'  => true,
+            'rest_base'     => '{PLURAL_SLUG}',
+        ]);
+    }
+
+{IF_TAXONOMY}    public function register_taxonomy(): void
+    {
+        register_taxonomy('{TAXONOMY_SLUG}', '{PLURAL_SLUG}', [
+            'labels' => [
+                'name'                       => __('{TAXONOMY_LABEL}', 'sage'),
+                'singular_name'              => __('{TAXONOMY_SINGULAR_LABEL}', 'sage'),
+                'menu_name'                  => __('{TAXONOMY_LABEL}', 'sage'),
+                'all_items'                  => __('All {TAXONOMY_LABEL}', 'sage'),
+                'edit_item'                  => __('Edit {TAXONOMY_SINGULAR_LABEL}', 'sage'),
+                'view_item'                  => __('View {TAXONOMY_SINGULAR_LABEL}', 'sage'),
+                'update_item'                => __('Update {TAXONOMY_SINGULAR_LABEL}', 'sage'),
+                'add_new_item'               => __('Add New {TAXONOMY_SINGULAR_LABEL}', 'sage'),
+                'new_item_name'              => __('New {TAXONOMY_SINGULAR_LABEL} Name', 'sage'),
+                'parent_item'                => __('Parent {TAXONOMY_SINGULAR_LABEL}', 'sage'),
+                'parent_item_colon'          => __('Parent {TAXONOMY_SINGULAR_LABEL}:', 'sage'),
+                'search_items'               => __('Search {TAXONOMY_LABEL}', 'sage'),
+                'popular_items'              => __('Popular {TAXONOMY_LABEL}', 'sage'),
+                'separate_items_with_commas' => __('Separate {TAXONOMY_LABEL} with commas', 'sage'),
+                'add_or_remove_items'        => __('Add or remove {TAXONOMY_LABEL}', 'sage'),
+                'choose_from_most_used'      => __('Choose from the most used {TAXONOMY_LABEL}', 'sage'),
+                'not_found'                  => __('No {TAXONOMY_LABEL} found', 'sage'),
+                'no_terms'                   => __('No {TAXONOMY_LABEL}', 'sage'),
+                'items_list_navigation'      => __('{TAXONOMY_LABEL} list navigation', 'sage'),
+                'items_list'                 => __('{TAXONOMY_LABEL} list', 'sage'),
+                'back_to_items'              => __('← Back to {TAXONOMY_LABEL}', 'sage'),
+            ],
+            'hierarchical'      => true,
+            'public'            => true,
+            'show_ui'           => true,
+            'show_admin_column' => true,
+            'show_in_nav_menus' => true,
+            'show_tagcloud'     => false,
+            'rewrite'           => ['slug' => '{TAXONOMY_SLUG}'],
+            'query_var'         => '{TAXONOMY_SLUG}',
+            'show_in_rest'      => true,
+            'rest_base'         => '{TAXONOMY_SLUG}',
+        ]);
+    }
+{/IF_TAXONOMY}}

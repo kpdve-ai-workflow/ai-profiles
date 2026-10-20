@@ -1,0 +1,16 @@
+<article @php(post_class('h-entry mb-20'))>
+
+  <div class="has-global-padding is-layout-constrained">
+    @php(the_content())
+  </div>
+
+  @if ($pagination)
+    <div class="container mx-auto px-4">
+      <footer>
+        <nav class="page-nav" aria-label="Page">
+          {!! $pagination !!}
+        </nav>
+      </footer>
+    </div>
+  @endif
+</article>

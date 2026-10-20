@@ -1,15 +1,26 @@
 PYTHON ?= python3
 PROJECT ?=
-PROFILE ?= backend-go
+PROFILE ?=
+DESCRIPTION ?=
 PART ?= patch
+.DEFAULT_GOAL := help
 
-.PHONY: check-project install update uninstall switch status validate test pull-update approve lock gate-status bump
+.PHONY: help create check-profile check-project install update uninstall switch status validate test pull-update approve lock gate-status bump
+
+help:
+	@$(PYTHON) profile.py help
+
+check-profile:
+	@test -n "$(PROFILE)" || (echo "Podaj PROFILE=nazwa-profilu" >&2; exit 2)
+
+create: check-profile
+	$(PYTHON) profile.py create "$(PROFILE)" $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
 
 check-project:
 	@test -n "$(PROJECT)" || (echo "Podaj PROJECT=/sciezka/do/projektu" >&2; exit 2)
 
-install: check-project
-	$(PYTHON) profile.py install $(PROFILE) --project "$(PROJECT)"
+install: check-project check-profile
+	$(PYTHON) profile.py install "$(PROFILE)" --project "$(PROJECT)"
 
 update: check-project
 	$(PYTHON) profile.py update --project "$(PROJECT)"
@@ -17,16 +28,16 @@ update: check-project
 uninstall: check-project
 	$(PYTHON) profile.py uninstall --project "$(PROJECT)"
 
-switch: check-project
-	$(PYTHON) profile.py switch $(PROFILE) --project "$(PROJECT)"
+switch: check-project check-profile
+	$(PYTHON) profile.py switch "$(PROFILE)" --project "$(PROJECT)"
 
 status: check-project
 	$(PYTHON) profile.py status --project "$(PROJECT)"
 
 validate:
-	$(PYTHON) profile.py validate
+	$(PYTHON) profile.py validate $(if $(strip $(PROFILE)),"$(PROFILE)")
 
-bump:
+bump: check-profile
 	$(PYTHON) profile.py bump "$(PROFILE)" --part "$(PART)"
 
 test:
