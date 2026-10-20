@@ -16,19 +16,29 @@ pub(crate) struct Ddev<'a> {
     project: &'a Path,
     docroot: String,
     runner: &'a dyn ProcessRunner,
+    cancellation: CancellationToken,
 }
 
 impl<'a> Ddev<'a> {
-    pub(crate) fn new(project: &'a Path, runner: &'a dyn ProcessRunner) -> Self {
+    pub(crate) fn new(
+        project: &'a Path,
+        runner: &'a dyn ProcessRunner,
+        cancellation: CancellationToken,
+    ) -> Self {
         Self {
             project,
             docroot: String::new(),
             runner,
+            cancellation,
         }
     }
 
     pub(crate) fn set_docroot(&mut self, docroot: &str) {
         self.docroot = docroot.to_owned();
+    }
+
+    pub(crate) fn docroot(&self) -> &str {
+        &self.docroot
     }
 
     pub(crate) fn run(&self, args: &[String]) -> Result<String, WordPressError> {
@@ -45,7 +55,7 @@ impl<'a> Ddev<'a> {
                 stdout: StreamMode::Capture,
                 stderr: StreamMode::Capture,
                 timeout: None,
-                cancellation: CancellationToken::new(),
+                cancellation: self.cancellation.clone(),
             })
             .map_err(|_| WordPressError::DdevUnavailable)?;
         if !output.status.success() {

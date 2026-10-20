@@ -106,6 +106,7 @@ pub(crate) fn docker_environment(environment: &HashMap<String, String>) -> HashM
         .collect()
 }
 
+#[allow(dead_code)] // Direct production implementation; launch uses the injectable process boundary.
 pub(crate) fn image_available(environment: &HashMap<String, String>) -> Result<bool, MariaDbError> {
     image_available_with(environment, &SystemProcessRunner)
 }
@@ -126,6 +127,7 @@ fn image_available_with(
     Ok(output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == COMMIT)
 }
 
+#[allow(dead_code)] // Direct production implementation; launch uses the injectable process boundary.
 pub(crate) fn ensure_image(environment: &HashMap<String, String>) -> Result<(), MariaDbError> {
     ensure_image_with(environment, &SystemProcessRunner, &HttpSourceDownloader)
 }
@@ -223,6 +225,7 @@ fn launch_with(
     downloader: &impl SourceDownloader,
 ) -> Result<(), MariaDbError> {
     let mut settings = validate_environment(&environment)?;
+    let _validated_port = settings.port.get();
     ensure_image_with(&settings.values, runner, downloader)?;
 
     let read_only_default = settings.read_only.to_string();

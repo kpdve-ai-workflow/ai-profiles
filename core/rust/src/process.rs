@@ -23,6 +23,7 @@ pub(crate) enum StreamMode {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)] // The process boundary supports callers that inherit or pipe stdin.
 pub(crate) enum StdinMode {
     Bytes(Vec<u8>),
     Inherit,
@@ -41,7 +42,7 @@ impl CancellationToken {
         self.0.store(true, Ordering::Release);
     }
 
-    fn is_cancelled(&self) -> bool {
+    pub(crate) fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::Acquire)
     }
 }

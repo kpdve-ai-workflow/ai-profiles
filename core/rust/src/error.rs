@@ -334,8 +334,6 @@ pub(crate) enum WordPressError {
         #[source]
         source: std::io::Error,
     },
-    #[error("Nieprawidłowa ścieżka lub nazwa w dumpie")]
-    InvalidDumpPath,
     #[error("Błąd kroku DDEV: {step}; przerwano (szczegóły nie są wypisywane z uwagi na sekrety)")]
     DdevStepFailed { step: String },
     #[error(
@@ -352,6 +350,76 @@ pub(crate) enum WordPressError {
     MissingSiteOptions,
     #[error("Nie można uruchomić DDEV")]
     DdevUnavailable,
+    #[error("Wymagany jest istniejący projekt DDEV")]
+    DdevProjectRequired,
+    #[error("Najpierw zainstaluj/zaktualizuj profil WordPress w tym projekcie")]
+    MissingWordPressHelpers,
+    #[error("Cel musi być wskazanym, uruchomionym projektem DDEV typu wordpress")]
+    InvalidDdevProject,
+    #[error("Wersja 1 obsługuje standardowy WordPress z wp-config.php w docroot")]
+    MissingWpConfig,
+    #[error("Brak standardowego katalogu wp-content")]
+    MissingWpContent,
+    #[error("Nieprawidłowe URL w konfiguracji DDEV")]
+    InvalidDdevUrls,
+    #[error(
+        "Każdy docelowy host musi występować w ddev describe; nie zmieniamy konfiguracji DDEV"
+    )]
+    UnknownDdevTargetHost,
+    #[error("Nieprawidłowy prefiks tabel lokalnej bazy")]
+    InvalidLocalTablePrefix,
+    #[error("WordPress i DDEV nie wskazują tej samej lokalnej bazy db")]
+    DatabaseMismatch,
+    #[error("Dump i lokalny WordPress muszą mieć ten sam prefiks i tryb single/multisite")]
+    DumpTopologyMismatch,
+    #[error("Lokalny plik ochrony jest inny; nie nadpisuję go")]
+    SafetyFileConflict,
+    #[error("Nieprawidłowe pola ddev describe")]
+    InvalidDdevFields,
+    #[error("Brak mapowania hosta bloga multisite")]
+    MissingBlogHostMapping,
+    #[error("Brak mapowania lub nieprawidłowy identyfikator sieci multisite")]
+    InvalidNetworkMapping,
+    #[error("Search-replace nie zastąpił wszystkich żądanych URL")]
+    SearchReplaceIncomplete,
+    #[error("Zmieniła się liczba blogów podczas importu")]
+    SiteCountChanged,
+    #[error("Weryfikacja URL po imporcie nie powiodła się")]
+    SiteVerificationFailed,
+    #[error("Weryfikacja domen sieci multisite nie powiodła się")]
+    NetworkVerificationFailed,
+    #[error("Brak witryn do lokalizacji")]
+    NoSitesToLocalize,
+    #[error("Nieprawidłowa nazwa projektu DDEV")]
+    InvalidDdevName,
+    #[error("Katalog backupów XDG_STATE_HOME musi być poza projektem i docroot")]
+    BackupDirectoryInsideProject,
+    #[error("Inny import tego projektu już działa")]
+    RestoreAlreadyRunning,
+    #[error("Źródło lub cel zmieniły się po potwierdzeniu; uruchom plan ponownie")]
+    RestorePlanChanged,
+    #[error("Plik źródłowy zmienił się podczas kopiowania")]
+    IncomingChanged,
+    #[error("Backup lokalnej bazy nie odpowiada potwierdzonemu celowi")]
+    BackupMismatch,
+    #[error("Plik ochrony zmienił się po potwierdzeniu; nie nadpisuję go")]
+    SafetyChanged,
+    #[error("Nieprawidłowa topologia zaimportowanej bazy")]
+    ImportedTopologyMismatch,
+    #[error("Anulowano; baza nie została zmieniona")]
+    RestoreCancelled,
+    #[error("Nie można przygotować prywatnego katalogu backupu")]
+    BackupDirectory,
+    #[error("Nie można zablokować katalogu backupu")]
+    BackupLock,
+    #[error("Nie można przygotować plików restore")]
+    RestoreIo,
+    #[error("Brak danych do potwierdzenia restore")]
+    ConfirmationInput,
+    #[error("Import przerwany. Brak automatycznego rollbacku. Przywróć backup ręcznie.")]
+    RecoveryRequired,
+    #[error(transparent)]
+    Filesystem(#[from] crate::error::FilesystemError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -448,12 +516,6 @@ pub(crate) enum McpConfigError {
     UnmanagedMcpExists(String),
     #[error("Nieprawidłowy obiekt MCP: {0}")]
     InvalidMcpObject(String),
-    #[error("Błąd systemu plików dla {path}: {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
     #[error(transparent)]
     Codec(#[from] CodecError),
     #[error(transparent)]

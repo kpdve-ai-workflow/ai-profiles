@@ -1,6 +1,9 @@
 pub(crate) mod ddev;
 pub(crate) mod dump;
+pub(crate) mod localize;
 pub(crate) mod mapping;
+pub(crate) mod preflight;
+pub mod restore;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Origin {
@@ -37,6 +40,10 @@ impl UrlMappings {
 pub(crate) struct TablePrefix(String);
 
 impl TablePrefix {
+    pub(crate) fn from_validated(value: String) -> Self {
+        Self(value)
+    }
+
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }

@@ -14,6 +14,8 @@ Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatr
 
 ## Wymagania i decyzje użytkownika
 
+**Najnowsza decyzja użytkownika (po T-23):** Python nie jest dozwolonym runtime/test runnerem po refaktorze. Produkcyjny kod Python pozostaje zachowany jako wymagano wcześniej, ale Make, walidacja i testy migracji mają uruchamiać wyłącznie Rust. Ta decyzja zastępuje w T-23/T-24/T-25 wybór Rust jako opt-in, Pythonowe cele Make, Python parity harness oraz końcowe `make validate`/`make test` w ich dotychczasowej postaci. Nie uruchamiać ani nie importować Python w T-24/T-25.
+
 | ID | Wymaganie | Pochodzenie |
 | --- | --- | --- |
 | BR-01 | Przenieść całą funkcjonalność produkcyjną Python do natywnego Rust, zachowując zachowanie 1:1. | USER-APPROVED — żądanie portu i ostatnie doprecyzowanie |
@@ -23,6 +25,7 @@ Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatr
 | BR-05 | Wykonywać pracę małymi etapami, a nie jednym ogromnym refaktorem. | USER-APPROVED — zlecenie tego planu |
 | BR-06 | Nie pisać testów przed implementacją i nie uruchamiać testów pośrednich; na końcu jedno pełne uruchomienie walidacji. | USER-APPROVED — ostatnia wiadomość; zastępuje wcześniejsze test-first |
 | BR-07 | Nie naruszać danych projektów, lokalnej konfiguracji, własności plików ani zabezpieczeń. | APPROVED SPEC — `AGENTS.md`, dokumentacja profili i MCP |
+| BR-08 | Po refaktorze Make, walidacja i test runner są Rust-only; Python nie jest wymagany ani uruchamiany. Zachować istniejące źródła Python. | USER-APPROVED — najnowsze doprecyzowanie |
 
 Wcześniejsze zalecenie pełnych testów przy każdym zakończeniu pracy jest **SUPERSEDED dla tej migracji**. Wcześniej wskazany flow PR `feature → develop`, `develop → main` pozostaje kontekstem CI; nie dodajemy wdrożeń ani wcześniejszych przebiegów testów. T-25 jest ostatnim, wyraźnie dozwolonym etapem pełnej walidacji.
 
@@ -471,6 +474,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-20 — wyłącznie preflight WordPress
 
+**Stan: IMPLEMENTED.** Dodano preflight DDEV/WordPress bez zapisów: walidację plików projektu i helperów, approot/status/type/docroot, hostów URL, lokalnej bazy/prefiksu, zgodności dumpa i topologii oraz konfliktu lokalnego pliku safety. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testów, DDEV, WP-CLI, bazy ani dumpów nie uruchamiałem; walidacja zachowania `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-19. **Kontrakt:** K-09.
 
 1. Dodać `src/wordpress/preflight.rs`; przenieść preflight i inside.
@@ -480,6 +485,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-21 — lokalizacja WordPress
 
+**Stan: IMPLEMENTED.** Dodano `wordpress/localize.rs`: pełna walidacja mapowań wszystkich witryn i sieci przed pierwszą zmianą, bootstrap URL/domen SQL przez UTF-8 hex literals, WP-CLI search-replace z dry-run, ustawienie `blog_public=0`, weryfikację topologii i `core is-installed`. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testów, DDEV, WP-CLI ani bazy nie uruchamiałem; walidacja zachowania `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-20. **Kontrakt:** K-09.
 
 1. Dodać `src/wordpress/localize.rs`; przenieść localize, zachowując kontrolę wszystkich mapowań przed pierwszą zmianą.
@@ -488,6 +495,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** porównanie kolejności efektów i kompilacja. **Gotowe, gdy:** nie ma raw string replace serializowanych danych ani ignorowania ostrzeżeń.
 
 ### T-22 — apply, backup, recovery i CLI restore
+
+**Stan: IMPLEMENTED.** Dodano `wordpress/restore.rs` i binarium `restore-updraft`: jawne tryby plan/apply, wymagane potwierdzenie, prywatny katalog stanu i nieblokująca blokada, ponowny preflight, prywatna kopia incoming i hash, eksport/pełna weryfikacja backupu przed safety/importem, kontrolowane anulowanie, recovery bez rollbacku oraz cleanup incoming. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Nie uruchamiałem testów, binarium, DDEV ani usług zewnętrznych; walidacja zachowania `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-21. **Kontrakt:** K-10.
 
@@ -499,6 +508,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-23 — spięcie budowania i dokumentacji, bez przełączenia domyślnego silnika
 
+**Stan: IMPLEMENTED, później zmieniony na mocy BR-08.** `make rust-build` oraz mapa produkcyjnego kodu Python→Rust zostały dodane. Pierwotne „Python pozostaje domyślny w Make” jest **SUPERSEDED przez BR-08**: od T-24 Make uruchamia wyłącznie Rust. Historyczny release build tego zadania zakończył się powodzeniem; binaria nie były uruchamiane.
+
 **Zależności:** T-09, T-15, T-17, T-22. **Kontrakt:** K-06, BR-02/03/05.
 
 1. W Makefile dodać wyłącznie `rust-build` z `cargo build --manifest-path core/rust/Cargo.toml --locked --release --bins`; nie uruchamiać wybudowanych programów.
@@ -507,19 +518,18 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 **Weryfikacja:** przegląd kompletności tabeli i kompilacja release bez uruchamiania. **Gotowe, gdy:** T-01…T-23 są `IMPLEMENTED`, nadal wszystkie zachowania `NOT RUN`. Nie oznaczać migracji zakończoną.
 
-### T-24 — przygotowanie jednej walidacji końcowej, bez uruchamiania
+### T-24 — przygotowanie jednej walidacji końcowej Rust-only, bez uruchamiania
+
+**Stan: IMPLEMENTED.** Dodano Rust-only test suites dla fundamentu, profili, MCP, lifecycle/CLI, MariaDB i restore WordPress, zmieniono Make manager/test na Rust i przygotowano `validate-rust-migration` z kontrolą statusu oraz obecności każdej wymaganej grupy. Zachowano źródła Python; nie używa się ich w Make ani walidacji migracji. Nie uruchamiałem testów, clippy, walidatora ani binariów; testy/walidacja zachowania pozostają `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-23. **Kontrakt:** wszystkie K-01…K-10 i BR-06.
 
-1. Dopiero teraz dodać Rust tests wskazane w kontraktach, fikcyjny ProcessRunner/downloader, syntetyczne archiwa/dumpy oraz komplet odwzorowanych scenariuszy obecnych testów. Nie wykonywać RED ani pojedynczych testów.
-2. W `core/python/tests/` dodać `rust_parity.py` i `rust_parity_support.py`. Nazwa pierwszego pliku celowo nie zaczyna się od `test_`: zwykły zestaw Python ma nadal działać bez zbudowanego Rust. Moduł jest uruchamiany jawnie dopiero przez pełny walidator.
-3. Harness odczytuje `AI_PROFILES_RUST_BIN_DIR` jako bezwzględny katalog czterech binariów i odmawia przy brakującym pliku. Kopiuje manager do osobnego tymczasowego checkoutu z tą samą strukturą; runtime do tymczasowego `.opencode`. Nie używa symlinków wskazujących prawdziwe źródła/projekt.
-4. Porównywać Python i Rust w dwóch odrębnych środowiskach. Jawnie normalizować jedynie korzenie katalogów tymczasowych i kontrolowany source_commit. Nie normalizować różnic w liczbach, hashach, kolejności mutacji ani ownership. Sprawdzać także oczekiwania niezależne od obu implementacji.
-5. Przenieść istniejące asercje białoskrzynkowe do odpowiednich testów Rust; black-box obejmuje każde CLI, lifecycle, legacy, samodzielny MCP i scenariusze z błędami. Dla MariaDB i restore używać fikcyjnych OS programów oraz wstrzykniętych granic, nie zewnętrznych usług.
-6. Poprawić wyłącznie niezbędne błędy relokacji w fixture'ach Python: korzeń w `core/python/tests/support.py`, `test_mariadb_launcher.py`, `test_wordpress_restore.py`; w teście importu CLI ustawić ścieżkę importu na `core/python` w tymczasowym checkoutcie. Ujednolicić korzeń fixture'ów przez `fixture_support.py`, zamiast powielać parents[n]. Wykluczyć `.git`, `node_modules`, `target`, caches i testy z kopiowanych źródeł. Nie zmieniać asercji bezpieczeństwa, Pythona produkcyjnego ani jego zachowania.
-7. Dodać w Makefile jeden cel `validate-rust-migration`, który wykonuje sekwencję z następnej sekcji i kończy się niezerowo przy dowolnym błędzie, zerowej liczbie testów lub pominięciu wymaganej grupy. Loguje liczbę i wynik każdej grupy; nie ukrywa błędów przez `|| true`, skip ani wymuszony sukces.
+1. Dodać Rust tests w `core/rust/tests/` dla kontraktów K-01…K-10: fikcyjne `ProcessRunner`/downloader, syntetyczne archiwa i dumpy oraz scenariusze negatywne. Nie wykonywać RED ani testów pośrednich. Nie dodałem pełnego historycznego Python parity; oracle stanowią jawne kontrakty i niezależne asercje Rust.
+2. Wszystkie Make targets managera i `make test` mają uruchamiać Rust; żadna reguła nie wywołuje `python`, `python3` ani unittest. `make validate` uruchamia walidację źródeł Rust.
+3. `validate-rust-migration` wykonuje tylko Rust: `cargo fmt --check`, release build, Clippy `-D warnings`, `make validate` i `make test`. Loguje status każdej grupy, odróżnia `FAILED` od `NOT RUN`, wymaga niezerowej liczby testów i kończy się błędem przy dowolnej awarii. Nie używa skip, cache ani wymuszonego sukcesu.
+4. Harness/testy nie używają Pythona ani prawdziwych Docker/DDEV/DB/HTTP. Testy procesu i pobierania używają granic fikcyjnych; nie wykonują produkcyjnych binariów ani zewnętrznych usług.
 
-**Weryfikacja:** wyłącznie przegląd kodu runnera, scenariuszy i poleceń. **Gotowe, gdy:** walidator i wszystkie testy są przygotowane po implementacji, nie zostały jeszcze uruchomione i nie wymagają prawdziwego Docker/DDEV/DB/HTTP. Nie tworzyć golden files przez bezkrytyczne zapisanie aktualnego wyniku.
+**Weryfikacja:** wyłącznie przegląd kodu runnera, scenariuszy i poleceń. **Gotowe, gdy:** walidator i testy Rust są przygotowane po implementacji, nie zostały jeszcze uruchomione i nie wymagają Python ani prawdziwego Docker/DDEV/DB/HTTP. Nie tworzyć golden files przez bezkrytyczne zapisanie aktualnego wyniku.
 
 ### T-25 — jedno pełne uruchomienie walidacji
 
@@ -531,24 +541,13 @@ Uruchomić z root repozytorium **jedno polecenie**:
 make validate-rust-migration
 ```
 
-Jest to jeden zbiorczy przebieg, a nie jeden smoke test. Cel ma, z zachowaniem `$(PYTHON)`, wykonać:
-
-```bash
-cargo fmt --manifest-path core/rust/Cargo.toml -- --check
-cargo build --manifest-path core/rust/Cargo.toml --locked --release --bins
-cargo clippy --manifest-path core/rust/Cargo.toml --locked --all-targets -- -D warnings
-cargo test --manifest-path core/rust/Cargo.toml --locked --all-targets
-make validate
-make test
-# W recipe Make: wartości ścieżek muszą być poprawnie cytowane także przy spacjach.
-PYTHONPATH="<root>/core/python" AI_PROFILES_RUST_BIN_DIR="<root>/core/rust/target/release" python3 -m unittest tests.rust_parity -v
-```
-
-`<root>` ma być rzeczywistą, absolutną ścieżką obliczoną przez Make/runner, nie dosłownym placeholderem w implementacji. Błędy kompilacji/przygotowania blokują dalsze wykonywanie. Pełne zestawy nie mogą być zastąpione cache poprzednich wyników. Raport musi odróżniać `FAILED` od grup `NOT RUN` po wcześniejszym przerwaniu.
+Jest to jeden zbiorczy przebieg, a nie jeden smoke test. Cel `validate-rust-migration` wykonuje sekwencję Rust-only opisaną w T-24: format, release build, Clippy, `make validate` i `make test`. Żaden etap nie uruchamia interpretera Python. Błędy kompilacji/przygotowania blokują dalsze wykonywanie. Raport musi odróżniać `FAILED` od grup `NOT RUN` po wcześniejszym przerwaniu.
 
 **Gotowe, gdy:** wszystkie grupy `PASSED`, każda ma niezerową liczbę testów, kompletna tabela pokrycia, brak nieuzasadnionych skipów i zachowane oryginalne payloady/Python. Przy dowolnym FAIL: oznaczyć T-25 `FAILED`, zachować zmiany i raport, zatrzymać się. Nie deklarować sukcesu ani automatycznie uruchamiać kolejnych prób; poprawki i ponowienie tego samego finału wymagają kolejnego zlecenia.
 
 ## Informacje brakujące i blokady
+
+**BLOCKED — BR-08 a istniejący kontrakt payloadu MCP.** Dowód: `core/rust/src/mcp/config.rs` renderuje lokalny serwer jako `python3 .opencode/ai-profile-mcp.py`, a `profile_management/payload.rs` nadal instaluje adapter `.py`, zgodnie z wcześniejszym K-03/T-10. Make, test runner i walidacja są już Rust-only, ale aplikacje instalowane przez manager nadal mogą uruchomić Python. T-24 nie zmienia tego, ponieważ wymagałoby to nowego kontraktu dystrybucji (gdzie instalować/skąd brać binarium `ai-profile-mcp`) i zmian poza T-24. **Nie uruchamiać T-25 ani nie deklarować BR-08 w pełni spełnionego, dopóki użytkownik nie zleci osobnego etapu rozwiązującego dystrybucję natywnego adaptera i usunięcie runtime Python z payloadu.** Pythonowy kod źródłowy pozostaje zachowany.
 
 **Na moment zapisania planu nie stwierdzono materialnego braku decyzji blokującego T-01.** Dalsze uruchomienie kompilatora/resolvera nie zostało sprawdzone; brak narzędzi lub niezgodny lock jest blokadą środowiskową, nie zgodą na zmianę architektury.
 
@@ -559,13 +558,13 @@ Jeżeli pojawi się nieopisana różnica między dokumentacją, Pythonem i oczek
 | Ryzyko | Skutek | Obsługa |
 | --- | --- | --- |
 | Testy dopiero na końcu — świadoma decyzja użytkownika. | Błędy semantyczne mogą przejść przez kilka etapów. | Małe zadania, statyczna lista pokrycia, kompilacja bez uruchamiania; brak deklaracji zgodności przed T-25. |
-| Python ma pozostałości błędnych ścieżek w fixture'ach. | Końcowy Python suite może nie wystartować mimo poprawnego Rust. | Ściśle ograniczone poprawki fixture'ów w T-24, bez osłabienia asercji. |
+| Pythonowe fixture'y mają znane błędne ścieżki. | Historyczne Python suite nie jest częścią migracyjnej walidacji po BR-08. | Nie uruchamiać ani nie modyfikować Pythonowych fixture'ów w T-24/T-25. |
 | Różnice JSON, quoting, regex, symlinków i sygnałów. | Rozbieżne hashe, błędny target lub niedziałające recovery. | Jawne K-01/K-04/K-07/K-10 i końcowe scenariusze negatywne; nie zastępować ich porównaniem samych exit codes. |
 | Wykonanie restore/buildu na prawdziwym środowisku. | Utrata danych, ujawnienie sekretów, niezamierzone pobrania. | Brak uruchomień programów w etapach implementacji; w finale wyłącznie temp/mock/fake i brak prawdziwego DB/Docker/DDEV/HTTP. |
-| Nowy Rust target skopiowany do każdego fixture'a. | Niepotrzebny wzrost czasu i dysku. | Wykluczyć `target`; do parity kopiować tylko wymagane cztery gotowe binaria. |
+| Nowy Rust target skopiowany do każdego fixture'a. | Niepotrzebny wzrost czasu i dysku. | Rust testy używają tymczasowych fixture'ów danych, bez kopiowania targetu. |
 
-Poza zakresem: usuwanie lub przepisywanie Pythona, zmiana profili/wersji, automatyczna instalacja natywnych runtime w projektach, przełączenie domyślnego Make na Rust, nowe usługi, async/FFI, cache wyników testów, równoległość testów, migracja upstreamowego serwera MariaDB/PHP helpers, tworzenie nowego pipeline wdrożeniowego oraz obietnica przyspieszenia bez pomiarów release.
+Poza zakresem: usuwanie zachowanych źródeł Python, zmiana profili/wersji, automatyczna instalacja natywnych runtime w projektach, nowe usługi, async/FFI, cache wyników testów, równoległość testów, migracja upstreamowego serwera MariaDB/PHP helpers, tworzenie nowego pipeline wdrożeniowego oraz obietnica przyspieszenia bez pomiarów release.
 
 ## Następne działanie
 
-**Wykonać tylko T-20 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
+**Nie uruchamiać T-25:** najpierw osobne zlecenie ma rozwiązać blocker BR-08 dla natywnego adaptera/payloadu MCP. T-24 jest przygotowane i nieuruchomione.

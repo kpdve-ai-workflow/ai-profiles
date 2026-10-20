@@ -19,6 +19,10 @@ use crate::{
     repository::profile_names,
 };
 
+#[cfg(test)]
+#[path = "../../tests/cli.rs"]
+mod cli_tests;
+
 const COMMAND_HELP: &str = "ai-profiles — zarządzanie profilami
 
 TWORZENIE PROFILU
