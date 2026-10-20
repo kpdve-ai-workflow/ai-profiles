@@ -1,4 +1,5 @@
 import json
+import hashlib
 from tests.profile_management.contracts.support import ContractCase
 
 
@@ -27,3 +28,18 @@ class LifecycleContractTests(ContractCase):
         state = json.loads((switch_project / ".opencode/ai-profile-state.json").read_text())
         self.assertEqual(state["profile"], "frontend-react")
         self.assertEqual(self.run_cli("uninstall", "--project", str(switch_project)).returncode, 0)
+
+    def test_installer_owned_retired_instruction_is_cleaned_on_update(self):
+        installed = self.run_cli("install", "backend-go", "--project", str(self.project))
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        retired = self.project / ".opencode/workflow-rules.md"
+        retired.parent.mkdir(parents=True, exist_ok=True)
+        content = b"installer-owned retired instruction\n"
+        retired.write_bytes(content)
+        state_path = self.project / ".opencode/ai-profile-state.json"
+        state = json.loads(state_path.read_text())
+        state["files"][".opencode/workflow-rules.md"] = hashlib.sha256(content).hexdigest()
+        state_path.write_text(json.dumps(state))
+        updated = self.run_cli("update", "--project", str(self.project))
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        self.assertFalse(retired.exists())

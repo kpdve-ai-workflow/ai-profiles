@@ -1,5 +1,6 @@
 from tests.profile_management.contracts.support import ContractCase
 import json
+import os
 
 
 class SafetyContractTests(ContractCase):
@@ -34,3 +35,16 @@ class SafetyContractTests(ContractCase):
         state_path.write_text(json.dumps(state))
         updated = self.run_cli("update", "--project", str(self.project))
         self.assertEqual(updated.returncode, 0, updated.stderr)
+
+    def test_symlink_replacement_blocks_update_and_preserves_target(self):
+        installed = self.run_cli("install", "backend-go", "--project", str(self.project))
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        managed = self.project / ".opencode/skills/go-backend/SKILL.md"
+        target = self.base / "outside.txt"
+        target.write_text("user data\n")
+        managed.unlink()
+        os.symlink(target, managed)
+        result = self.run_cli("update", "--project", str(self.project))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(target.read_text(), "user data\n")
+        self.assertTrue(managed.is_symlink())
