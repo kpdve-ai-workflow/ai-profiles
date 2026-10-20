@@ -189,6 +189,40 @@ pub(crate) enum PayloadError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub(crate) enum InstallationError {
+    #[error("Downgrade niedozwolony: zainstalowana wersja jest wyższa od dostępnej")]
+    Downgrade,
+    #[error("Konflikt: ścieżka nie jest plikiem: {0}")]
+    DestinationNotFile(String),
+    #[error("Konflikt: ścieżka nie jest katalogiem: {0}")]
+    ParentNotDirectory(PathBuf),
+    #[error("Nie można odczytać .gitignore jako UTF-8")]
+    GitignoreRead,
+    #[error("Nieprawidłowy stan profilu instalacji")]
+    InvalidState,
+    #[error("Błąd systemu plików dla {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Filesystem(#[from] FilesystemError),
+    #[error(transparent)]
+    Mcp(#[from] McpConfigError),
+    #[error(transparent)]
+    Payload(#[from] PayloadError),
+    #[error(transparent)]
+    Project(#[from] ProjectError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+    #[error(transparent)]
+    Model(#[from] ModelError),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum McpConfigError {
     #[error("Nieprawidłowa nazwa definicji MCP; użyj małych liter/cyfr i pojedynczych myślników")]
     InvalidName,

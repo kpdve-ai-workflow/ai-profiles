@@ -2,7 +2,7 @@
 
 ## Stan i sposób pracy
 
-**Gotowość planu: READY.** **Implementacja: 10/25 zadań. Walidacja wykonania: NOT RUN.**
+**Gotowość planu: READY.** **Implementacja: 11/25 zadań. Walidacja wykonania: NOT RUN.**
 
 Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozostawieniem działającego Pythona. W sprawdzonym checkoutcie istnieje `core/python/`; nie ma jeszcze `core/rust/`. Nie uruchomiono kodu, kompilacji ani testów podczas planowania.
 
@@ -10,7 +10,7 @@ Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozost
 
 Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatrzymuje się. Nie przechodzi samodzielnie do następnego zadania. `IMPLEMENTED` oznacza powstanie kodu, **nie** potwierdzoną zgodność. Do T-25 weryfikacja zachowania pozostaje `NOT RUN — PROHIBITED AT THIS STAGE`.
 
-**Następne działanie: T-11 — wspólna synchronizacja install/update/switch.**
+**Następne działanie: T-12 — uninstall.**
 
 ## Wymagania i decyzje użytkownika
 
@@ -370,6 +370,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-11 — wspólna synchronizacja install/update/switch
 
+**Stan: IMPLEMENTED.** Dodano wspólne `apply_profile`: downgrade check, payload/MCP, ownership i konflikt preflight wszystkich celów, ostrzeżenia override, synchronizację konfiguracji, usuwanie wycofanych plików, zapis nowych plików/config/stanu oraz cleanup własnych markerów. `check_files` przyjmuje pożyczone ścieżki, zachowując kolejność payloadu bez kopiowania bajtów. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testy i operacje na projekcie: `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-10. **Kontrakt:** K-05.
 
 1. Dodać `src/profile_management/installation.rs`; przenieść `apply_profile` bez CLI i bez uninstall.
@@ -550,4 +552,4 @@ Poza zakresem: usuwanie lub przepisywanie Pythona, zmiana profili/wersji, automa
 
 ## Następne działanie
 
-**Wykonać tylko T-11 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
+**Wykonać tylko T-12 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**

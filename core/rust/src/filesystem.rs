@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     fs,
     path::{Component, Path, PathBuf},
 };
@@ -31,10 +30,10 @@ pub(crate) fn file_path(project: &Path, relative: &str) -> Result<PathBuf, Files
 }
 
 /// Validate ownership and every destination before the caller starts writing.
-pub(crate) fn check_files(
+pub(crate) fn check_files<'a>(
     project: &Path,
     old_state: Option<&Value>,
-    next_files: &BTreeMap<String, Vec<u8>>,
+    next_files: impl IntoIterator<Item = &'a str>,
 ) -> Result<(), FilesystemError> {
     let owned = old_state
         .and_then(|state| state.get("files"))
@@ -57,7 +56,7 @@ pub(crate) fn check_files(
         }
     }
 
-    for relative in next_files.keys() {
+    for relative in next_files {
         let path = file_path(project, relative)?;
         let exists = match fs::symlink_metadata(&path) {
             Ok(_) => true,
@@ -67,7 +66,7 @@ pub(crate) fn check_files(
             }
         };
         if exists && !owned.is_some_and(|files| files.contains_key(relative)) {
-            return Err(FilesystemError::UnmanagedFileExists(relative.clone()));
+            return Err(FilesystemError::UnmanagedFileExists(relative.to_owned()));
         }
     }
     Ok(())
@@ -99,34 +98,11 @@ pub(crate) fn cleanup_empty_directories(
             }
             match fs::remove_dir(&path) {
                 Ok(()) => directory = path.parent().map(Path::to_owned),
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
-                    ) =>
-                {
-                    break
-                }
-                Err(source) => {
-                    return Err(FilesystemError::Io { path, source });
-                }
+                Err(_) => break,
             }
         }
     }
     let opencode = project.join(".opencode");
-    match fs::remove_dir(&opencode) {
-        Ok(()) => Ok(()),
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
-            ) =>
-        {
-            Ok(())
-        }
-        Err(source) => Err(FilesystemError::Io {
-            path: opencode,
-            source,
-        }),
-    }
+    let _ = fs::remove_dir(opencode);
+    Ok(())
 }
