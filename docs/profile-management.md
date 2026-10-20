@@ -22,6 +22,11 @@ dotyczy wszystkich profili. Nie używaj symlinków ani kolidujących nazw.
 Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
 w skillach. Są instalowane bez automatycznego wykonywania.
 
+Skille przeznaczone wyłącznie dla tego repozytorium umieszczaj w
+`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `common/`
+ani żadnego profilu i nie są dostarczane do projektów. Workflow tego checkoutu
+jest oddzielony od zawartości profili.
+
 ## Wersje i publikowanie
 
 Każdy profil ma niezależną stabilną wersję `MAJOR.MINOR.PATCH`. Aktualizuj ją
@@ -55,6 +60,14 @@ zarządzane wpisy MCP i dane potrzebne do bezpiecznej synchronizacji. Status
 rozróżnia aktualność wersji od zmian treści oraz pokazuje lokalne modyfikacje.
 SHA commit nie opisuje niezacommitowanych zmian; do publikowania używaj czystego
 checkoutu.
+
+Wycofany `.opencode/workflow-rules.md` oraz dawniej wspólnie dostarczany
+`brain-to-implementer` są usuwane z istniejącej instalacji podczas update/switch
+lub uninstall tylko wtedy, gdy ich hashe zgadzają się ze stanem instalatora.
+Wpis `workflow-rules.md` w `instructions` jest usuwany przy update/switch
+wyłącznie, gdy stan potwierdza, że dodał go instalator (`instructions_added`).
+Własny wpis użytkownika pozostaje; po usunięciu wpisu instalatora flaga
+ownership jest zerowana.
 
 Przed zapisem menedżer sprawdza hashe plików, wpisy MCP i kolizje ścieżek.
 Konflikt przerywa operację bez częściowego zastosowania; nie ma opcji wymuszającej

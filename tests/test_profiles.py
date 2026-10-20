@@ -295,17 +295,99 @@ class ProfileTests(unittest.TestCase):
 
     def test_update_common_rules_and_mcp(self):
         manager.apply_profile(self.project, "backend-go")
-        rules = self.source / "common/workflow-rules.md"
-        rules.write_text(rules.read_text() + "\nUpdated guidance\n")
         mcp_path = self.source / "mcp/servers/postgres.json"
         mcp = json.loads(mcp_path.read_text())
         mcp["enabled"] = False
         mcp_path.write_text(json.dumps(mcp))
         manager.apply_profile(self.project, "backend-go")
-        self.assertEqual((self.project / manager.RULE).read_bytes(), rules.read_bytes())
         expected, _ = manager.configured_mcp(self.project, {"postgres": mcp})
         self.assertEqual(self.cfg()["mcp"]["postgres"], expected["postgres"])
         self.assertIn("UP TO DATE", self.status_output())
+
+    def test_repository_local_skill_and_fresh_install_scope(self):
+        local = self.source / ".opencode/skills/brain-to-implementer/SKILL.md"
+        original = local.read_bytes()
+        self.assertNotIn(".opencode/skills/brain-to-implementer/SKILL.md", manager.desired_files("backend-go"))
+        manager.apply_profile(self.project, "backend-go")
+        self.assertNotIn(manager.RULE, self.state()["files"])
+        self.assertNotIn(".opencode/skills/brain-to-implementer/SKILL.md", self.state()["files"])
+        self.assertFalse((self.project / manager.RULE).exists())
+        self.assertFalse((self.project / ".opencode/skills/brain-to-implementer").exists())
+        self.assertNotIn("instructions", self.cfg())
+        self.assertEqual(local.read_bytes(), original)
+
+    def test_retire_old_rules_and_skill_hash_checked_idempotently(self):
+        manager.apply_profile(self.project, "backend-go")
+        retired_skill = ".opencode/skills/brain-to-implementer/SKILL.md"
+        rules = self.project / manager.RULE
+        rules.write_text("old managed rules\n")
+        skill = self.project / retired_skill
+        skill.parent.mkdir(parents=True)
+        skill.write_text("old managed skill\n")
+        cfg = self.cfg()
+        cfg["instructions"] = ["keep-me.md", manager.RULE]
+        (self.project / "opencode.json").write_text(json.dumps(cfg))
+        state = self.state()
+        state["files"][manager.RULE] = manager.sha(rules.read_bytes())
+        state["files"][retired_skill] = manager.sha(skill.read_bytes())
+        state["instructions_added"] = True
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        manager.apply_profile(self.project, "backend-go")
+        self.assertFalse(rules.exists())
+        self.assertFalse(skill.exists())
+        self.assertEqual(self.cfg()["instructions"], ["keep-me.md"])
+        self.assertFalse(self.state()["instructions_added"])
+        snapshot = self.snapshot()
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(snapshot, self.snapshot())
+
+    def test_retired_file_conflicts_abort_without_partial_changes(self):
+        manager.apply_profile(self.project, "backend-go")
+        rules = self.project / manager.RULE
+        rules.write_text("managed old rules\n")
+        state = self.state()
+        state["files"][manager.RULE] = manager.sha(rules.read_bytes())
+        state["instructions_added"] = True
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        cfg = self.cfg()
+        cfg["instructions"] = [manager.RULE]
+        (self.project / "opencode.json").write_text(json.dumps(cfg))
+        rules.write_text("locally modified\n")
+        before = self.snapshot()
+        with self.assertRaisesRegex(manager.ProfileError, "Konflikt"):
+            manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(before, self.snapshot())
+
+    def test_uninstall_removes_hash_verified_retired_files_and_owned_instruction(self):
+        manager.apply_profile(self.project, "backend-go")
+        for rel, content in ((manager.RULE, b"old rules\n"),
+                             (".opencode/skills/brain-to-implementer/SKILL.md", b"old skill\n")):
+            path = self.project / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        state = self.state()
+        state["files"][manager.RULE] = manager.sha(b"old rules\n")
+        state["files"][".opencode/skills/brain-to-implementer/SKILL.md"] = manager.sha(b"old skill\n")
+        state["instructions_added"] = True
+        (self.project / manager.STATE).write_text(json.dumps(state))
+        cfg = self.cfg()
+        cfg["instructions"] = [manager.RULE, "my-instructions.md"]
+        (self.project / "opencode.json").write_text(json.dumps(cfg))
+        manager.uninstall(self.project)
+        self.assertFalse((self.project / manager.RULE).exists())
+        self.assertFalse((self.project / ".opencode/skills/brain-to-implementer/SKILL.md").exists())
+        self.assertEqual(self.cfg()["instructions"], ["my-instructions.md"])
+
+    def test_user_owned_retired_instruction_and_untracked_files_survive(self):
+        cfg = {"instructions": [manager.RULE, "other.md"]}
+        (self.project / "opencode.json").write_text(json.dumps(cfg))
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(self.cfg()["instructions"], cfg["instructions"])
+        untracked = self.project / manager.RULE
+        untracked.parent.mkdir(parents=True, exist_ok=True)
+        untracked.write_text("user file\n")
+        manager.apply_profile(self.project, "backend-go")
+        self.assertEqual(untracked.read_text(), "user file\n")
 
     def test_install_update_add_remove_skills_preserve_custom_and_uninstall(self):
         custom_cfg = {
@@ -319,7 +401,7 @@ class ProfileTests(unittest.TestCase):
         manager.apply_profile(self.project, "backend-go")
         self.assertIn("postgres", self.cfg()["mcp"])
         self.assertEqual(self.cfg()["model"], "test/model")
-        self.assertEqual(self.cfg()["instructions"], ["custom-rules.md", manager.RULE])
+        self.assertEqual(self.cfg()["instructions"], ["custom-rules.md"])
         self.assertFalse((self.project / manager.GATE).exists())
 
         # Add two new skills and modify one previously installed skill upstream.
@@ -402,6 +484,9 @@ class ProfileTests(unittest.TestCase):
             "---\nname: implementation-breakdown\ndescription: Legacy planning skill\n---\n"
         )
         shutil.rmtree(skills / "make-plan")
+        # These were not part of the legacy MVP's installed skill set.
+        for name in ("changelogs", "make-roadmap", "test-gap-discovery"):
+            shutil.rmtree(skills / name)
         # The old MVP installed only SKILL.md, without supporting assets.
         for skill in (skills / "refine-plan", skills / "go-backend"):
             content = (skill / "SKILL.md").read_bytes()
@@ -410,6 +495,8 @@ class ProfileTests(unittest.TestCase):
             (skill / "SKILL.md").write_bytes(content)
         state_path = self.project / manager.STATE
         state_path.write_text(json.dumps({"profile": "backend-go", "skill": "go-backend", "mcp": "postgres"}))
+        (self.project / manager.RULE).parent.mkdir(parents=True, exist_ok=True)
+        (self.project / manager.RULE).write_text("legacy workflow rules\n")
         plugin = self.project / ".opencode/plugins/approval-gate.js"
         plugin.parent.mkdir(parents=True)
         plugin.write_text("// Historical approval gate fixture\n")

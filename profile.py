@@ -215,7 +215,6 @@ def desired_files(profile: str) -> dict[str, bytes]:
                     if rel in files:
                         raise ProfileError(f"Duplikat pliku skilla: {rel}")
                     files[rel] = source.read_bytes()
-    files[RULE] = (ROOT / "common/workflow-rules.md").read_bytes()
     files[mcp_runtime.LAUNCHER] = (ROOT / "mcp_runtime.py").read_bytes()
     # Optional launcher assets travel only with profiles selecting that MCP.
     for name, entry in desired_mcp(profile).items():
@@ -385,10 +384,14 @@ def apply_profile(project: Path, profile: str) -> None:
     else:
         cfg.pop("mcp", None)
     rules = list(cfg.get("instructions", []))
-    originally_missing_rule = RULE not in rules
-    if originally_missing_rule:
-        rules.append(RULE)
-    cfg["instructions"] = rules
+    instructions_added = bool(old and old.get("instructions_added"))
+    if instructions_added:
+        rules = [item for item in rules if item != RULE]
+        instructions_added = False
+    if rules:
+        cfg["instructions"] = rules
+    else:
+        cfg.pop("instructions", None)
 
     for rel in (old.get("files", {}) if old else {}):
         if rel not in files:
@@ -409,7 +412,7 @@ def apply_profile(project: Path, profile: str) -> None:
         "mcp_local_hash": sha(json_bytes(overrides)),
         "had_config": old.get("had_config", existed) if old else existed,
         "gitignore_added": False,
-        "instructions_added": old.get("instructions_added", originally_missing_rule) if old else originally_missing_rule,
+        "instructions_added": instructions_added,
     }
     if old:
         file_path(project, GATE).unlink(missing_ok=True)  # retire the old gate marker
