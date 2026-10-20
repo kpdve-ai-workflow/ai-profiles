@@ -17,7 +17,7 @@ make validate
 make test
 ```
 
-Bez Make można użyć `python3 core/profile_management/implementations/python/ai-profile.py help`.
+Bez Make można użyć `python3 core/python/profile_management/ai-profile.py help`.
 Po instalacji, aktualizacji lub zmianie profilu zrestartuj OpenCode.
 
 ## Dokumentacja

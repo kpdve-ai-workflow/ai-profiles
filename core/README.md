@@ -1,5 +1,6 @@
-# Core components
+# Core architecture
 
-`core/` owns reusable components and their contracts. Each component keeps its
-implementation isolated under `implementations/<language>/`; replacing one does
-not require importing another implementation's internal modules.
+Core implementations are grouped by language. Python source code and tests live
+together under `core/python/`, with functional areas beneath that directory.
+Future languages may receive sibling directories with independent dependencies.
+The project deliberately avoids component → implementations → language nesting.

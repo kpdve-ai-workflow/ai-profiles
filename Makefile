@@ -1,5 +1,5 @@
 PYTHON ?= python3
-PROFILE_CLI := $(PYTHON) core/profile_management/implementations/python/ai-profile.py
+PROFILE_CLI := $(PYTHON) core/python/profile_management/ai-profile.py
 PROJECT ?=
 PROFILE ?=
 DESCRIPTION ?=
@@ -42,7 +42,7 @@ bump: check-profile
 	$(PROFILE_CLI) bump "$(PROFILE)" --part "$(PART)"
 
 test:
-	$(PYTHON) -m unittest discover -s tests -v
+	$(PYTHON) -m unittest discover -s core/python/tests -t core/python -v
 
 pull-update: check-project
 	git pull --ff-only

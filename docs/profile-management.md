@@ -87,7 +87,7 @@ konfiguracji. Instalacje MVP bez hashy wymagają przeglądu i backupu przed
 świadomym przejęciem:
 
 ```bash
-python3 core/profile_management/implementations/python/ai-profile.py migrate-legacy --accept-existing --project ~/projects/my-api
+python3 core/python/profile_management/ai-profile.py migrate-legacy --accept-existing --project ~/projects/my-api
 make update PROJECT=~/projects/my-api
 ```
 
