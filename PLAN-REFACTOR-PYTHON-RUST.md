@@ -2,7 +2,7 @@
 
 ## Stan i sposób pracy
 
-**Gotowość planu: READY.** **Implementacja: 1/25 zadań. Walidacja wykonania: NOT RUN.**
+**Gotowość planu: READY.** **Implementacja: 5/25 zadań. Walidacja wykonania: NOT RUN.**
 
 Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozostawieniem działającego Pythona. W sprawdzonym checkoutcie istnieje `core/python/`; nie ma jeszcze `core/rust/`. Nie uruchomiono kodu, kompilacji ani testów podczas planowania.
 
@@ -10,7 +10,7 @@ Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozost
 
 Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatrzymuje się. Nie przechodzi samodzielnie do następnego zadania. `IMPLEMENTED` oznacza powstanie kodu, **nie** potwierdzoną zgodność. Do T-25 weryfikacja zachowania pozostaje `NOT RUN — PROHIBITED AT THIS STAGE`.
 
-**Następne działanie: T-02 — typy, wersje, błędy i JSON.**
+**Następne działanie: T-06 — manifesty i typy MCP.**
 
 ## Wymagania i decyzje użytkownika
 
@@ -267,6 +267,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-02 — typy, wersje, błędy i JSON
 
+**Stan: IMPLEMENTED.** Dodano zwalidowane nazwy profili i nieograniczone segmenty wersji, typowane akcje/bump/context, błędy strukturalne oraz codec JSON/SHA-256. `cargo fmt` i `cargo check --locked --lib` zakończone powodzeniem. Testy i zachowanie: `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-01. **Kontrakt:** K-01.
 
 1. Dodać `src/{model,error,codec}.rs` i rejestrację w `lib.rs`; przenieść reguły z `versioning.py`, `constants.py`, `filesystem.{sha,json_bytes,read_json}`.
@@ -276,6 +278,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** przegląd K-01 i kompilacja. **Gotowe, gdy:** nie ma limitu segmentu u64, serializacja ma określone Unicode/indent/LF i nie gubi obcych pól. Zgodność runtime odroczona.
 
 ### T-03 — bezpieczny system plików i granica procesów
+
+**Stan: IMPLEMENTED.** Dodano narzędzia ścieżek/ownership/zapisu/cleanup oraz `ProcessRunner` z argv, cwd/env, sterowaniem stdin/stdout/stderr, timeoutem, kill+wait i tokenem anulowania. `cargo fmt` i `cargo check --locked --lib` zakończone powodzeniem. Testy i procesy zewnętrzne: `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-02. **Kontrakt:** K-01 i przepływ procesów.
 
@@ -287,6 +291,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-04 — źródła repozytorium i stan projektu
 
+**Stan: IMPLEMENTED.** Dodano odkrywanie checkoutu względem lokalizacji binarium, odczyt profili/metadanych i opcjonalnego commita, wybór projektu, stan/config oraz czyszczenie wyłącznie własnej linii `.gitignore`. `cargo fmt` i `cargo check --locked --lib` zakończone powodzeniem. Testy i zachowanie: `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-03. **Kontrakt:** K-01.
 
 1. Dodać `src/{repository,project}.rs`; przenieść wszystkie symbole z `infrastructure/{repository,project}.py`.
@@ -296,6 +302,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** statyczne porównanie pól i warunków oraz kompilacja. **Gotowe, gdy:** nie ma zależności od cwd dla źródeł ani baked-in ścieżki builda; projekt domyślny nadal pochodzi z cwd.
 
 ### T-05 — tworzenie i bump profilu
+
+**Stan: IMPLEMENTED.** Dodano `create_profile` i `bump_profile` ze stagingiem, `.gitkeep`, zachowaniem obcych pól i uprawnień metadata oraz automatycznym sprzątaniem pliku tymczasowego przy błędzie. `cargo fmt` i `cargo check --locked --lib` zakończone powodzeniem. Testy i operacje na profilach: `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-04. **Kontrakt:** K-02.
 
@@ -532,4 +540,4 @@ Poza zakresem: usuwanie lub przepisywanie Pythona, zmiana profili/wersji, automa
 
 ## Następne działanie
 
-**Wykonać tylko T-02 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
+**Wykonać tylko T-06 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
