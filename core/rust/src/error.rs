@@ -149,6 +149,46 @@ pub(crate) enum ProfileManagementError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub(crate) enum PayloadError {
+    #[error("Brak katalogu skills: {0}")]
+    MissingSkills(PathBuf),
+    #[error("Nieprawidłowy katalog skilla: {0}")]
+    InvalidSkillDirectory(PathBuf),
+    #[error("Brak lub nieprawidłowy SKILL.md w {0}")]
+    MissingSkillDocument(PathBuf),
+    #[error("Nieprawidłowy YAML frontmatter: {0}")]
+    InvalidFrontmatter(PathBuf),
+    #[error("SKILL.md musi mieć name={name} i description: {path}")]
+    InvalidSkillMetadata { name: String, path: PathBuf },
+    #[error("Skill używa symlinka: {0}")]
+    SkillSymlink(PathBuf),
+    #[error("Duplikat pliku skilla: {0}")]
+    DuplicateSkillFile(String),
+    #[error("Brak zarządzanego pliku launchera MCP: {0}")]
+    MissingManagedLauncher(String),
+    #[error("Nieprawidłowy katalog launchera MCP: {0}")]
+    InvalidLauncherDirectory(String),
+    #[error("Launcher MCP używa symlinka: {0}")]
+    LauncherSymlink(PathBuf),
+    #[error("Nieprawidłowy katalog scripts: {0}")]
+    InvalidScriptsDirectory(String),
+    #[error("Skrypt profilu używa symlinka: {0}")]
+    ScriptSymlink(PathBuf),
+    #[error("Nieprawidłowa ścieżka payloadu: {0}")]
+    InvalidPayloadPath(PathBuf),
+    #[error("Błąd systemu plików dla {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Filesystem(#[from] FilesystemError),
+    #[error(transparent)]
+    Mcp(#[from] McpConfigError),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum McpConfigError {
     #[error("Nieprawidłowa nazwa definicji MCP; użyj małych liter/cyfr i pojedynczych myślników")]
     InvalidName,
@@ -220,4 +260,42 @@ pub(crate) enum McpConfigError {
     Filesystem(#[from] FilesystemError),
     #[error(transparent)]
     Repository(#[from] RepositoryError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum EnvironmentError {
+    #[error("Cannot read env file: {filename}")]
+    ReadEnvFile { filename: String },
+    #[error("Invalid env entry at line {line}")]
+    InvalidEntry { line: usize },
+    #[error("Invalid env quoting at line {line}")]
+    InvalidQuoting { line: usize },
+    #[error("Invalid env value at line {line}")]
+    InvalidValue { line: usize },
+    #[error("Required environment variable is missing or empty: {0}")]
+    MissingVariable(String),
+    #[error("Invalid MCP environment mapping")]
+    InvalidMapping,
+    #[error(transparent)]
+    McpConfig(#[from] McpConfigError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum McpRuntimeError {
+    #[error("MCP startup failed: check working directory and executable availability.")]
+    ProjectLocation,
+    #[error("Cannot read valid JSON: ai-profile-state.json")]
+    StateRead,
+    #[error("Missing or invalid mcp_base in profile state; run ai-profiles update")]
+    InvalidState,
+    #[error("Unknown local MCP server")]
+    UnknownLocalServer,
+    #[error("MCP server is disabled locally")]
+    Disabled,
+    #[error("MCP startup failed: check working directory and executable availability.")]
+    Exec,
+    #[error(transparent)]
+    Environment(#[from] EnvironmentError),
+    #[error(transparent)]
+    Config(#[from] McpConfigError),
 }

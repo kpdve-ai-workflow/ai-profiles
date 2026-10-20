@@ -1,0 +1,305 @@
+use std::{
+    ffi::OsStr,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use regex::Regex;
+use std::sync::OnceLock;
+
+use crate::{
+    error::PayloadError, filesystem::file_path, mcp::config::desired_mcp, model::RepositoryContext,
+};
+
+const PYTHON_ADAPTER: &str = ".opencode/ai-profile-mcp.py";
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PayloadFile {
+    pub(crate) relative_path: String,
+    pub(crate) contents: Vec<u8>,
+}
+
+pub(crate) fn desired_files(
+    context: &RepositoryContext,
+    profile: &str,
+) -> Result<Vec<PayloadFile>, PayloadError> {
+    let mut files = Vec::new();
+    for folder in [
+        context.sources.join("common/skills"),
+        context
+            .sources
+            .join("profiles")
+            .join(profile)
+            .join("skills"),
+    ] {
+        collect_skills(&folder, &mut files)?;
+    }
+
+    let adapter = context
+        .sources
+        .join("core/python/profile_management/mcp_runtime.py");
+    insert_file(&mut files, PYTHON_ADAPTER, &adapter, false)?;
+
+    for definition in desired_mcp(context, profile)? {
+        let name = definition.name.as_str();
+        let launcher = file_path(&context.sources, &format!("mcp/launchers/{name}"))?;
+        if launcher.exists() {
+            if !launcher.is_dir() {
+                return Err(PayloadError::InvalidLauncherDirectory(name.to_owned()));
+            }
+            for source in sorted_tree(&launcher)? {
+                if source_is_symlink(&source)? {
+                    return Err(PayloadError::LauncherSymlink(source));
+                }
+                let relative = source
+                    .strip_prefix(&launcher)
+                    .map_err(|_| PayloadError::InvalidPayloadPath(source.clone()))?;
+                if contains_component(relative, "__pycache__") || has_extension(&source, "pyc") {
+                    continue;
+                }
+                if source.is_file() {
+                    let relative_path =
+                        payload_path(&[".opencode/mcp", name, &path_to_posix(relative)?]);
+                    insert_file(&mut files, &relative_path, &source, false)?;
+                }
+            }
+        }
+
+        for argument in definition.command.iter().flatten() {
+            if argument.starts_with(".opencode/mcp/")
+                && !files.iter().any(|file| file.relative_path == *argument)
+            {
+                return Err(PayloadError::MissingManagedLauncher(argument.clone()));
+            }
+        }
+    }
+
+    let readme = file_path(&context.sources, &format!("profiles/{profile}/README.md"))?;
+    let scripts = file_path(&context.sources, &format!("profiles/{profile}/scripts"))?;
+    if scripts.exists() {
+        if !scripts.is_dir() {
+            return Err(PayloadError::InvalidScriptsDirectory(profile.to_owned()));
+        }
+        for source in sorted_tree(&scripts)? {
+            if source_is_symlink(&source)? {
+                return Err(PayloadError::ScriptSymlink(source));
+            }
+            let relative = source
+                .strip_prefix(&scripts)
+                .map_err(|_| PayloadError::InvalidPayloadPath(source.clone()))?;
+            if contains_component(relative, "__pycache__") || has_extension(&source, "pyc") {
+                continue;
+            }
+            if source.is_file() {
+                let relative_path =
+                    payload_path(&[".opencode/ai-profile/scripts", &path_to_posix(relative)?]);
+                insert_file(&mut files, &relative_path, &source, false)?;
+            }
+        }
+    }
+    if readme.is_file() {
+        insert_file(&mut files, ".opencode/ai-profile/README.md", &readme, false)?;
+    }
+    Ok(files)
+}
+
+fn collect_skills(folder: &Path, files: &mut Vec<PayloadFile>) -> Result<(), PayloadError> {
+    if !folder.is_dir() {
+        return Err(PayloadError::MissingSkills(folder.to_owned()));
+    }
+    let mut skills = read_directory(folder)?;
+    skills.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    for skill in skills {
+        let skill_type = fs::symlink_metadata(&skill).map_err(|source| PayloadError::Io {
+            path: skill.clone(),
+            source,
+        })?;
+        if skill.file_name() == Some(OsStr::new(".gitkeep"))
+            && skill_type.is_file()
+            && !skill_type.file_type().is_symlink()
+        {
+            continue;
+        }
+        if !skill_type.is_dir() || skill_type.file_type().is_symlink() {
+            return Err(PayloadError::InvalidSkillDirectory(skill));
+        }
+        let skill_name = skill
+            .file_name()
+            .and_then(OsStr::to_str)
+            .ok_or_else(|| PayloadError::InvalidPayloadPath(skill.clone()))?;
+        let skill_file = skill.join("SKILL.md");
+        let document_type = fs::symlink_metadata(&skill_file).ok();
+        if !document_type
+            .as_ref()
+            .is_some_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+        {
+            return Err(PayloadError::MissingSkillDocument(skill_file));
+        }
+        let frontmatter = fs::read_to_string(&skill_file).map_err(|source| PayloadError::Io {
+            path: skill_file.clone(),
+            source,
+        })?;
+        if !frontmatter.starts_with("---\n") {
+            return Err(PayloadError::InvalidFrontmatter(skill_file));
+        }
+        let Some((metadata, _rest)) = frontmatter[4..].split_once("\n---") else {
+            return Err(PayloadError::InvalidFrontmatter(skill_file));
+        };
+        let Some((declared_name, has_description)) = skill_metadata(metadata) else {
+            return Err(PayloadError::InvalidSkillMetadata {
+                name: skill_name.to_owned(),
+                path: skill_file,
+            });
+        };
+        if declared_name != skill_name || !has_description {
+            return Err(PayloadError::InvalidSkillMetadata {
+                name: skill_name.to_owned(),
+                path: skill_file,
+            });
+        }
+
+        for source in tree_in_filesystem_order(&skill)? {
+            if source_is_symlink(&source)? {
+                return Err(PayloadError::SkillSymlink(source));
+            }
+            if source.is_file() {
+                let relative = source
+                    .strip_prefix(&skill)
+                    .map_err(|_| PayloadError::InvalidPayloadPath(source.clone()))?;
+                let relative_path =
+                    payload_path(&[".opencode/skills", skill_name, &path_to_posix(relative)?]);
+                insert_file(files, &relative_path, &source, true)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn skill_metadata(metadata: &str) -> Option<(&str, bool)> {
+    static NAME: OnceLock<Regex> = OnceLock::new();
+    static DESCRIPTION: OnceLock<Regex> = OnceLock::new();
+    let name = NAME.get_or_init(|| {
+        Regex::new(r#"(?m)^name:\s*["']?([a-z0-9]+(?:-[a-z0-9]+)*)["']?\s*$"#)
+            .expect("fixed skill-name regex is valid")
+    });
+    let description = DESCRIPTION.get_or_init(|| {
+        Regex::new(r"(?m)^description:\s*.+$").expect("fixed description regex is valid")
+    });
+    Some((
+        name.captures(metadata)?.get(1)?.as_str(),
+        description.is_match(metadata),
+    ))
+}
+
+fn read_directory(path: &Path) -> Result<Vec<PathBuf>, PayloadError> {
+    fs::read_dir(path)
+        .map_err(|source| PayloadError::Io {
+            path: path.to_owned(),
+            source,
+        })?
+        .map(|entry| {
+            entry
+                .map(|entry| entry.path())
+                .map_err(|source| PayloadError::Io {
+                    path: path.to_owned(),
+                    source,
+                })
+        })
+        .collect()
+}
+
+fn tree_in_filesystem_order(root: &Path) -> Result<Vec<PathBuf>, PayloadError> {
+    let mut entries = Vec::new();
+    collect_tree(root, &mut entries)?;
+    Ok(entries)
+}
+
+fn sorted_tree(root: &Path) -> Result<Vec<PathBuf>, PayloadError> {
+    let mut entries = tree_in_filesystem_order(root)?;
+    entries.sort();
+    Ok(entries)
+}
+
+fn collect_tree(root: &Path, entries: &mut Vec<PathBuf>) -> Result<(), PayloadError> {
+    for path in read_directory(root)? {
+        entries.push(path.clone());
+        let metadata = fs::symlink_metadata(&path).map_err(|source| PayloadError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            collect_tree(&path, entries)?;
+        }
+    }
+    Ok(())
+}
+
+fn source_is_symlink(path: &Path) -> Result<bool, PayloadError> {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_symlink())
+        .map_err(|source| PayloadError::Io {
+            path: path.to_owned(),
+            source,
+        })
+}
+
+fn has_extension(path: &Path, extension: &str) -> bool {
+    path.extension() == Some(OsStr::new(extension))
+}
+
+fn contains_component(path: &Path, expected: &str) -> bool {
+    path.components()
+        .any(|component| component.as_os_str() == expected)
+}
+
+fn path_to_posix(path: &Path) -> Result<String, PayloadError> {
+    path.components()
+        .map(|component| {
+            component
+                .as_os_str()
+                .to_str()
+                .map(str::to_owned)
+                .ok_or_else(|| PayloadError::InvalidPayloadPath(path.to_owned()))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|parts| parts.join("/"))
+}
+
+fn payload_path(parts: &[&str]) -> String {
+    parts
+        .iter()
+        .map(|part| part.trim_matches('/'))
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn insert_file(
+    files: &mut Vec<PayloadFile>,
+    relative_path: &str,
+    source: &Path,
+    reject_duplicate: bool,
+) -> Result<(), PayloadError> {
+    if let Some(existing) = files
+        .iter_mut()
+        .find(|file| file.relative_path == relative_path)
+    {
+        if reject_duplicate {
+            return Err(PayloadError::DuplicateSkillFile(relative_path.to_owned()));
+        }
+        existing.contents = fs::read(source).map_err(|source_error| PayloadError::Io {
+            path: source.to_owned(),
+            source: source_error,
+        })?;
+        return Ok(());
+    }
+    let contents = fs::read(source).map_err(|source_error| PayloadError::Io {
+        path: source.to_owned(),
+        source: source_error,
+    })?;
+    files.push(PayloadFile {
+        relative_path: relative_path.to_owned(),
+        contents,
+    });
+    Ok(())
+}

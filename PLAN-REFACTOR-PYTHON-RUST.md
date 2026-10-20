@@ -2,7 +2,7 @@
 
 ## Stan i sposób pracy
 
-**Gotowość planu: READY.** **Implementacja: 7/25 zadań. Walidacja wykonania: NOT RUN.**
+**Gotowość planu: READY.** **Implementacja: 10/25 zadań. Walidacja wykonania: NOT RUN.**
 
 Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozostawieniem działającego Pythona. W sprawdzonym checkoutcie istnieje `core/python/`; nie ma jeszcze `core/rust/`. Nie uruchomiono kodu, kompilacji ani testów podczas planowania.
 
@@ -10,7 +10,7 @@ Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozost
 
 Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatrzymuje się. Nie przechodzi samodzielnie do następnego zadania. `IMPLEMENTED` oznacza powstanie kodu, **nie** potwierdzoną zgodność. Do T-25 weryfikacja zachowania pozostaje `NOT RUN — PROHIBITED AT THIS STAGE`.
 
-**Następne działanie: T-08 — dotenv i środowisko.**
+**Następne działanie: T-11 — wspólna synchronizacja install/update/switch.**
 
 ## Wymagania i decyzje użytkownika
 
@@ -337,6 +337,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-08 — dotenv i środowisko
 
+**Stan: IMPLEMENTED.** Dodano literalny parser dotenv (BOM, podział linii, komentarze, `export`, quoting bez shella) i resolver środowiska z kolejnością inherited → env_file → environment oraz podstawianiem wszystkich mapowań ze wspólnego stanu wejściowego. Błędy nie ujawniają wartości sekretów. `cargo fmt` i `cargo check --locked --lib` zakończone powodzeniem. Testy i parser na fixture'ach: `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-07. **Kontrakt:** K-04.
 
 1. Dodać `src/mcp/environment.rs`; odwzorować `dotenv` i `environment_for` bez shella.
@@ -346,6 +348,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-09 — natywny adapter MCP
 
+**Stan: IMPLEMENTED.** Dodano samodzielne binarium adaptera, wybór projektu z położenia własnego pliku wykonywalnego w `.opencode`, walidację stanu/serwera, override/env/cwd oraz Unix `exec` z odziedziczonymi stdio. Błędy wykonania nie ujawniają ścieżek ani wartości sekretów. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testy i adapter: `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-08. **Kontrakt:** K-04.
 
 1. Dodać `src/mcp/runtime.rs` i pierwsze binarium `src/bin/ai-profile-mcp.rs`.
@@ -354,6 +358,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** przegląd streamów/kodów i kompilacja, bez uruchamiania adaptera. **Gotowe, gdy:** nie wywołuje własnego kodu Python i nie wymaga całego repozytorium po skopiowaniu do `.opencode`.
 
 ### T-10 — zbieranie payloadu
+
+**Stan: IMPLEMENTED.** Dodano kolekcję uporządkowanych ścieżek i bajtów: common/profile skills z kontrolą frontmatter i symlinków, oryginalny adapter Python, wybrane launchery MCP, skrypty oraz README profilu. Zachowano filtry `.gitkeep`, `__pycache__` i `.pyc`; nie dodano ani nie wykonano binariów Rust. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testy i kolekcja payloadu na danych: `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-07. **Kontrakt:** K-05.
 
@@ -544,4 +550,4 @@ Poza zakresem: usuwanie lub przepisywanie Pythona, zmiana profili/wersji, automa
 
 ## Następne działanie
 
-**Wykonać tylko T-08 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
+**Wykonać tylko T-11 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
