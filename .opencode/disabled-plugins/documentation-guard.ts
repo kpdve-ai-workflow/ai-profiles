@@ -2,7 +2,7 @@ import { Plugin } from "@opencode/plugin"
 import { basename } from "node:path"
 
 // Add file names here. Each name is protected in every repository directory.
-const protectedFiles = new Set([""])
+const protectedFiles = new Set(["README.md", "AGENTS.md"])
 
 export default Plugin.define({
   id: "ai-profiles.documentation-guard",
