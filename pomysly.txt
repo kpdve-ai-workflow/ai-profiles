@@ -7,3 +7,4 @@
 - skill do tworzenia testow python
 - uporzadkowanie pliku python ( obecnie jest za duzy )
 - nie uruchamianie wszystkich testow na raz oraz cache testow jesli nie ma obecnie
+- agent przy blednym pluginie sie zacinal w momencie aktualizacji pliku .md ( nie widac bylo w TUI po prostu ciagle pracowal jakis podlgad by sie przydal )

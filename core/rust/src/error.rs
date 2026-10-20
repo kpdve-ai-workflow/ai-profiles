@@ -147,3 +147,77 @@ pub(crate) enum ProfileManagementError {
     #[error(transparent)]
     Repository(#[from] RepositoryError),
 }
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum McpConfigError {
+    #[error("Nieprawidłowa nazwa definicji MCP; użyj małych liter/cyfr i pojedynczych myślników")]
+    InvalidName,
+    #[error("Brak definicji MCP: {name} (mcp/servers/{name}.json)")]
+    MissingDefinition { name: String },
+    #[error("Nieprawidłowa MCP dla {profile}: oczekiwano listy servers z nazwami z mcp/servers/")]
+    InvalidManifest { profile: String },
+    #[error("Powielona nazwa MCP w profilu {profile}: {name}")]
+    DuplicateName { profile: String, name: String },
+    #[error("Invalid MCP type: {0}")]
+    InvalidType(String),
+    #[error("MCP command must be a nonempty string array: {0}")]
+    InvalidCommand(String),
+    #[error("Missing remote MCP URL: {0}")]
+    MissingRemoteUrl(String),
+    #[error("access_mode is supported only for local postgres MCP")]
+    AccessModeUnsupported,
+    #[error("PostgreSQL access_mode must be restricted or unrestricted")]
+    InvalidAccessMode,
+    #[error("Missing PostgreSQL --access-mode value")]
+    MissingCommandAccessMode,
+    #[error("Duplicate PostgreSQL --access-mode arguments; specify exactly one mode")]
+    DuplicateCommandAccessMode,
+    #[error("PostgreSQL --access-mode must be restricted or unrestricted")]
+    InvalidCommandAccessMode,
+    #[error("MCP {field} must map names to strings: {name}")]
+    InvalidStringMap { field: &'static str, name: String },
+    #[error("Invalid environment variable name: {0}")]
+    InvalidEnvironmentName(String),
+    #[error("MCP {field} must be boolean: {name}")]
+    InvalidBoolean { field: &'static str, name: String },
+    #[error("Invalid MCP cwd: {0}")]
+    InvalidCwd(String),
+    #[error("Invalid MCP timeout: {0}")]
+    InvalidTimeout(String),
+    #[error("Invalid MCP OAuth settings: {0}")]
+    InvalidOAuth(String),
+    #[error("Invalid MCP protocol: {0}")]
+    InvalidProtocol(String),
+    #[error("env_file is supported only for local MCP: {0}")]
+    RemoteEnvFile(String),
+    #[error("Expected a relative path inside the project")]
+    InvalidProjectPath,
+    #[error("Symlinks are not supported for MCP configuration")]
+    ProjectSymlink,
+    #[error("ai-profile.local.json must contain an mcp object")]
+    InvalidLocalManifest,
+    #[error("Local override targets an unmanaged or removed MCP: {0}")]
+    UnmanagedOverride(String),
+    #[error("Invalid local MCP fields: {0}")]
+    InvalidOverrideFields(String),
+    #[error("Local override cannot change MCP transport type: {0}")]
+    OverrideTransportChange(String),
+    #[error("Konflikt: konfiguracja MCP '{0}' była zmieniona. Nie nadpisuję jej automatycznie.")]
+    ManagedMcpChanged(String),
+    #[error("MCP '{0}' już istnieje i nie należy do managera.")]
+    UnmanagedMcpExists(String),
+    #[error("Nieprawidłowy obiekt MCP: {0}")]
+    InvalidMcpObject(String),
+    #[error("Błąd systemu plików dla {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Filesystem(#[from] FilesystemError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}

@@ -2,7 +2,7 @@
 
 ## Stan i sposób pracy
 
-**Gotowość planu: READY.** **Implementacja: 5/25 zadań. Walidacja wykonania: NOT RUN.**
+**Gotowość planu: READY.** **Implementacja: 7/25 zadań. Walidacja wykonania: NOT RUN.**
 
 Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozostawieniem działającego Pythona. W sprawdzonym checkoutcie istnieje `core/python/`; nie ma jeszcze `core/rust/`. Nie uruchomiono kodu, kompilacji ani testów podczas planowania.
 
@@ -10,7 +10,7 @@ Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozost
 
 Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatrzymuje się. Nie przechodzi samodzielnie do następnego zadania. `IMPLEMENTED` oznacza powstanie kodu, **nie** potwierdzoną zgodność. Do T-25 weryfikacja zachowania pozostaje `NOT RUN — PROHIBITED AT THIS STAGE`.
 
-**Następne działanie: T-06 — manifesty i typy MCP.**
+**Następne działanie: T-08 — dotenv i środowisko.**
 
 ## Wymagania i decyzje użytkownika
 
@@ -315,6 +315,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-06 — manifesty i typy MCP
 
+**Stan: IMPLEMENTED.** Dodano typowany model MCP oraz odczyt definicji/manifestów, wykrywanie duplikatów i walidację serwerów obejmującą transport, command/url, environment/headers, flagi, cwd, timeouty bez akceptacji bool jako int, OAuth, protocol, access_mode i env_file z ochroną ścieżek/symlinków. `cargo fmt` i `cargo check --locked --lib` zakończone powodzeniem. Testy: `NOT RUN — PROHIBITED AT THIS STAGE`.
+
 **Zależności:** T-04. **Kontrakt:** K-03.
 
 1. Dodać `src/mcp.rs` i `mcp/config.rs`; przenieść `mcp_definition`, `desired_mcp`, `validate_servers`, `project_path`.
@@ -323,6 +325,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** lista warunków z `mcp_runtime.py:104–146` i kompilacja. **Gotowe, gdy:** registry i manifest nie mają pominiętych reguł walidacji.
 
 ### T-07 — override, postgres i render MCP
+
+**Stan: IMPLEMENTED.** Dodano local override loading/ownership, rekurencyjny merge, walidację i pojedynczy argument access mode PostgreSQL, resolve/render, ścieżkę lokalnego launchera oraz kontrolę konfliktów i zmienionych ścieżek override. Synchronizacja nie odczytuje `env_file`. `cargo fmt` i `cargo check --locked --lib` zakończone powodzeniem. Testy i zachowanie: `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-06. **Kontrakt:** K-03.
 
@@ -540,4 +544,4 @@ Poza zakresem: usuwanie lub przepisywanie Pythona, zmiana profili/wersji, automa
 
 ## Następne działanie
 
-**Wykonać tylko T-06 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
+**Wykonać tylko T-08 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**

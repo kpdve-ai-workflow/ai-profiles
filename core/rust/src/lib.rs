@@ -6,6 +6,7 @@
 mod codec;
 mod error;
 mod filesystem;
+pub(crate) mod mcp;
 mod model;
 mod process;
 pub(crate) mod profile_management;
