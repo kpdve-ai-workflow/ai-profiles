@@ -6,9 +6,11 @@
 mod codec;
 mod error;
 mod filesystem;
+pub mod mariadb;
 pub mod mcp;
 mod model;
 mod process;
-pub(crate) mod profile_management;
+pub mod profile_management;
 mod project;
 mod repository;
+pub(crate) mod wordpress;

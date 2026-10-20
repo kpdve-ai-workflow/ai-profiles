@@ -301,6 +301,94 @@ pub(crate) enum ValidationError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub(crate) enum WordPressError {
+    #[error("Mapowanie wymaga origin URL, np. https://example.pl (bez ścieżki)")]
+    InvalidOrigin,
+    #[error("Użyj --map https://zrodlo.pl=https://projekt.ddev.site")]
+    InvalidMappingSyntax,
+    #[error("Powielone lub identyczne mapowanie domen")]
+    DuplicateOrIdentityMapping,
+    #[error("Jeden host źródłowy nie może wskazywać różnych hostów lokalnych")]
+    SourceHostConflict,
+    #[error("Wymagane są niełańcuchowe, jawne mapowania domen")]
+    MissingOrChainedMappings,
+    #[error("Nie łącz różnych witryn pod jednym hostem w tym importerze")]
+    TargetHostCollision,
+    #[error(
+        "Backup zawiera URL witryny bez jawnego mapowania; baza wymaga odtworzenia lub dokończenia"
+    )]
+    UnmappedUrl,
+    #[error("Brak lub pusty plik backupu")]
+    EmptyDump,
+    #[error("Obsługiwane są tylko nieszyfrowane .sql lub .gz, nie ZIP/.crypt")]
+    UnsupportedDumpType,
+    #[error("Dump zawiera niedozwolone dyrektywy baz/użytkowników lub klienta SQL")]
+    ForbiddenDumpDirective,
+    #[error("Nie rozpoznano jednej kompletnej bazy WP; sprawdź pełny dump i prefiks")]
+    IncompleteDatabase,
+    #[error("Niekompletny backup multisite")]
+    IncompleteMultisite,
+    #[error("Błąd odczytu dumpa: {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Nieprawidłowa ścieżka lub nazwa w dumpie")]
+    InvalidDumpPath,
+    #[error("Błąd kroku DDEV: {step}; przerwano (szczegóły nie są wypisywane z uwagi na sekrety)")]
+    DdevStepFailed { step: String },
+    #[error(
+        "WP-CLI zgłosił ostrzeżenie/błąd search-replace; nie uznaję częściowej zamiany za sukces"
+    )]
+    SearchReplaceWarning,
+    #[error("Nie rozpoznano JSON ddev describe")]
+    InvalidDdevDescribe,
+    #[error("Nieprawidłowy wynik zapytania WP-CLI")]
+    InvalidQueryOutput,
+    #[error("Nieprawidłowy identyfikator bloga")]
+    InvalidBlogId,
+    #[error("Brak home/siteurl dla jednej z witryn")]
+    MissingSiteOptions,
+    #[error("Nie można uruchomić DDEV")]
+    DdevUnavailable,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum MigrationError {
+    #[error("Migracja starej instalacji wymaga --accept-existing po przeglądzie plików")]
+    AcceptanceRequired,
+    #[error("Brak starego profilu")]
+    MissingLegacyState,
+    #[error("Nie wykryto starego formatu profilu (zainstalowany nowy lub niepoprawny)")]
+    NotLegacyFormat,
+    #[error("Nieznany format starego profilu")]
+    UnknownLegacyFormat,
+    #[error("Nie odnaleziono dotychczasowej konfiguracji MCP")]
+    MissingMcpConfiguration,
+    #[error("Brak pliku dotychczasowego profilu: {0}")]
+    MissingLegacyFile(String),
+    #[error("Nieprawidłowy stary stan profilu")]
+    InvalidLegacyState,
+    #[error("Błąd systemu plików dla {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Filesystem(#[from] FilesystemError),
+    #[error(transparent)]
+    Mcp(#[from] McpConfigError),
+    #[error(transparent)]
+    Project(#[from] ProjectError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum McpConfigError {
     #[error("Nieprawidłowa nazwa definicji MCP; użyj małych liter/cyfr i pojedynczych myślników")]
     InvalidName,

@@ -19,6 +19,7 @@ pub(crate) enum StreamMode {
     Capture,
     Inherit,
     Null,
+    RedirectToStderr,
 }
 
 #[derive(Clone, Debug)]
@@ -89,8 +90,8 @@ impl ProcessRunner for SystemProcessRunner {
         }
         command.envs(&spec.env);
         command.stdin(stdin_stdio(&spec.stdin));
-        command.stdout(stream_stdio(spec.stdout));
-        command.stderr(stream_stdio(spec.stderr));
+        command.stdout(stream_stdio(spec.stdout, true));
+        command.stderr(stream_stdio(spec.stderr, false));
 
         let mut child = command
             .spawn()
@@ -129,11 +130,13 @@ fn stdin_stdio(mode: &StdinMode) -> Stdio {
     }
 }
 
-fn stream_stdio(mode: StreamMode) -> Stdio {
+fn stream_stdio(mode: StreamMode, is_stdout: bool) -> Stdio {
     match mode {
         StreamMode::Capture => Stdio::piped(),
         StreamMode::Inherit => Stdio::inherit(),
         StreamMode::Null => Stdio::null(),
+        StreamMode::RedirectToStderr if is_stdout => Stdio::from(std::io::stderr()),
+        StreamMode::RedirectToStderr => Stdio::inherit(),
     }
 }
 

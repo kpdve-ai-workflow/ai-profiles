@@ -2,7 +2,7 @@
 
 ## Stan i sposób pracy
 
-**Gotowość planu: READY.** **Implementacja: 13/25 zadań. Walidacja wykonania: NOT RUN.**
+**Gotowość planu: READY.** **Implementacja: 19/25 zadań. Walidacja wykonania: NOT RUN.**
 
 Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozostawieniem działającego Pythona. W sprawdzonym checkoutcie istnieje `core/python/`; nie ma jeszcze `core/rust/`. Nie uruchomiono kodu, kompilacji ani testów podczas planowania.
 
@@ -10,7 +10,7 @@ Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozost
 
 Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatrzymuje się. Nie przechodzi samodzielnie do następnego zadania. `IMPLEMENTED` oznacza powstanie kodu, **nie** potwierdzoną zgodność. Do T-25 weryfikacja zachowania pozostaje `NOT RUN — PROHIBITED AT THIS STAGE`.
 
-**Następne działanie: T-14 — legacy migration.**
+**Następne działanie: T-20 — wyłącznie preflight WordPress.**
 
 ## Wymagania i decyzje użytkownika
 
@@ -404,6 +404,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-14 — legacy migration
 
+**Stan: IMPLEMENTED.** Dodano jawnie potwierdzaną adopcję starego stanu: dokładne mapowania dwóch profili/skillów, wymagany wcześniejszy MCP i lista pięciu historycznych plików. Zapisywane są ich bieżące hashe jako baseline, bez zmian treści; gate jest usuwany dopiero po zapisaniu stanu. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testów ani migracji na projekcie nie uruchamiałem.
+
 **Zależności:** T-12. **Kontrakt:** K-05.
 
 1. Dodać `src/profile_management/migration.rs`; przenieść `migrate_legacy`, historyczny mapping profili i listę plików do adopcji.
@@ -412,6 +414,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** przegląd źródłowego `actions/migration.py` i kompilacja. **Gotowe, gdy:** nie zgaduje historycznych hashy i nie przejmuje dowolnej nieznanej instalacji.
 
 ### T-15 — połączenie całego CLI menedżera
+
+**Stan: IMPLEMENTED.** Dodano ręczny parser `args_os`, binarium `ai-profile`, pełną pomoc, ograniczenia opcji i połączenie wszystkich dziesięciu akcji z implementacjami Rust. Zachowano kody parsera 2, błędu operacji 1 i sukcesu 0; `--project` pozostaje ścieżką OS, także ze spacjami. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Nie uruchamiałem CLI ani `--help`; testy pozostają `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-05, T-11, T-12, T-13, T-14. **Kontrakt:** K-06.
 
@@ -423,6 +427,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-16 — wejścia i bezpieczne źródła MariaDB
 
+**Stan: IMPLEMENTED.** Dodano stałe zgodne ze źródłem, allowlistę środowiska Docker, walidację wymaganych ustawień/portu/bool oraz wstrzykiwalny interfejs downloadera z implementacją `ureq` (limit 16 MiB, timeout 60 s). Ekstrakcja weryfikuje SHA-256 przed ręcznym rozpakowaniem i dopuszcza wyłącznie regularne pliki/katalogi pod przypiętym korzeniem, odrzucając ścieżki traversal i niedozwolone typy wpisów. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Nie pobierałem archiwum ani nie uruchamiałem Docker/testów.
+
 **Zależności:** T-03. **Kontrakt:** K-07.
 
 1. Dodać `src/mariadb.rs`, `mariadb/archive.rs` i przygotować część `mariadb/runtime.rs` walidującą DB/env.
@@ -431,6 +437,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** przegląd limitów i warunków odmowy z `launch.py:16–71,105–114`, kompilacja. **Gotowe, gdy:** ekstrakcja nie używa niesprawdzonego unpack całego archiwum.
 
 ### T-17 — obraz, blokada i uruchomienie MariaDB
+
+**Stan: IMPLEMENTED.** Dodano inspect/info, allowlistę env dla komend Docker, cache i blokadę z recheckiem po locku, zweryfikowane pobranie/build obrazu oraz `docker run` z nazwami `--env` i Unix `exec`. Build kieruje stdout do stderr; credentials pozostają wyłącznie w środowisku runtime. Dodano binarium `mariadb-launcher`. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Nie uruchamiałem binarium, Docker ani HTTP; testy pozostają `NOT RUN — PROHIBITED AT THIS STAGE`.
 
 **Zależności:** T-16. **Kontrakt:** K-07.
 
@@ -441,6 +449,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-18 — mapowania i dump WordPress
 
+**Stan: IMPLEMENTED.** Dodano typowane originy/mapowania z walidacją hostów, duplikatów, łańcuchów i kolizji oraz `mapped_url`. Dump `.sql`/`.gz` jest przetwarzany strumieniowo; wykrywane są zakazane dyrektywy, kompletny prefiks single/multisite, a gzip jest czytany do EOF z weryfikacją CRC. SHA-256 dotyczy oryginalnych bajtów. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Nie inspekowałem dumpów ani nie uruchamiałem testów.
+
 **Zależności:** T-03. **Kontrakt:** K-08.
 
 1. Dodać `src/wordpress.rs`, `wordpress/{mapping,dump}.rs`.
@@ -449,6 +459,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** przegląd wszystkich regexów, ograniczeń mapowań i kompilacja. **Gotowe, gdy:** nie ma mechanizmu zmiany bazy ani pomijania CRC.
 
 ### T-19 — DDEV i topologia
+
+**Stan: IMPLEMENTED.** Dodano `Ddev` przez `ProcessRunner` z argv/cwd, odrzucaniem szczegółów mogących ujawnić sekrety, kontrolą WP-CLI warnings, obsługą JSON i JSON-lines `describe`, komendami WP przez `ddev exec`, zapytaniami oraz hex-literal i topologią site/network. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Nie uruchamiałem DDEV, WP-CLI, bazy ani testów.
 
 **Zależności:** T-18. **Kontrakt:** K-09.
 
@@ -556,4 +568,4 @@ Poza zakresem: usuwanie lub przepisywanie Pythona, zmiana profili/wersji, automa
 
 ## Następne działanie
 
-**Wykonać tylko T-14 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
+**Wykonać tylko T-20 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**

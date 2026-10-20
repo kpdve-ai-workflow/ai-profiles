@@ -1,4 +1,6 @@
+pub mod cli;
 pub(crate) mod installation;
+pub(crate) mod migration;
 pub(crate) mod payload;
 pub(crate) mod profiles;
 pub(crate) mod status;
