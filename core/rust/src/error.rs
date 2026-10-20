@@ -223,6 +223,84 @@ pub(crate) enum InstallationError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub(crate) enum UninstallError {
+    #[error("Brak zainstalowanego profilu w tym projekcie")]
+    NoInstalledProfile,
+    #[error("Nieprawidłowy stan profilu instalacji")]
+    InvalidState,
+    #[error("Błąd systemu plików dla {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Filesystem(#[from] FilesystemError),
+    #[error(transparent)]
+    Mcp(#[from] McpConfigError),
+    #[error(transparent)]
+    Project(#[from] ProjectError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum StatusError {
+    #[error("Nieprawidłowy stan profilu")]
+    InvalidState,
+    #[error("Błąd systemu plików dla {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Filesystem(#[from] FilesystemError),
+    #[error(transparent)]
+    Mcp(#[from] McpConfigError),
+    #[error(transparent)]
+    Payload(#[from] PayloadError),
+    #[error(transparent)]
+    Project(#[from] ProjectError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+    #[error(transparent)]
+    Model(#[from] ModelError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ValidationError {
+    #[error("Nieznany profil: {0}")]
+    UnknownProfile(String),
+    #[error("Nieprawidłowy mcp/example.json")]
+    InvalidExample,
+    #[error("Nieprawidłowa nazwa definicji MCP: {0}")]
+    InvalidRegistryName(PathBuf),
+    #[error("mcp/example.json różni się od MCP wybranych przez profil {0}")]
+    ScopedExampleMismatch(String),
+    #[error("mcp/example.json różni się od definicji MCP wybranych przez profile")]
+    FullExampleMismatch,
+    #[error("Błąd systemu plików dla {path}: {source}")]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Filesystem(#[from] FilesystemError),
+    #[error(transparent)]
+    Mcp(#[from] McpConfigError),
+    #[error(transparent)]
+    Payload(#[from] PayloadError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum McpConfigError {
     #[error("Nieprawidłowa nazwa definicji MCP; użyj małych liter/cyfr i pojedynczych myślników")]
     InvalidName,

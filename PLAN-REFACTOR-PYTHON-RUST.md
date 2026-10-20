@@ -2,7 +2,7 @@
 
 ## Stan i sposób pracy
 
-**Gotowość planu: READY.** **Implementacja: 11/25 zadań. Walidacja wykonania: NOT RUN.**
+**Gotowość planu: READY.** **Implementacja: 13/25 zadań. Walidacja wykonania: NOT RUN.**
 
 Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozostawieniem działającego Pythona. W sprawdzonym checkoutcie istnieje `core/python/`; nie ma jeszcze `core/rust/`. Nie uruchomiono kodu, kompilacji ani testów podczas planowania.
 
@@ -10,7 +10,7 @@ Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozost
 
 Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatrzymuje się. Nie przechodzi samodzielnie do następnego zadania. `IMPLEMENTED` oznacza powstanie kodu, **nie** potwierdzoną zgodność. Do T-25 weryfikacja zachowania pozostaje `NOT RUN — PROHIBITED AT THIS STAGE`.
 
-**Następne działanie: T-12 — uninstall.**
+**Następne działanie: T-14 — legacy migration.**
 
 ## Wymagania i decyzje użytkownika
 
@@ -382,6 +382,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 ### T-12 — uninstall
 
+**Stan: IMPLEMENTED.** Dodano `uninstall` z kontrolą stanu, hashy i ownership MCP przed zmianami; usuwa wyłącznie zarządzane pliki/konfigurację, zachowuje obce wpisy, respektuje `instructions_added` i `had_config`, usuwa własne markery oraz sprząta puste katalogi. `opencode.json` znika tylko przy warunku schema-only. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testów ani operacji uninstall nie uruchamiałem.
+
 **Zależności:** T-11. **Kontrakt:** K-05.
 
 1. Dodać `src/profile_management/uninstall.rs`; przenieść `uninstall` z zachowaniem preflight, had_config i własności instrukcji/MCP.
@@ -390,6 +392,8 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Weryfikacja:** przegląd listy usuwanych ścieżek i kompilacja. **Gotowe, gdy:** usuwanie zależy od zweryfikowanego stanu, nie od szerokiego kasowania katalogów.
 
 ### T-13 — status i walidacja źródeł
+
+**Stan: IMPLEMENTED.** Dodano `status` z osobną oceną wersji, zmian treści, lokalnych modyfikacji plików/MCP i hashy override’ów, zachowując wszystkie etykiety. Dodano scoped/full `validate_sources`, w tym pełny registry scan i odpowiednie porównanie z `mcp/example.json`. `cargo fmt` i `cargo check --locked --lib --bins` zakończone powodzeniem. Testów, `status` ani walidacji źródeł nie uruchamiałem.
 
 **Zależności:** T-10. **Kontrakt:** K-05.
 
@@ -552,4 +556,4 @@ Poza zakresem: usuwanie lub przepisywanie Pythona, zmiana profili/wersji, automa
 
 ## Następne działanie
 
-**Wykonać tylko T-12 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
+**Wykonać tylko T-14 po odrębnym zleceniu; nie rozpoczynać go automatycznie.**
