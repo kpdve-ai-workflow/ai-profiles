@@ -40,8 +40,6 @@ UTRZYMANIE REPOZYTORIUM
     Bramka walidacji, potem Playwright (bez powtarzania testów Rust).
   make test-vm-up / test-vm-stop
     Przygotowuje/wznawia lub zatrzymuje VM bez usuwania cache.
-  make test-vm-logs
-    Pokazuje na żywo log ostatniej operacji i cloud-init; Ctrl+C kończy podgląd.
   make test-vm-sync / test-vm-reprovision
     Synchronizuje źródła lub jawnie ponawia provisioning istniejącej VM.
     Wymagania hosta i zasoby: docs/testing.md. Host testów nie wymaga

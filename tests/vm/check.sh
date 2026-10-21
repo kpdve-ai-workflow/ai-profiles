@@ -13,7 +13,7 @@ expect() {
         echo "Oczekiwano $expected, otrzymano $status: $*" >&2; exit 1
     fi
 }
-for script in host guest provision logs check; do bash -n "$root/tests/vm/$script.sh"; done
+for script in host guest provision check; do bash -n "$root/tests/vm/$script.sh"; done
 expect 1 bash "$root/tests/vm/host.sh" unknown
 grep -q 'Nieznany tryb' "$scratch/output"
 expect 1 bash "$root/tests/vm/guest.sh" test invalid
@@ -22,10 +22,7 @@ expect 2 make -s -C "$root" _test-guest
 
 checkout="$scratch/checkout space,comma'quote"
 mkdir -p "$checkout/tests/vm" "$scratch/bin" "$scratch/minimal"
-cp "$root"/tests/vm/{host.sh,logs.sh,excludes} "$checkout/tests/vm/"
-expect 1 bash "$checkout/tests/vm/logs.sh"
-grep -q 'Brak logów' "$scratch/output"
-[[ ! -e $checkout/.test-vm ]]
+cp "$root"/tests/vm/{host.sh,excludes} "$checkout/tests/vm/"
 ln -s /usr/bin/uname "$scratch/minimal/uname"
 # Brak CLI: żadnego lokalnego fallbacku.
 expect 1 env PATH="$scratch/minimal" /bin/bash "$checkout/tests/vm/host.sh" test
@@ -59,7 +56,6 @@ case "$1 $2" in
         ;;
     'file pull')
         [[ $MOCK_EXPORT == 0 ]] || exit "$MOCK_EXPORT"
-        if [[ ${MOCK_LOGS:-0} == 1 ]]; then printf 'provision-live\n' > "${@: -1}"; fi
         ;;
     'file push'|'config get') ;;
     *) echo "Nieoczekiwane wywołanie mocka: $*" >&2; exit 98 ;;
@@ -125,21 +121,4 @@ if [[ -r /dev/kvm && -w /dev/kvm ]]; then
 else
     echo 'SKIP: mockowane pełne dispatch/exit status wymagają dostępnego /dev/kvm (brak obejścia kontroli hosta).'
 fi
-mkdir -p "$checkout/.test-vm/artifacts/99999999-logs"
-echo host-live > "$checkout/.test-vm/artifacts/99999999-logs/host.log"
-: > "$MOCK_CALLS"
-MOCK_STATE=collision
-expect 1 bash "$checkout/tests/vm/logs.sh"
-grep -q 'odmawiam odczytu' "$scratch/output"
-! grep -q 'file pull' "$MOCK_CALLS"
-MOCK_STATE=owned
-: > "$MOCK_CALLS"
-# Podgląd działa przy aktywnym locku i po TERM nie zatrzymuje testu/VM.
-flock -n 8
-MOCK_LOGS=1 expect 0 timeout --preserve-status --signal=TERM 3 bash "$checkout/tests/vm/logs.sh"
-flock -u 8
-grep -q host-live "$scratch/output"
-grep -q provision-live "$scratch/output"
-[[ $(grep -c provision-live "$scratch/output") == 1 ]]
-! grep -Eq ' (start|stop|exec|init) ' "$MOCK_CALLS"
 echo 'OK: granice orkiestracji (mock), guard gościa, rsync/symlinki/excludes/cache. To nie jest test VM ani Playwright E2E.'

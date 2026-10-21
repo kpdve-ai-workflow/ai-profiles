@@ -237,7 +237,6 @@ make test-all                 # powyższa bramka, potem Playwright; Rust tylko r
 make test-vm-sync              # sama synchronizacja aktualnego checkoutu
 make test-vm-reprovision       # jawne ponowne wykonanie provision.sh w VM
 make test-vm-stop              # zatrzymanie bez usuwania dysku/cache
-make test-vm-logs              # podgląd logów na żywo, także podczas provisioningu
 ```
 
 Każdy test wznawia własną VM, czeka na agenta i cloud-init, sprawdza marker
@@ -288,22 +287,6 @@ Build pozostaje w miejscu wymaganym przez wykrywanie payloadów repozytorium.
 budowany przy każdym żądaniu (Docker może wykorzystać warstwy).
 
 ## Logi i diagnostyka
-
-W drugim terminalu, z katalogu repozytorium, wystarczy:
-
-```sh
-make test-vm-logs
-```
-
-Komenda sama wybiera najnowszy log operacji tego checkoutu, pokazuje ostatnie
-60 linii i dopisuje nowe. Automatycznie przełącza się na kolejną operację.
-Dołącza też log cloud-init z własnej VM (również po błędzie provisioningu),
-gdy agent jest dostępny; nie trzeba podawać nazwy VM ani ścieżki logu.
-Przy braku VM/agenta nadal wyświetla log hosta. Na Bluefin automatycznie
-wykrywa socket `/run/incus/unix.socket`, jeżeli `INCUS_SOCKET` nie jest ustawione.
-To tylko odczyt: nie zajmuje blokady testów, nie startuje VM ani testów i nie
-tworzy nowego przebiegu. Ctrl+C kończy wyłącznie podgląd. Logi są odczytywane
-co 2 sekundy, bez zostawiania w gościu procesu `tail -f`.
 
 Każde wywołanie drukuje unikalną ścieżkę `.test-vm/artifacts/<run>/`.
 Zawiera log hosta, log operacji gościa i wyłącznie raporty JSON/HTML oraz PNG

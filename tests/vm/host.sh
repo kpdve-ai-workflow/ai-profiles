@@ -18,7 +18,6 @@ run=$(date -u +%Y%m%dT%H%M%SZ)-$(cat /proc/sys/kernel/random/uuid)
 artifact=$state/artifacts/$run
 mkdir -p "$artifact"
 echo "Artefakty: $artifact"
-echo 'Podgląd w drugim terminalu: make test-vm-logs'
 exec > >(tee "$artifact/host.log") 2>&1
 identity=$(printf '%s\0%s\0%s' "$root" "$(id -u)" "$(cat /etc/machine-id)" | sha256sum | cut -d' ' -f1)
 name=ai-profiles-${identity:0:24}

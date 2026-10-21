@@ -58,10 +58,6 @@ test validate-rust-migration test-playwright test-all:
 	  esac; \
 	else bash tests/vm/host.sh "$@"; fi
 
-.PHONY: test-vm-logs
-test-vm-logs:
-	@bash tests/vm/logs.sh
-
 test-vm-up:
 	@bash tests/vm/host.sh up
 test-vm-stop:
