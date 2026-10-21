@@ -22,7 +22,29 @@ dotyczy wszystkich profili. Nie używaj symlinków ani kolidujących nazw.
 Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
 w skillach. Są instalowane bez automatycznego wykonywania.
 
+Skille przeznaczone wyłącznie dla tego repozytorium umieszczaj w
+`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `common/`
+ani żadnego profilu i nie są dostarczane do projektów. Workflow tego checkoutu
+jest oddzielony od zawartości profili.
+
 ## Wersje i publikowanie
+
+Nazwę istniejącego profilu zmieniaj poleceniem:
+
+```bash
+make rename PROFILE=stara-nazwa NEW_NAME=nowa-nazwa
+```
+
+Komenda zmienia katalog `profiles/stara-nazwa` na `profiles/nowa-nazwa`
+oraz pole `name` w jego `profile.json`. Zachowuje wersję, opis, dodatkowe
+metadane, skille, skrypty i wybór MCP. Nie zastępuje nazw w treści dokumentacji.
+Nowa nazwa musi być wolna i składać się z małych liter/cyfr rozdzielonych
+pojedynczymi myślnikami. Nie używa `PROJECT` i odrzuca opcję `--project`.
+Odpowiednik CLI: `ai-profile rename stara-nazwa --new-name nowa-nazwa`.
+
+Istniejące instalacje pozostają bez zmian i nadal wskazują starą nazwę.
+Komenda nie tworzy aliasu; ich `status` i `update` mogą odrzucić profil,
+którego stara nazwa nie istnieje już w źródłach.
 
 Każdy profil ma niezależną stabilną wersję `MAJOR.MINOR.PATCH`. Aktualizuj ją
 poleceniem `make bump PROFILE=<nazwa> PART=patch|minor|major` (domyślnie `patch`):
@@ -39,7 +61,14 @@ wykonuje commitów ani nie tworzy tagów.
 
 ## Instalacja i aktualizacja
 
-Make wymaga `PROFILE` przy `create`, `install`, `switch` i `bump`, oraz `PROJECT`
+Instaluj przez `make install PROFILE=<profil> PROJECT=<projekt>`. Make buduje
+manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
+launcher MariaDB i restore WordPress trafiają do projektu jako samodzielne
+pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
+referencyjny. Aktualizacja usuwa dawne zarządzane `.py` po sprawdzeniu hashy;
+obce i lokalnie zmienione pliki zachowują dotychczasową ochronę.
+
+Make wymaga `PROFILE` przy `create`, `rename`, `install`, `switch` i `bump`, oraz `PROJECT`
 przy komendach projektowych. CLI domyślnie działa na bieżącym katalogu.
 `status` i `update` korzystają z lokalnego checkoutu i nie pobierają zmian;
 `pull-update` wykonuje `git pull --ff-only`, a następnie `update`. Przed oceną
@@ -55,6 +84,14 @@ zarządzane wpisy MCP i dane potrzebne do bezpiecznej synchronizacji. Status
 rozróżnia aktualność wersji od zmian treści oraz pokazuje lokalne modyfikacje.
 SHA commit nie opisuje niezacommitowanych zmian; do publikowania używaj czystego
 checkoutu.
+
+Wycofany `.opencode/workflow-rules.md` oraz dawniej wspólnie dostarczany
+`brain-to-implementer` są usuwane z istniejącej instalacji podczas update/switch
+lub uninstall tylko wtedy, gdy ich hashe zgadzają się ze stanem instalatora.
+Wpis `workflow-rules.md` w `instructions` jest usuwany przy update/switch
+wyłącznie, gdy stan potwierdza, że dodał go instalator (`instructions_added`).
+Własny wpis użytkownika pozostaje; po usunięciu wpisu instalatora flaga
+ownership jest zerowana.
 
 Przed zapisem menedżer sprawdza hashe plików, wpisy MCP i kolizje ścieżek.
 Konflikt przerywa operację bez częściowego zastosowania; nie ma opcji wymuszającej
@@ -74,7 +111,7 @@ konfiguracji. Instalacje MVP bez hashy wymagają przeglądu i backupu przed
 świadomym przejęciem:
 
 ```bash
-python3 profile.py migrate-legacy --accept-existing --project ~/projects/my-api
+make migrate-legacy PROJECT=~/projects/my-api
 make update PROJECT=~/projects/my-api
 ```
 

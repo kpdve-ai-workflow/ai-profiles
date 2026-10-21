@@ -41,7 +41,7 @@ Tak, jako **procedura wykonywana w pojedynczej sesji agenta** z dostępem do rep
 
 ## Skrypty pomocnicze
 
-- `scripts/inventory-tests.sh [ścieżka]`: bezpieczny odczyt i szacunkowa inwentaryzacja nazw plików testowych.
+- `scripts/inventory-tests [ścieżka]`: instalowane binarium Rust; bezpieczny odczyt i szacunkowa inwentaryzacja nazw plików testowych. Historyczny `inventory-tests.sh` pozostaje wyłącznie w repozytorium jako referencja.
 - `scripts/mutation-check.sh [ścieżka]`: wyświetla dostępne narzędzia i bezpieczną procedurę; **nie modyfikuje kodu**.
 - `scripts/coverage-map.sh [ścieżka]`: tylko wykrywanie wskazówek związanych z coverage; **nie uruchamia testów**.
 

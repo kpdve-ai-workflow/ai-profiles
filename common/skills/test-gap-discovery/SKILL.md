@@ -84,7 +84,7 @@ Read only the references relevant to the task:
 - `references/anti-patterns.md` — traps of solution-mirroring tests.
 - `references/gap-report.md` — optional, **only when an explicit formal artifact is requested**.
 - `references/test-vision-template.md` — optional, **only when an explicit vision document is requested**.
-- `scripts/inventory-tests.sh [repo]` — safe, heuristic inventory of test files and hints.
+- `scripts/inventory-tests [repo]` — native Rust executable for safe, heuristic inventory of test files and hints.
 - `scripts/mutation-check.sh [repo]` — safe inspection of possible mutation tools; does not run or mutate anything.
 - `scripts/coverage-map.sh [repo]` — safe, read-only coverage tool discovery; does not run tests.
 

@@ -1,5 +1,5 @@
 <?php
-// Required by every WP-CLI operation of restore-updraft.py, before WP bootstrap.
+// Required by every WP-CLI operation of restore-updraft, before WP bootstrap.
 if (!defined('WP_CLI') || !WP_CLI) {
     exit(1);
 }

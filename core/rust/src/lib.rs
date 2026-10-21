@@ -1,0 +1,44 @@
+//! Native Rust implementation of the AI Profiles tooling.
+//!
+//! Make and installed project tooling use this implementation. Python sources
+//! remain in the repository as migration reference only.
+
+mod codec;
+mod error;
+mod filesystem;
+pub mod mariadb;
+pub mod mcp;
+mod model;
+mod process;
+pub mod profile_management;
+mod project;
+mod repository;
+pub mod wordpress;
+
+#[cfg(test)]
+#[path = "../tests/foundation.rs"]
+mod foundation_tests;
+#[cfg(test)]
+#[path = "../tests/lifecycle.rs"]
+mod lifecycle_tests;
+#[cfg(test)]
+#[path = "../tests/mariadb.rs"]
+mod mariadb_tests;
+#[cfg(test)]
+#[path = "../tests/mcp_config.rs"]
+mod mcp_config_tests;
+#[cfg(test)]
+#[path = "../tests/mcp_runtime.rs"]
+mod mcp_runtime_tests;
+#[cfg(test)]
+#[path = "../tests/profiles.rs"]
+mod profiles_tests;
+#[cfg(test)]
+#[path = "../tests/wordpress_dump.rs"]
+mod wordpress_dump_tests;
+#[cfg(test)]
+#[path = "../tests/wordpress_localize.rs"]
+mod wordpress_localize_tests;
+#[cfg(test)]
+#[path = "../tests/wordpress_preflight.rs"]
+mod wordpress_preflight_tests;
