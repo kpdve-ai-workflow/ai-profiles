@@ -19,19 +19,23 @@ fn put(root: &Path, relative: &str, contents: &[u8]) {
 
 fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     let source = tempfile::tempdir().unwrap();
-    for directory in ["core/rust/src", "common/skills", "mcp/servers"] {
+    for directory in ["core/rust/src", "skills", "mcp/servers"] {
         fs::create_dir_all(source.path().join(directory)).unwrap();
     }
-    fs::create_dir_all(source.path().join("profiles/wordpress/skills")).unwrap();
     put(
         source.path(),
-        "common/skills/test-gap-discovery/SKILL.md",
+        "skills/test-gap-discovery/SKILL.md",
         b"---\nname: test-gap-discovery\ndescription: Test inventory\n---\n",
     );
     put(
         source.path(),
-        "common/skills/test-gap-discovery/scripts/inventory-tests.sh",
+        "skills/test-gap-discovery/scripts/inventory-tests.sh",
         b"reference only",
+    );
+    put(
+        source.path(),
+        "profiles/wordpress/skills.json",
+        br#"{"skills":["test-gap-discovery"]}"#,
     );
     put(
         source.path(),

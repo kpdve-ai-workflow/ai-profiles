@@ -160,12 +160,39 @@ pub(crate) enum ProfileManagementError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PayloadError {
+    #[error("Profil {profile}: nie można odczytać manifestu umiejętności {path}: {source}")]
+    SkillManifestRead {
+        profile: String,
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Profil {profile}: nieprawidłowy manifest umiejętności {path}")]
+    InvalidSkillManifest { profile: String, path: PathBuf },
+    #[error("Profil {profile}: nieprawidłowa nazwa umiejętności {name:?} w {path}")]
+    InvalidSelectedSkill {
+        profile: String,
+        path: PathBuf,
+        name: String,
+    },
+    #[error("Profil {profile}: powielona umiejętność {name:?} w {path}")]
+    DuplicateSelectedSkill {
+        profile: String,
+        path: PathBuf,
+        name: String,
+    },
+    #[error("Profil {profile}: nieznana umiejętność {name:?} w {path}")]
+    UnknownSelectedSkill {
+        profile: String,
+        path: PathBuf,
+        name: String,
+    },
+    #[error("Profil {profile}: symlink w manifeście lub ścieżce umiejętności {path}")]
+    SelectedSkillSymlink { profile: String, path: PathBuf },
     #[error("Brak natywnego pliku wykonywalnego {0}; wykonaj make rust-build")]
     MissingNativeBinary(PathBuf),
     #[error("Python nie jest dozwolony w instalowanym payloadzie: {0}")]
     PythonPayload(PathBuf),
-    #[error("Brak katalogu skills: {0}")]
-    MissingSkills(PathBuf),
     #[error("Nieprawidłowy katalog skilla: {0}")]
     InvalidSkillDirectory(PathBuf),
     #[error("Brak lub nieprawidłowy SKILL.md w {0}")]

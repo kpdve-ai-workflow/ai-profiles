@@ -3,27 +3,44 @@
 ## Tworzenie i struktura profilu
 
 Profile są wykrywane automatycznie z `profiles/<nazwa>/`. Profil zawiera
-`profile.json`, `mcp.json` i opcjonalne `skills/<skill>/SKILL.md`. `name` w
-metadanych musi odpowiadać nazwie katalogu. Najprościej utworzyć profil poleceniem:
+`profile.json`, `mcp.json` oraz `skills.json`. `name` w metadanych musi
+odpowiadać nazwie katalogu. Najprościej utworzyć profil poleceniem:
 
 ```bash
 make create PROFILE=backend-python DESCRIPTION="Backend Python development profile"
 ```
 
 Nazwa jest wymagana; opis jest opcjonalny. Komenda tworzy metadane w wersji
-`1.0.0`, pusty wybór MCP oraz zachowuje pusty katalog skills. Nie instaluje
+`1.0.0`, pusty wybór MCP i pusty wybór skilli. Nie instaluje
 profilu ani nie nadpisuje istniejącego. Szczegóły formatu wyboru MCP znajdują się
 w [dokumentacji MCP](../mcp/README.md).
 
-Skill dodaj jako `profiles/<profil>/skills/<skill>/SKILL.md` z frontmatter `name`
-i `description`; nazwa musi odpowiadać katalogowi. Pliki pomocnicze pozostają
-w katalogu skilla. Wspólne skille umieszczaj w `common/skills/`; ich zmiana
-dotyczy wszystkich profili. Nie używaj symlinków ani kolidujących nazw.
+Skille dystrybuowane przechowuj raz w `skills/<nazwa>/SKILL.md`, z frontmatter
+`name` i `description`; nazwa musi odpowiadać katalogowi. Pliki pomocnicze
+pozostają w katalogu skilla. Profile wybierają je jawnie w `skills.json`.
+Przykładowy wybór WordPress:
+
+```json
+{
+  "skills": ["acf", "make-plan", "sage-block-scaffold", "styling"]
+}
+```
+
+Nazwy są bezpośrednimi nazwami katalogów pod `skills/`; wpisy muszą być
+unikalne. Dwa profile mogą wskazać ten sam katalog źródłowy, a instalator
+kopiuje każdy skill do własnego projektu. Na przykład
+`skills/make-plan/SKILL.md` trafia do
+`<projekt>/.opencode/skills/make-plan/SKILL.md`, a
+`skills/make-plan/references/plan-layout.md` do
+`<projekt>/.opencode/skills/make-plan/references/plan-layout.md`.
+Nowy profil zaczyna z `{"skills":[]}`. Zmiany manifestu docierają do projektu
+przez `make update PROJECT=<projekt>`; usunięte pliki są zdejmowane zgodnie z
+kontrolą własności i hashy. Nie używaj symlinków ani kolidujących nazw.
 Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
 w skillach. Są instalowane bez automatycznego wykonywania.
 
 Skille przeznaczone wyłącznie dla tego repozytorium umieszczaj w
-`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `common/`
+`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `skills/`
 ani żadnego profilu i nie są dostarczane do projektów. Workflow tego checkoutu
 jest oddzielony od zawartości profili.
 
