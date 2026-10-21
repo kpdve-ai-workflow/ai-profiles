@@ -2,41 +2,41 @@ use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ModelError {
-    #[error("Nieprawidłowa nazwa profilu: {0:?}")]
+    #[error("Invalid profile name: {0:?}")]
     InvalidProfileName(String),
-    #[error("Nieprawidłowa wersja MAJOR.MINOR.PATCH: {0:?}")]
+    #[error("Invalid MAJOR.MINOR.PATCH version: {0:?}")]
     InvalidVersion(String),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CodecError {
-    #[error("Nie mogę odczytać JSON z {path}: {source}")]
+    #[error("Failed to read JSON from {path}: {source}")]
     Read {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("Nieprawidłowy JSON w {path}: {source}")]
+    #[error("Invalid JSON in {path}: {source}")]
     Parse {
         path: PathBuf,
         #[source]
         source: serde_json::Error,
     },
-    #[error("Nie mogę serializować JSON: {0}")]
+    #[error("Failed to serialize JSON: {0}")]
     Serialize(#[from] serde_json::Error),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum FilesystemError {
-    #[error("Nieprawidłowa ścieżka zarządzana: {0}")]
+    #[error("Invalid managed path: {0}")]
     InvalidManagedPath(String),
-    #[error("Odmowa operacji przez symlink: {0}")]
+    #[error("Operation refused because of symlink: {0}")]
     Symlink(PathBuf),
-    #[error("Konflikt: zarządzany plik zmieniono/usunięto: {relative}. Zrób backup i przywróć zarządzaną wersję przed update/remove.")]
+    #[error("Conflict: managed file was changed or removed: {relative}. Back up and restore the managed version before updating or removing it.")]
     ManagedFileChanged { relative: String },
-    #[error("Konflikt z istniejącym niezarządzanym plikiem: {0}")]
+    #[error("Conflict with existing unmanaged file: {0}")]
     UnmanagedFileExists(String),
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -46,33 +46,33 @@ pub(crate) enum FilesystemError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ProcessError {
-    #[error("Nie można uruchomić procesu: {source}")]
+    #[error("Failed to start process: {source}")]
     Spawn {
         #[source]
         source: std::io::Error,
     },
-    #[error("Proces przekroczył limit czasu")]
+    #[error("Process timed out")]
     Timeout,
-    #[error("Proces został anulowany")]
+    #[error("Process was cancelled")]
     Cancelled,
-    #[error("Błąd komunikacji z procesem: {source}")]
+    #[error("Process communication error: {source}")]
     Io {
         #[source]
         source: std::io::Error,
     },
-    #[error("Wątek obsługujący strumień procesu uległ awarii")]
+    #[error("Process stream handling thread panicked")]
     StreamThread,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum RepositoryError {
-    #[error("Nie znaleziono checkoutu ai-profiles w ścieżce {0}")]
+    #[error("Could not find an ai-profiles checkout at {0}")]
     CheckoutNotFound(PathBuf),
-    #[error("Nieprawidłowy katalog źródeł profili: {0}")]
+    #[error("Invalid profile source directory: {0}")]
     InvalidSourceRoot(PathBuf),
-    #[error("Nieprawidłowy profile.json: {0}")]
+    #[error("Invalid profile.json: {0}")]
     InvalidMetadata(String),
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -88,21 +88,21 @@ pub(crate) enum RepositoryError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ProjectError {
-    #[error("Projekt nie istnieje: {0}")]
+    #[error("Project does not exist: {0}")]
     ProjectNotFound(PathBuf),
-    #[error("Nie instaluj profilu wewnątrz repozytorium ai-profiles")]
+    #[error("Profiles cannot be installed inside the ai-profiles repository")]
     ProjectInsideSources,
-    #[error("Nieobsługiwany stan profilu. Nie nadpisuję obcych plików: {0}")]
+    #[error("Unsupported profile state. Will not overwrite files owned by others: {0}")]
     UnsupportedState(PathBuf),
-    #[error("Wykryto opencode.jsonc. Żeby nie zgubić komentarzy ani zmieszać dwóch konfiguracji, najpierw scal go z opencode.json.")]
+    #[error("Found opencode.jsonc. Merge it into opencode.json first to preserve comments and avoid combining two configurations.")]
     JsoncPresent,
-    #[error("opencode.json musi zawierać obiekt JSON")]
+    #[error("opencode.json must contain a JSON object")]
     ConfigMustBeObject,
-    #[error("opencode.json: mcp musi być obiektem")]
+    #[error("opencode.json: mcp must be an object")]
     McpMustBeObject,
-    #[error("opencode.json: instructions musi być tablicą")]
+    #[error("opencode.json: instructions must be an array")]
     InstructionsMustBeArray,
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -120,9 +120,9 @@ pub(crate) enum ProjectError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ProfileManagementError {
-    #[error("Nowa nazwa profilu musi różnić się od obecnej")]
+    #[error("The new profile name must differ from the current name")]
     SameProfileName,
-    #[error("Nie udało się zapisać metadanych ({source}) ani przywrócić nazwy katalogu ({rollback}). Profil pozostał w {destination}; przywróć go ręcznie do {original}.")]
+    #[error("Failed to save metadata ({source}) and failed to restore the directory name ({rollback}). The profile remains at {destination}; restore it manually to {original}.")]
     RenameRollback {
         original: PathBuf,
         destination: PathBuf,
@@ -130,23 +130,23 @@ pub(crate) enum ProfileManagementError {
         source: std::io::Error,
         rollback: std::io::Error,
     },
-    #[error("Nazwa profilu musi zawierać małe litery/cyfry rozdzielone pojedynczymi myślnikami")]
+    #[error("Profile names must contain lowercase letters or digits separated by single hyphens")]
     InvalidProfileName,
-    #[error("Opis profilu nie może być pusty")]
+    #[error("Profile description cannot be empty")]
     EmptyDescription,
-    #[error("Profil już istnieje: {0}")]
+    #[error("Profile already exists: {0}")]
     ProfileAlreadyExists(String),
-    #[error("Nieznany profil: {0}")]
+    #[error("Unknown profile: {0}")]
     UnknownProfile(String),
-    #[error("Nie udało się utworzyć profilu: {destination}; sprawdź jego zawartość")]
+    #[error("Failed to create profile at {destination}; check its contents")]
     CreateFailed { destination: PathBuf },
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("Nie udało się zapisać tymczasowych metadanych profilu: {0}")]
+    #[error("Failed to save temporary profile metadata: {0}")]
     Persist(String),
     #[error(transparent)]
     Codec(#[from] CodecError),
@@ -160,37 +160,64 @@ pub(crate) enum ProfileManagementError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PayloadError {
-    #[error("Brak natywnego pliku wykonywalnego {0}; wykonaj make rust-build")]
+    #[error("Profile {profile}: failed to read skill manifest {path}: {source}")]
+    SkillManifestRead {
+        profile: String,
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Profile {profile}: invalid skill manifest {path}")]
+    InvalidSkillManifest { profile: String, path: PathBuf },
+    #[error("Profile {profile}: invalid skill name {name:?} in {path}")]
+    InvalidSelectedSkill {
+        profile: String,
+        path: PathBuf,
+        name: String,
+    },
+    #[error("Profile {profile}: duplicate skill {name:?} in {path}")]
+    DuplicateSelectedSkill {
+        profile: String,
+        path: PathBuf,
+        name: String,
+    },
+    #[error("Profile {profile}: unknown skill {name:?} in {path}")]
+    UnknownSelectedSkill {
+        profile: String,
+        path: PathBuf,
+        name: String,
+    },
+    #[error("Profile {profile}: symlink found in skill manifest or path {path}")]
+    SelectedSkillSymlink { profile: String, path: PathBuf },
+    #[error("Native executable {0} is missing; run make rust-build")]
     MissingNativeBinary(PathBuf),
-    #[error("Python nie jest dozwolony w instalowanym payloadzie: {0}")]
+    #[error("Python is not allowed in the installed payload: {0}")]
     PythonPayload(PathBuf),
-    #[error("Brak katalogu skills: {0}")]
-    MissingSkills(PathBuf),
-    #[error("Nieprawidłowy katalog skilla: {0}")]
+    #[error("Invalid skill directory: {0}")]
     InvalidSkillDirectory(PathBuf),
-    #[error("Brak lub nieprawidłowy SKILL.md w {0}")]
+    #[error("Missing or invalid SKILL.md in {0}")]
     MissingSkillDocument(PathBuf),
-    #[error("Nieprawidłowy YAML frontmatter: {0}")]
+    #[error("Invalid YAML front matter: {0}")]
     InvalidFrontmatter(PathBuf),
-    #[error("SKILL.md musi mieć name={name} i description: {path}")]
+    #[error("SKILL.md must define name={name} and description: {path}")]
     InvalidSkillMetadata { name: String, path: PathBuf },
-    #[error("Skill używa symlinka: {0}")]
+    #[error("Skill uses a symlink: {0}")]
     SkillSymlink(PathBuf),
-    #[error("Duplikat pliku skilla: {0}")]
+    #[error("Duplicate skill file: {0}")]
     DuplicateSkillFile(String),
-    #[error("Brak zarządzanego pliku launchera MCP: {0}")]
+    #[error("Managed MCP launcher file is missing: {0}")]
     MissingManagedLauncher(String),
-    #[error("Nieprawidłowy katalog launchera MCP: {0}")]
+    #[error("Invalid MCP launcher directory: {0}")]
     InvalidLauncherDirectory(String),
-    #[error("Launcher MCP używa symlinka: {0}")]
+    #[error("MCP launcher uses a symlink: {0}")]
     LauncherSymlink(PathBuf),
-    #[error("Nieprawidłowy katalog scripts: {0}")]
+    #[error("Invalid scripts directory: {0}")]
     InvalidScriptsDirectory(String),
-    #[error("Skrypt profilu używa symlinka: {0}")]
+    #[error("Profile script uses a symlink: {0}")]
     ScriptSymlink(PathBuf),
-    #[error("Nieprawidłowa ścieżka payloadu: {0}")]
+    #[error("Invalid payload path: {0}")]
     InvalidPayloadPath(PathBuf),
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -199,22 +226,28 @@ pub(crate) enum PayloadError {
     #[error(transparent)]
     Filesystem(#[from] FilesystemError),
     #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+    #[error(transparent)]
     Mcp(#[from] McpConfigError),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum InstallationError {
-    #[error("Downgrade niedozwolony: zainstalowana wersja jest wyższa od dostępnej")]
+    #[error("Downgrade is not allowed: the installed version is newer than the available version")]
     Downgrade,
-    #[error("Konflikt: ścieżka nie jest plikiem: {0}")]
+    #[error("Conflict: path is not a file: {0}")]
     DestinationNotFile(String),
-    #[error("Konflikt: ścieżka nie jest katalogiem: {0}")]
+    #[error("Conflict: path is not a directory: {0}")]
     ParentNotDirectory(PathBuf),
-    #[error("Nie można odczytać .gitignore jako UTF-8")]
+    #[error("Failed to read .gitignore as UTF-8")]
     GitignoreRead,
-    #[error("Nieprawidłowy stan profilu instalacji")]
+    #[error("Invalid installed profile state")]
     InvalidState,
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Native plugin configuration error: {0}")]
+    Native(String),
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -238,11 +271,13 @@ pub(crate) enum InstallationError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum UninstallError {
-    #[error("Brak zainstalowanego profilu w tym projekcie")]
+    #[error("No profile is installed in this project")]
     NoInstalledProfile,
-    #[error("Nieprawidłowy stan profilu instalacji")]
+    #[error("Invalid installed profile state")]
     InvalidState,
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Native plugin configuration error: {0}")]
+    Native(String),
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -260,9 +295,11 @@ pub(crate) enum UninstallError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum StatusError {
-    #[error("Nieprawidłowy stan profilu")]
+    #[error("Invalid profile state")]
     InvalidState,
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Native plugin configuration error: {0}")]
+    Native(String),
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -286,17 +323,17 @@ pub(crate) enum StatusError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ValidationError {
-    #[error("Nieznany profil: {0}")]
+    #[error("Unknown profile: {0}")]
     UnknownProfile(String),
-    #[error("Nieprawidłowy mcp/example.json")]
+    #[error("Invalid mcp/example.json")]
     InvalidExample,
-    #[error("Nieprawidłowa nazwa definicji MCP: {0}")]
+    #[error("Invalid MCP definition name: {0}")]
     InvalidRegistryName(PathBuf),
-    #[error("mcp/example.json różni się od MCP wybranych przez profil {0}")]
+    #[error("mcp/example.json does not match the MCP servers selected by profile {0}")]
     ScopedExampleMismatch(String),
-    #[error("mcp/example.json różni się od definicji MCP wybranych przez profile")]
+    #[error("mcp/example.json does not match the MCP definitions selected by the profiles")]
     FullExampleMismatch,
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -316,121 +353,123 @@ pub(crate) enum ValidationError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum WordPressError {
-    #[error("Mapowanie wymaga origin URL, np. https://example.pl (bez ścieżki)")]
+    #[error("Mapping requires an origin URL, for example https://example.com (without a path)")]
     InvalidOrigin,
-    #[error("Użyj --map https://zrodlo.pl=https://projekt.ddev.site")]
+    #[error("Use --map https://source.example=https://project.ddev.site")]
     InvalidMappingSyntax,
-    #[error("Powielone lub identyczne mapowanie domen")]
+    #[error("Duplicate or identical domain mapping")]
     DuplicateOrIdentityMapping,
-    #[error("Jeden host źródłowy nie może wskazywać różnych hostów lokalnych")]
+    #[error("A source host cannot map to multiple local hosts")]
     SourceHostConflict,
-    #[error("Wymagane są niełańcuchowe, jawne mapowania domen")]
+    #[error("Explicit, non-chained domain mappings are required")]
     MissingOrChainedMappings,
-    #[error("Nie łącz różnych witryn pod jednym hostem w tym importerze")]
+    #[error("This importer cannot combine different sites under one host")]
     TargetHostCollision,
     #[error(
-        "Backup zawiera URL witryny bez jawnego mapowania; baza wymaga odtworzenia lub dokończenia"
+        "Backup contains a site URL without an explicit mapping; the database must be restored or the operation completed"
     )]
     UnmappedUrl,
-    #[error("Brak lub pusty plik backupu")]
+    #[error("Backup file is missing or empty")]
     EmptyDump,
-    #[error("Obsługiwane są tylko nieszyfrowane .sql lub .gz, nie ZIP/.crypt")]
+    #[error("Only unencrypted .sql or .gz files are supported; ZIP and .crypt files are not")]
     UnsupportedDumpType,
-    #[error("Dump zawiera niedozwolone dyrektywy baz/użytkowników lub klienta SQL")]
+    #[error("Dump contains forbidden database or user directives, or SQL client commands")]
     ForbiddenDumpDirective,
-    #[error("Nie rozpoznano jednej kompletnej bazy WP; sprawdź pełny dump i prefiks")]
+    #[error(
+        "Could not identify one complete WordPress database; check the full dump and table prefix"
+    )]
     IncompleteDatabase,
-    #[error("Niekompletny backup multisite")]
+    #[error("Incomplete multisite backup")]
     IncompleteMultisite,
-    #[error("Błąd odczytu dumpa: {path}: {source}")]
+    #[error("Failed to read database dump {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("Błąd kroku DDEV: {step}; przerwano (szczegóły nie są wypisywane z uwagi na sekrety)")]
+    #[error("DDEV step failed: {step}; operation aborted (details are hidden to protect secrets)")]
     DdevStepFailed { step: String },
     #[error(
-        "WP-CLI zgłosił ostrzeżenie/błąd search-replace; nie uznaję częściowej zamiany za sukces"
+        "WP-CLI reported a search-replace warning or error; a partial replacement is not considered successful"
     )]
     SearchReplaceWarning,
-    #[error("Nie rozpoznano JSON ddev describe")]
+    #[error("Could not parse ddev describe JSON")]
     InvalidDdevDescribe,
-    #[error("Nieprawidłowy wynik zapytania WP-CLI")]
+    #[error("Invalid WP-CLI query result")]
     InvalidQueryOutput,
-    #[error("Nieprawidłowy identyfikator bloga")]
+    #[error("Invalid blog ID")]
     InvalidBlogId,
-    #[error("Brak home/siteurl dla jednej z witryn")]
+    #[error("A site is missing home or siteurl")]
     MissingSiteOptions,
-    #[error("Nie można uruchomić DDEV")]
+    #[error("Failed to start DDEV")]
     DdevUnavailable,
-    #[error("Wymagany jest istniejący projekt DDEV")]
+    #[error("An existing DDEV project is required")]
     DdevProjectRequired,
-    #[error("Najpierw zainstaluj/zaktualizuj profil WordPress w tym projekcie")]
+    #[error("Install or update the WordPress profile in this project first")]
     MissingWordPressHelpers,
-    #[error("Cel musi być wskazanym, uruchomionym projektem DDEV typu wordpress")]
+    #[error("The target must be the specified, running DDEV project of type wordpress")]
     InvalidDdevProject,
-    #[error("Wersja 1 obsługuje standardowy WordPress z wp-config.php w docroot")]
+    #[error("Version 1 supports standard WordPress with wp-config.php in the document root")]
     MissingWpConfig,
-    #[error("Brak standardowego katalogu wp-content")]
+    #[error("Standard wp-content directory is missing")]
     MissingWpContent,
-    #[error("Nieprawidłowe URL w konfiguracji DDEV")]
+    #[error("Invalid URLs in DDEV configuration")]
     InvalidDdevUrls,
     #[error(
-        "Każdy docelowy host musi występować w ddev describe; nie zmieniamy konfiguracji DDEV"
+        "Each target host must appear in ddev describe; DDEV configuration will not be changed"
     )]
     UnknownDdevTargetHost,
-    #[error("Nieprawidłowy prefiks tabel lokalnej bazy")]
+    #[error("Invalid local database table prefix")]
     InvalidLocalTablePrefix,
-    #[error("WordPress i DDEV nie wskazują tej samej lokalnej bazy db")]
+    #[error("WordPress and DDEV do not point to the same local db database")]
     DatabaseMismatch,
-    #[error("Dump i lokalny WordPress muszą mieć ten sam prefiks i tryb single/multisite")]
+    #[error("The dump and local WordPress must use the same table prefix and single-site or multisite mode")]
     DumpTopologyMismatch,
-    #[error("Lokalny plik ochrony jest inny; nie nadpisuję go")]
+    #[error("Local safety file differs; it will not be overwritten")]
     SafetyFileConflict,
-    #[error("Nieprawidłowe pola ddev describe")]
+    #[error("Invalid ddev describe fields")]
     InvalidDdevFields,
-    #[error("Brak mapowania hosta bloga multisite")]
+    #[error("Missing host mapping for a multisite blog")]
     MissingBlogHostMapping,
-    #[error("Brak mapowania lub nieprawidłowy identyfikator sieci multisite")]
+    #[error("Missing mapping or invalid multisite network ID")]
     InvalidNetworkMapping,
-    #[error("Search-replace nie zastąpił wszystkich żądanych URL")]
+    #[error("Search-replace did not replace all requested URLs")]
     SearchReplaceIncomplete,
-    #[error("Zmieniła się liczba blogów podczas importu")]
+    #[error("The number of blogs changed during import")]
     SiteCountChanged,
-    #[error("Weryfikacja URL po imporcie nie powiodła się")]
+    #[error("Post-import URL verification failed")]
     SiteVerificationFailed,
-    #[error("Weryfikacja domen sieci multisite nie powiodła się")]
+    #[error("Multisite network domain verification failed")]
     NetworkVerificationFailed,
-    #[error("Brak witryn do lokalizacji")]
+    #[error("No sites to localize")]
     NoSitesToLocalize,
-    #[error("Nieprawidłowa nazwa projektu DDEV")]
+    #[error("Invalid DDEV project name")]
     InvalidDdevName,
-    #[error("Katalog backupów XDG_STATE_HOME musi być poza projektem i docroot")]
+    #[error("The XDG_STATE_HOME backup directory must be outside the project and document root")]
     BackupDirectoryInsideProject,
-    #[error("Inny import tego projektu już działa")]
+    #[error("Another import for this project is already running")]
     RestoreAlreadyRunning,
-    #[error("Źródło lub cel zmieniły się po potwierdzeniu; uruchom plan ponownie")]
+    #[error("The source or target changed after confirmation; run the plan again")]
     RestorePlanChanged,
-    #[error("Plik źródłowy zmienił się podczas kopiowania")]
+    #[error("The source file changed during copying")]
     IncomingChanged,
-    #[error("Backup lokalnej bazy nie odpowiada potwierdzonemu celowi")]
+    #[error("The local database backup does not match the confirmed target")]
     BackupMismatch,
-    #[error("Plik ochrony zmienił się po potwierdzeniu; nie nadpisuję go")]
+    #[error("The safety file changed after confirmation; it will not be overwritten")]
     SafetyChanged,
-    #[error("Nieprawidłowa topologia zaimportowanej bazy")]
+    #[error("Invalid topology in the imported database")]
     ImportedTopologyMismatch,
-    #[error("Anulowano; baza nie została zmieniona")]
+    #[error("Cancelled; the database was not changed")]
     RestoreCancelled,
-    #[error("Nie można przygotować prywatnego katalogu backupu")]
+    #[error("Failed to prepare the private backup directory")]
     BackupDirectory,
-    #[error("Nie można zablokować katalogu backupu")]
+    #[error("Failed to lock the backup directory")]
     BackupLock,
-    #[error("Nie można przygotować plików restore")]
+    #[error("Failed to prepare restore files")]
     RestoreIo,
-    #[error("Brak danych do potwierdzenia restore")]
+    #[error("Missing input to confirm the restore")]
     ConfirmationInput,
-    #[error("Import przerwany. Brak automatycznego rollbacku. Przywróć backup ręcznie.")]
+    #[error("Import aborted. No automatic rollback was performed. Restore the backup manually.")]
     RecoveryRequired,
     #[error(transparent)]
     Filesystem(#[from] crate::error::FilesystemError),
@@ -438,21 +477,25 @@ pub(crate) enum WordPressError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum MigrationError {
-    #[error("Migracja starej instalacji wymaga --accept-existing po przeglądzie plików")]
+    #[error(
+        "Migrating a legacy installation requires --accept-existing after reviewing the files"
+    )]
     AcceptanceRequired,
-    #[error("Brak starego profilu")]
+    #[error("Legacy profile is missing")]
     MissingLegacyState,
-    #[error("Nie wykryto starego formatu profilu (zainstalowany nowy lub niepoprawny)")]
+    #[error(
+        "Legacy profile format was not detected (the profile may be newly installed or invalid)"
+    )]
     NotLegacyFormat,
-    #[error("Nieznany format starego profilu")]
+    #[error("Unknown legacy profile format")]
     UnknownLegacyFormat,
-    #[error("Nie odnaleziono dotychczasowej konfiguracji MCP")]
+    #[error("Could not find the existing MCP configuration")]
     MissingMcpConfiguration,
-    #[error("Brak pliku dotychczasowego profilu: {0}")]
+    #[error("Legacy profile file is missing: {0}")]
     MissingLegacyFile(String),
-    #[error("Nieprawidłowy stary stan profilu")]
+    #[error("Invalid legacy profile state")]
     InvalidLegacyState,
-    #[error("Błąd systemu plików dla {path}: {source}")]
+    #[error("Filesystem error for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
@@ -472,13 +515,17 @@ pub(crate) enum MigrationError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum McpConfigError {
-    #[error("Nieprawidłowa nazwa definicji MCP; użyj małych liter/cyfr i pojedynczych myślników")]
+    #[error(
+        "Invalid MCP definition name; use lowercase letters or digits separated by single hyphens"
+    )]
     InvalidName,
-    #[error("Brak definicji MCP: {name} (mcp/servers/{name}.json)")]
+    #[error("MCP definition is missing: {name} (mcp/servers/{name}.json)")]
     MissingDefinition { name: String },
-    #[error("Nieprawidłowa MCP dla {profile}: oczekiwano listy servers z nazwami z mcp/servers/")]
+    #[error(
+        "Invalid MCP manifest for {profile}: expected a servers list with names from mcp/servers/"
+    )]
     InvalidManifest { profile: String },
-    #[error("Powielona nazwa MCP w profilu {profile}: {name}")]
+    #[error("Duplicate MCP name in profile {profile}: {name}")]
     DuplicateName { profile: String, name: String },
     #[error("Invalid MCP type: {0}")]
     InvalidType(String),
@@ -510,6 +557,12 @@ pub(crate) enum McpConfigError {
     InvalidOAuth(String),
     #[error("Invalid MCP protocol: {0}")]
     InvalidProtocol(String),
+    #[error("MCP {server} cannot be represented for {client}: unsupported field {field}")]
+    UnsupportedClientField {
+        server: String,
+        client: String,
+        field: String,
+    },
     #[error("env_file is supported only for local MCP: {0}")]
     RemoteEnvFile(String),
     #[error("Expected a relative path inside the project")]
@@ -524,11 +577,13 @@ pub(crate) enum McpConfigError {
     InvalidOverrideFields(String),
     #[error("Local override cannot change MCP transport type: {0}")]
     OverrideTransportChange(String),
-    #[error("Konflikt: konfiguracja MCP '{0}' była zmieniona. Nie nadpisuję jej automatycznie.")]
+    #[error(
+        "Conflict: MCP configuration '{0}' has changed. It will not be overwritten automatically."
+    )]
     ManagedMcpChanged(String),
-    #[error("MCP '{0}' już istnieje i nie należy do managera.")]
+    #[error("MCP '{0}' already exists and is not managed by this tool.")]
     UnmanagedMcpExists(String),
-    #[error("Nieprawidłowy obiekt MCP: {0}")]
+    #[error("Invalid MCP object: {0}")]
     InvalidMcpObject(String),
     #[error(transparent)]
     Codec(#[from] CodecError),

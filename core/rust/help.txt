@@ -2,7 +2,7 @@ ai-profiles — zarządzanie profilami
 
 TWORZENIE PROFILU
   make create PROFILE=NAZWA
-    Tworzy profil 1.0.0 z pustym MCP i katalogiem skilli. Nie nadpisuje plików.
+    Tworzy profil 1.0.0 z pustym MCP i pustym wyborem skilli. Nie nadpisuje plików.
     Opcjonalny opis: DESCRIPTION="Opis profilu"
 
 PRACA Z PROJEKTEM
@@ -28,10 +28,22 @@ UTRZYMANIE REPOZYTORIUM
   make validate
     Sprawdza wszystkie profile, skille i konfigurację MCP.
   make validate PROFILE=NAZWA
-    Sprawdza tylko wybrany profil, wspólne skille i jego wpisy w mcp/example.json.
+    Sprawdza wybrany profil, jego wybrane skille i wpisy w mcp/example.json.
     Cały rejestr MCP i nadmiarowe wpisy sprawdza pełne make validate.
   make test
-    Uruchamia testy w tymczasowych kopiach repozytorium.
+    Pełne testy Rust w trwałej VM Debian 13 amd64 (Incus/QEMU/KVM).
+  make test-playwright
+    Buduje obraz i uruchamia pełny test adaptera/Compose/Chromium w VM.
+  make validate-rust-migration
+    Bramka format/build/Clippy/walidacja/testy Rust w VM.
+  make test-all
+    Bramka walidacji, potem Playwright (bez powtarzania testów Rust).
+  make test-vm-up / test-vm-stop
+    Przygotowuje/wznawia lub zatrzymuje VM bez usuwania cache.
+  make test-vm-sync / test-vm-reprovision
+    Synchronizuje źródła lub jawnie ponawia provisioning istniejącej VM.
+    Wymagania hosta i zasoby: docs/testing.md. Host testów nie wymaga
+    Cargo, Node ani Dockera. Raporty: .test-vm/artifacts/.
   make help
     Pokazuje pomoc. Samo make również pokazuje pomoc.
 
@@ -44,4 +56,3 @@ ARGUMENTY
   DESCRIPTION  Opcjonalny opis dla create; domyślnie „Profil NAZWA”.
   PART         Opcjonalny rodzaj zmiany wersji dla bump.
   NEW_NAME     Wymagana nowa nazwa dla rename: małe litery/cyfry i myślniki.
-

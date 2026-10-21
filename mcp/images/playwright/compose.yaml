@@ -1,0 +1,25 @@
+services:
+  playwright:
+    image: ai-profiles-playwright:0.1.0
+    pull_policy: never
+    init: true
+    stdin_open: true
+    tty: false
+    working_dir: "${AI_PROFILE_PROJECT_DIR:?AI_PROFILE_PROJECT_DIR must be the absolute project path; launch through the installed ai-profile-mcp adapter}"
+    network_mode: "${AI_PROFILE_PLAYWRIGHT_NETWORK:-bridge}"
+    environment:
+      HOST_UID: "${HOST_UID:-}"
+      HOST_GID: "${HOST_GID:-}"
+      PLAYWRIGHT_MCP_OUTPUT_DIR: "${AI_PROFILE_PROJECT_DIR:?}/reports/wcag"
+    volumes:
+      - type: bind
+        source: "${AI_PROFILE_PROJECT_DIR:?}"
+        target: "${AI_PROFILE_PROJECT_DIR:?}"
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${AI_PROFILE_PROJECT_DIR:?}/reports/wcag"
+        target: "${AI_PROFILE_PROJECT_DIR:?}/reports/wcag"
+        bind:
+          create_host_path: false

@@ -1,0 +1,11 @@
+services:
+  playwright:
+    environment:
+      PLAYWRIGHT_CA_CERT: /run/ai-profile-ca.crt
+    volumes:
+      - type: bind
+        source: "${AI_PROFILE_PLAYWRIGHT_CA_CERT:?Set AI_PROFILE_PLAYWRIGHT_CA_CERT to your trusted CA file}"
+        target: /run/ai-profile-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false

@@ -25,6 +25,14 @@ Stan projektu zachowuje rozwinięte `mcp_base`, a nie odwołania do repozytorium
 więc adapter nie potrzebuje dostępu do źródeł ai-profiles. Zmiana definicji
 wymaga bumpu wyłącznie profili, które ją wybierają.
 
+`install`, `update` i `switch` renderują jeden efektywny zestaw (rejestr plus
+`.opencode/ai-profile.local.json`) do OpenCode (`opencode.json`), Codex
+(`.codex/config.toml`, zachowywany przez `toml_edit`) i Claude Code (`.mcp.json`).
+CLI klientów nie są wymagane do przygotowania konfiguracji. Wpisy są śledzone
+oddzielnie w stanie instalacji; kolizje i ręczne zmiany zarządzanych wpisów
+blokują aktualizację. Klienci nadal kontrolują zaufanie projektu, zatwierdzanie
+MCP i OAuth. Status potwierdza przygotowaną konfigurację, nie runtime connection.
+
 ## Lokalne ustawienia projektu
 
 `.opencode/ai-profile.local.json` jest plikiem użytkownika/projektu. Menedżer go
@@ -57,10 +65,10 @@ Obiekty ustawień scalają się po kluczach, tablice (np. `command`) są zastęp
 w całości. Można nadpisać m.in. `command`, `environment`, `cwd`, `enabled`/
 `disabled`, `timeout`, a dla zdalnego MCP także `url`, `headers` i `oauth`.
 Nie można zmienić transportu ani nadpisać serwera niezarządzanego przez profil;
-takie serwery konfiguruj niezależnie w OpenCode. Aktualizacja ostrzega o zmianie
+takie serwery konfiguruj niezależnie w każdym kliencie. Aktualizacja ostrzega o zmianie
 upstream pól, które lokalnie nadpisano, bez ujawniania ich wartości. Nadpisania
 niepasujące do aktualnego profilu powodują błąd, a nie ciche pominięcie.
-Nie edytuj wygenerowanych wpisów `opencode.json` — ręczne zmiany blokują update.
+Nie edytuj wygenerowanych wpisów MCP; ręczne zmiany blokują update/uninstall.
 
 PostgreSQL MCP ma domyślnie tryb `unrestricted` (read/write w granicach uprawnień
 konta). Tryb ustawiaj wyłącznie przez lokalne pole `access_mode`:
@@ -81,12 +89,19 @@ Instalator dostarcza natywne binarium Rust `.opencode/ai-profile-mcp` i nadaje
 mu prawa wykonania. OpenCode uruchamia je bezpośrednio. Adapter odczytuje
 `mcp_base` ze stanu, nakłada lokalne nadpisania, uruchamia komendy bez powłoki,
 przekazuje stdio i rozwiązuje środowisko wyłącznie dla procesu MCP. Nie zmienia
-środowiska OpenCode. Zdalne MCP uruchamia natywnie OpenCode i nie używają
+środowiska OpenCode. Zdalne MCP uruchamia natywnie każdy klient i nie używają
 `env_file`. Osobny `ai-profile-mcp.json` nie jest wymagany; update usuwa jego
 wcześniej zarządzaną kopię. Adapter działa bez Python, Cargo i checkoutu;
-zależności wybranego serwera muszą być dostępne osobno.
-Po zmianie pliku env lub mapowania zrestartuj MCP;
-po zmianie ustawień OpenCode wykonaj update i zrestartuj sesję.
+zależności wybranego serwera muszą być dostępne osobno. Codex i Claude używają
+bezwzględnej ścieżki adaptera i argumentu nazwy serwera; sekrety nie są
+rozwijane przy instalacji. Po zmianie pliku env lub mapowania zrestartuj MCP;
+po zmianie ustawień klienta zrestartuj jego sesję.
+
+Każda lokalna komenda otrzymuje zastrzeżone `AI_PROFILE_PROJECT_DIR`: kanoniczną
+ścieżkę projektu odnalezioną z położenia zainstalowanego adaptera w runtime,
+nie z `PWD` ani katalogu klienta. Adapter ustawia ją wyłącznie dla podprocesu,
+po rozwiązaniu środowiska; odziedziczone wartości, dotenv i lokalne mapowania
+nie zastępują jej końcowej wartości. Użytkownik nie musi jej konfigurować.
 
 ## Launchery
 
@@ -102,6 +117,113 @@ nie jest instalowany. Launcher buduje przypięte źródła upstream dopiero przy
 włączonym uruchomieniu MCP, nie podczas instalacji profilu. Weryfikuje SHA-256
 archiwum i buduje obraz Docker; szczegółowe wymagania, konfiguracja i ostrzeżenia
 dotyczące SQL znajdują się w [instrukcji WordPress](../profiles/wordpress/README.md).
+
+## Playwright i audyty WCAG
+
+Pełny test repozytorium uruchamia `make test-playwright` w trwałej VM Debian 13
+amd64 zarządzanej przez Incus (Docker i Node.js 24 LTS wewnątrz gościa).
+Etap zainstalowanego adaptera wymaga Node na maszynie wykonującej skrypt, czyli
+w VM; produkcyjne użycie MCP opisane poniżej go nie wymaga na hoście.
+`network_mode: host` w integracji oznacza sieć VM, nie fizycznego hosta.
+Wymagania, cache i eksport raportów: [testowanie](../docs/testing.md).
+
+Profile WordPress i React wybierają serwer `playwright` oraz skill
+`wcag-audit`. Pozostałe profile nie otrzymują konfiguracji przeglądarki.
+`make install PROFILE=<profil> PROJECT=<projekt>` dostarcza do projektu kompletny
+kontekst budowy i konfigurację Compose w `.opencode/mcp/playwright/`. Instalacja
+nie wymaga Dockera i nie buduje ani nie pobiera obrazu.
+
+### Przygotowanie w repozytorium docelowym
+
+Z katalogu głównego projektu, mając działający Docker Engine i plugin Compose:
+
+```sh
+mkdir -p reports/wcag
+docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+```
+
+Następnie zrestartuj klienta AI. Jak dla pozostałych lokalnych MCP, wspólny
+adapter `ai-profile-mcp` odczytuje konfigurację i uruchamia jej komendę — tutaj
+standardowe `docker compose run` bez TTY. Nie ma dedykowanego launchera Playwright,
+publikacji GHCR, tokenów ani automatycznego buildu/pull obrazu. Nie uruchamiaj
+`compose up -d`: każdy klient ma własny kontener i sesję przeglądarki.
+
+Compose montuje projekt pod jego rzeczywistą bezwzględną ścieżką hosta, tylko
+do odczytu, a `reports/wcag` pod tą samą ścieżką zapisywalnie. Ścieżkę dostarcza
+wspólny adapter przez `AI_PROFILE_PROJECT_DIR`, bez konfiguracji użytkownika.
+Katalog raportów musi wcześniej utworzyć użytkownik projektu;
+kontener dopasowuje do niego UID/GID. Nie montuje Docker socketu. Opcjonalne
+`HOST_UID` i `HOST_GID` pozwalają jawnie wybrać użytkownika.
+
+Dockerfile deklaruje dokładne wersje `@playwright/mcp` i `axe-core`, bez npm
+manifestu i lockfile w repozytorium. Node, npm dependencies, Chromium i biblioteki
+systemowe są instalowane wyłącznie wewnątrz obrazu. Skrypt axe jest ładowany przez
+`--init-script` również po kolejnych nawigacjach. Nie potrzeba hostowego Node/npm,
+cache przeglądarki ani CDN. Przypięte wersje bezpośrednie nie gwarantują identycznych
+zależności przechodnich w przyszłych rebuildach.
+
+Po aktualizacji dostarczonej receptury użytkownik jawnie ponawia build w projekcie.
+Aktualizacja i uninstall nie zarządzają lokalnymi obrazami ani raportami.
+Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwright/README.md).
+
+### Sieć, certyfikaty i artefakty
+
+W `.opencode/ai-profile.local.json` ustawiaj `environment` dla `playwright`.
+Przykład konfiguracji lokalnej DDEV (sprawdź nazwę sieci u siebie):
+
+```json
+{
+  "mcp": {
+    "playwright": {
+      "environment": {
+        "AI_PROFILE_PLAYWRIGHT_NETWORK": "ddev_default",
+        "AI_PROFILE_PLAYWRIGHT_CA_CERT": ".ddev/ai-profile-ca.crt"
+      }
+    }
+  }
+}
+```
+
+Używaj URL dostępnego w tej sieci, np. `https://<projekt>.ddev.site`, nie
+`localhost` hosta. Dla lokalnego HTTPS
+`AI_PROFILE_PLAYWRIGHT_CA_CERT` wskazuje plik CA. Włącz dodatkowo `compose.ca.yaml`
+przez lokalne `environment.COMPOSE_FILE`, zgodnie z dostarczoną instrukcją.
+Compose montuje plik oddzielnie, a kontener dodaje go do magazynów CA systemu i Chromium
+przed startem Chromium; weryfikacja TLS pozostaje włączona.
+
+Uwierzytelniony audyt może użyć `AI_PROFILE_PLAYWRIGHT_STORAGE_STATE` wskazującego
+prywatny plik storage state o prawach `0600`. Włącz `compose.auth.yaml` przez
+`COMPOSE_FILE`. Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
+nie należy do raportów ani stanu instalacji.
+Raport, findings JSON, raw scans i screenshoty skill zapisuje w
+`reports/wcag/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
+zadeklarowane zmienne, nie całe środowisko hosta.
+
+Dla jawnego `filename` preferuj `reports/wcag/<run>/...` albo odpowiadającą
+bezwzględną ścieżkę hosta `<projekt>/reports/wcag/<run>/...`. Nazwy względne
+rozwiązują się względem projektu z MCP roots, nie automatycznie względem katalogu
+wyjściowego. Pominięcie `filename` używa skonfigurowanego `reports/wcag`.
+Sama nazwa `file.png` próbuje zapisać w projekcie tylko do odczytu i nie jest
+obsługiwana. Nie używaj `/workspace/...` ani hostowego `/tmp/opencode`: nie są
+aliasami projektu ani dodatkowymi mountami. Nie udostępniamy dowolnych katalogów
+hosta. Osobne polecenie diagnostyczne Compose z jawną zmienną jest w
+[instrukcji instalowanej](images/playwright/README.md#diagnostyka).
+
+Obraz obsługuje `linux/amd64` i `linux/arm64`; pozostałe architektury są
+odrzucane. Zakres rzeczywistych testów należy podawać oddzielnie dla każdej
+architektury; testy obrazu są w `mcp/images/playwright/tests/`.
+
+Runner `tests/run.sh` wymaga dodatkowo hostowego Node wyłącznie jako klienta
+testowego MCP. Sprawdza entrypoint, a następnie instalację przez `make install`
+i wspólny adapter uruchomiony z `/`, z prawdziwymi MCP roots. Przeglądarka i axe
+pozostają w kontenerze. Test używa ścieżki projektu ze spacjami i przecinkiem,
+weryfikuje artefakty także na hoście oraz próby nadpisania metadanych adaptera.
+
+Timeouty: Codex dostaje startup/tool timeouty w sekundach. Claude dostaje
+`env.MCP_TIMEOUT` w milisekundach (wpisany automatycznie, jeśli brak jawnej
+wartości); jawna, zbyt mała wartość jest zachowana i zgłaszana. Fazy katalogu
+nie mają odpowiednika w każdym kliencie, więc są odrzucane zamiast po cichu
+zmieniania znaczenia.
 
 ## Walidacja
 

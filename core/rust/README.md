@@ -38,7 +38,7 @@ build before invoking the manager. There is no `install2` target.
 
 The native profile manager discovers its source checkout by walking ancestors
 of its own executable location and looking for the repository layout
-(`core/rust/src/`, `profiles/`, `common/skills/`, and
+(`core/rust/src/`, `profiles/`, `skills/`, and
 `mcp/servers/`). For a build inside the checkout, the executable is located at
 `core/rust/target/release/ai-profile`. If it is copied elsewhere, preserve a
 layout where its ancestor contains those source directories. The manager does
@@ -65,7 +65,7 @@ project writes; direct Cargo users must build all release binaries there first.
 | `ai-profile-mcp` | `.opencode/ai-profile-mcp` |
 | `mariadb-launcher` | `.opencode/mcp/mariadb/mariadb-launcher` (selected MariaDB) |
 | `restore-updraft` | `.opencode/ai-profile/scripts/restore-updraft` (WordPress) |
-| `test-inventory` | `.opencode/skills/test-gap-discovery/scripts/inventory-tests` |
+| `test-inventory` | `.opencode/ai-profile/plugin/skills/test-gap-discovery/scripts/inventory-tests` |
 
 Installed files are copied, hashed and managed through the existing ownership
 checks. Update removes previously managed Python payloads only after verifying
@@ -107,7 +107,7 @@ implementation. Rust module filenames are relative to `core/rust/src/`.
 | `profiles/wordpress/scripts/restore-updraft.py`: `preflight` | `wordpress/preflight.rs` |
 | `profiles/wordpress/scripts/restore-updraft.py`: `localize` | `wordpress/localize.rs` |
 | `profiles/wordpress/scripts/restore-updraft.py`: `restore`, `main` | `wordpress/restore.rs`, `bin/restore-updraft.rs` |
-| Python embedded in `common/skills/test-gap-discovery/scripts/inventory-tests.sh` | `bin/test-inventory.rs` |
+| Python embedded in `skills/test-gap-discovery/scripts/inventory-tests.sh` | `bin/test-inventory.rs` |
 
 The Rust manager does not invoke a host Python interpreter to implement any
 operation. The MariaDB launcher retains the upstream container's documented

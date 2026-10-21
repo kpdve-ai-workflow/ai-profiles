@@ -8,7 +8,7 @@ use crate::{
 
 fn source() -> (tempfile::TempDir, RepositoryContext) {
     let temp = tempfile::tempdir().unwrap();
-    for path in ["core/rust/src", "profiles", "common/skills", "mcp/servers"] {
+    for path in ["core/rust/src", "profiles", "skills", "mcp/servers"] {
         std::fs::create_dir_all(temp.path().join(path)).unwrap();
     }
     let context = RepositoryContext::from_sources(PathBuf::from(temp.path())).unwrap();
@@ -55,7 +55,10 @@ fn rename_changes_only_directory_and_metadata_name() {
         fs::read(renamed.join("README.md")).unwrap(),
         b"old-profile documentation"
     );
-    assert!(renamed.join("skills/.gitkeep").is_file());
+    assert_eq!(
+        read_json(&renamed.join("skills.json")).unwrap(),
+        serde_json::json!({"skills": []})
+    );
     assert_eq!(
         fs::read(context.sources.join("profiles/other-profile/profile.json")).unwrap(),
         other
@@ -123,10 +126,10 @@ fn rename_rejects_symlinked_profile_and_metadata() {
 fn create_and_bump_touch_only_requested_profile() {
     let (_temp, context) = source();
     create_profile(&context, "new-profile", Some("Description")).unwrap();
-    assert!(context
-        .sources
-        .join("profiles/new-profile/skills/.gitkeep")
-        .exists());
+    assert_eq!(
+        read_json(&context.sources.join("profiles/new-profile/skills.json")).unwrap(),
+        serde_json::json!({"skills": []})
+    );
     assert_eq!(
         bump_profile(&context, "new-profile", VersionBump::Minor).unwrap(),
         "1.1.0"

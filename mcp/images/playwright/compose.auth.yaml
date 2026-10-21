@@ -1,0 +1,11 @@
+services:
+  playwright:
+    environment:
+      PLAYWRIGHT_MCP_STORAGE_STATE: /run/ai-profile-auth.json
+    volumes:
+      - type: bind
+        source: "${AI_PROFILE_PLAYWRIGHT_STORAGE_STATE:?Set AI_PROFILE_PLAYWRIGHT_STORAGE_STATE to your private storage-state file}"
+        target: /run/ai-profile-auth.json
+        read_only: true
+        bind:
+          create_host_path: false

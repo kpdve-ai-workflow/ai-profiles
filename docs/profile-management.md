@@ -3,27 +3,100 @@
 ## Tworzenie i struktura profilu
 
 Profile są wykrywane automatycznie z `profiles/<nazwa>/`. Profil zawiera
-`profile.json`, `mcp.json` i opcjonalne `skills/<skill>/SKILL.md`. `name` w
-metadanych musi odpowiadać nazwie katalogu. Najprościej utworzyć profil poleceniem:
+`profile.json`, `mcp.json` oraz `skills.json`. `name` w metadanych musi
+odpowiadać nazwie katalogu. Najprościej utworzyć profil poleceniem:
 
 ```bash
 make create PROFILE=backend-python DESCRIPTION="Backend Python development profile"
 ```
 
 Nazwa jest wymagana; opis jest opcjonalny. Komenda tworzy metadane w wersji
-`1.0.0`, pusty wybór MCP oraz zachowuje pusty katalog skills. Nie instaluje
+`1.0.0`, pusty wybór MCP i pusty wybór skilli. Nie instaluje
 profilu ani nie nadpisuje istniejącego. Szczegóły formatu wyboru MCP znajdują się
 w [dokumentacji MCP](../mcp/README.md).
 
-Skill dodaj jako `profiles/<profil>/skills/<skill>/SKILL.md` z frontmatter `name`
-i `description`; nazwa musi odpowiadać katalogowi. Pliki pomocnicze pozostają
-w katalogu skilla. Wspólne skille umieszczaj w `common/skills/`; ich zmiana
-dotyczy wszystkich profili. Nie używaj symlinków ani kolidujących nazw.
+Skille dystrybuowane przechowuj raz w `skills/<nazwa>/SKILL.md`, z frontmatter
+`name` i `description`; nazwa musi odpowiadać katalogowi. Pliki pomocnicze
+pozostają w katalogu skilla. Profile wybierają je jawnie w `skills.json`.
+Przykładowy wybór WordPress:
+
+```json
+{
+  "skills": ["acf", "make-plan", "sage-block-scaffold", "styling"]
+}
+```
+
+Nazwy są bezpośrednimi nazwami katalogów pod `skills/`; wpisy muszą być
+unikalne. Dwa profile mogą wskazać ten sam katalog źródłowy, a instalator
+kopiuje każdy skill do własnego projektu. Na przykład
+`skills/make-plan/SKILL.md` trafia do
+`<projekt>/.opencode/ai-profile/plugin/skills/make-plan/SKILL.md`, a
+`skills/make-plan/references/plan-layout.md` do tego samego katalogu
+`references/`. To jedyna kopia dystrybucyjna skilla w projekcie.
+Nowy profil zaczyna z `{"skills":[]}`. Zmiany manifestu docierają do projektu
+przez `make update PROJECT=<projekt>`; usunięte pliki są zdejmowane zgodnie z
+kontrolą własności i hashy. Nie używaj symlinków ani kolidujących nazw.
+
+Instalacja przygotowuje wspólny plugin `ai-profile`. OpenCode otrzymuje jawny
+source skills w `opencode.json`, a Claude Code i Codex dostają natywne katalogi
+projektowe oraz włączenie pluginu. Katalog Claude znajduje się w
+`.claude-plugin/marketplace.json`, katalog Codex w
+`.agents/plugins/marketplace.json`. Identyfikator marketplace zawiera skrót
+kanonicznej ścieżki projektu, dzięki czemu projekty nie dzielą tożsamości.
+
+Przed użyciem pluginu Claude Code może wymagać zaufania repozytorium; Codex
+ładuje `.codex/config.toml` tylko w zaufanym projekcie. Instalator nie zmienia
+zaufania ani uprawnień. Gdy CLI hosta nie ma, pliki projektu są przygotowane,
+a aktywacja pozostaje oczekująca. Przy błędzie aktywacji `status` pokazuje
+oddzielnie pliki projektu i ostatni zapisany wynik instalacji natywnej; ponowne
+`make update` ponawia aktywację Codex po błędzie lub stanie oczekującym.
+Claude Code instaluje plugin przez `claude plugin install ai-profile@<marketplace>
+--scope project`; przy kolejnej aktualizacji menedżer używa `claude plugin
+update`.
+
+Codex rejestruje lokalny marketplace i instaluje plugin osobnymi poleceniami,
+uruchamianymi z katalogu projektu:
+
+```bash
+codex plugin marketplace add <bezwzględna-ścieżka-projektu> --json
+codex plugin add ai-profile@<marketplace-z-.agents/plugins/marketplace.json> --json
+```
+
+Instalator bierze nazwy z katalogu Codex i weryfikuje rejestrację oraz wynik
+przez `codex plugin list --marketplace <marketplace> --json`. Istniejąca
+rejestracja jest używana tylko wtedy, gdy jej nazwa i lokalne źródło pasują do
+projektu. Rejestracja i instalacja Codex zapisują ustawienia oraz cache w
+konfiguracji użytkownika Codex; CLI nie udostępnia tu opcji zakresu projektu.
+Stan śledzi, które zasoby natywne dodał instalator, a `uninstall` usuwa tylko te
+zasoby. Istniejące pluginy, rejestracje i jawne wyłączenie pozostają zachowane.
+
+Powtórne `make update` sprawdza inwentarz i nie powtarza `plugin add`, jeśli
+plugin jest już zainstalowany. Zmiana plików projektu bez zmiany wersji nie
+dowodzi odświeżenia zawartości cache Codex; nie potwierdzono obsługiwanego
+polecenia odświeżającego lokalny plugin, więc aktualność cache pozostaje
+niezweryfikowana. Wynik `installed` oznacza wyłącznie potwierdzenie przez
+natywny inwentarz. Nie dowodzi, że uruchomiona sesja Codex załadowała skille.
+Uruchom ponownie Codex, aby ocenić je w nowej sesji. Wpisy `Dir` lub `File` w
+selektorze wzmianek nie potwierdzają wykrycia skilla.
+
+Skill może się załadować, gdy jego wymagany serwer MCP nie jest dostępny w tym
+hoście. Instalator przygotowuje wybrane MCP w `opencode.json`,
+`.codex/config.toml` oraz `.mcp.json` na podstawie wspólnego rejestru i lokalnych
+nadpisań. Status opisuje konfigurację; nie sprawdza połączenia MCP. Po instalacji
+lub aktualizacji uruchom ponownie klienta, zatwierdź projekt i MCP zgodnie z
+jego natywnymi ustawieniami, a zdalne OAuth zaloguj osobno w każdym kliencie.
+Skille mogą też zachowywać metadane
+`opencode/slash`, ale składnia wywołania i automatyczna aktywacja zależą od hosta.
+
+Przy aktualizacji instalacji ze starszego układu pliki z
+`.opencode/skills/<nazwa>/` są usuwane dopiero po zgodności z zapisanymi hashami.
+Lokalnie zmieniony zarządzany plik blokuje migrację; niezależne skille projektu
+pozostają nietknięte.
 Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
 w skillach. Są instalowane bez automatycznego wykonywania.
 
 Skille przeznaczone wyłącznie dla tego repozytorium umieszczaj w
-`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `common/`
+`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `skills/`
 ani żadnego profilu i nie są dostarczane do projektów. Workflow tego checkoutu
 jest oddzielony od zawartości profili.
 
@@ -117,3 +190,21 @@ make update PROJECT=~/projects/my-api
 
 Migracja uznaje istniejące pliki za punkt odniesienia. Walidację repozytorium
 uruchom przez `make validate`; szczegóły walidacji MCP są w dokumentacji MCP.
+
+Starsze instalacje zyskają konfigurację Codex i Claude Code przez
+`make update PROJECT=<projekt>`. Przygotowanie konfiguracji nie wymaga obecności
+CLI tych klientów. Dla Playwright WCAG instalator dostarcza Dockerfile i Compose
+do `.opencode/mcp/playwright/`, bez uruchamiania Dockera lub npm. Przygotowanie
+wykonuje użytkownik w katalogu głównym docelowego repozytorium:
+
+```sh
+mkdir -p reports/wcag
+docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+```
+
+Do korzystania potrzebny jest Docker Engine i plugin Compose. Wspólny adapter MCP
+uruchamia standardową komendę z konfiguracji. Nie ma osobnego launchera Playwright,
+automatycznego buildu/pull ani zależności od publikacji GHCR. Wszystkie zależności
+Playwright są instalowane w obrazie, nie na hoście. Po zmianie receptury wykonaj
+ponownie build. Instrukcja dostarczana do projektu jest w
+`.opencode/mcp/playwright/README.md`; szczegóły wspólne są w `mcp/README.md`.

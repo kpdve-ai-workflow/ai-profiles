@@ -27,6 +27,17 @@
       "url": "https://mcp.figma.com/mcp",
       "disabled": false
     },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "docker", "compose", "--project-directory", ".",
+        "run", "--rm", "--no-deps", "--pull", "never", "-T", "playwright"
+      ],
+      "enabled": true,
+      "environment": {
+        "COMPOSE_FILE": ".opencode/mcp/playwright/compose.yaml"
+      }
+    },
     "novamira": {
       "type": "local",
       "command": ["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"],

@@ -490,6 +490,170 @@ pub(crate) fn configured_mcp(
     })
 }
 
+/// Render the resolved OpenCode-shaped entries for native project clients. The
+/// adapter command is shared, while each client receives its own transport schema.
+pub(crate) fn native_client_mcp(
+    effective: &Map<String, Value>,
+    client: &str,
+) -> Result<Map<String, Value>, McpConfigError> {
+    let mut result = Map::new();
+    for (name, entry) in effective {
+        let object = entry
+            .as_object()
+            .ok_or_else(|| McpConfigError::InvalidMcpObject(name.clone()))?;
+        if object.get("disabled").and_then(Value::as_bool) == Some(true)
+            || object.get("enabled").and_then(Value::as_bool) == Some(false)
+        {
+            continue;
+        }
+        let transport = object.get("type").and_then(Value::as_str).unwrap_or("");
+        let timeout = object.get("timeout");
+        if object.get("codemode").is_some() {
+            return Err(McpConfigError::UnsupportedClientField {
+                server: name.clone(),
+                client: client.to_owned(),
+                field: "codemode".into(),
+            });
+        }
+        if object.get("protocol").is_some() {
+            return Err(McpConfigError::UnsupportedClientField {
+                server: name.clone(),
+                client: client.to_owned(),
+                field: "protocol".into(),
+            });
+        }
+        if transport == "local" && object.get("oauth").is_some() {
+            return Err(McpConfigError::UnsupportedClientField {
+                server: name.clone(),
+                client: client.to_owned(),
+                field: "oauth".into(),
+            });
+        }
+        if timeout.is_some_and(|value| value.get("catalog").is_some()) {
+            return Err(McpConfigError::UnsupportedClientField {
+                server: name.clone(),
+                client: client.to_owned(),
+                field: "timeout.catalog".into(),
+            });
+        }
+        let mut rendered = Map::new();
+        if transport == "local" {
+            let command = object
+                .get("command")
+                .and_then(Value::as_array)
+                .ok_or_else(|| McpConfigError::InvalidCommand(name.clone()))?;
+            let command = command
+                .iter()
+                .map(Value::as_str)
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| McpConfigError::InvalidCommand(name.clone()))?;
+            if command.len() != 2 {
+                return Err(McpConfigError::InvalidCommand(name.clone()));
+            }
+            rendered.insert("command".into(), Value::String(command[0].to_owned()));
+            rendered.insert(
+                "args".into(),
+                Value::Array(vec![Value::String(command[1].to_owned())]),
+            );
+            if let Some(env) = object.get("environment") {
+                rendered.insert("env".into(), env.clone());
+            }
+            if client == "claude" {
+                rendered.insert("type".into(), Value::String("stdio".into()));
+            }
+        } else if transport == "remote" {
+            rendered.insert(
+                "url".into(),
+                object
+                    .get("url")
+                    .cloned()
+                    .ok_or_else(|| McpConfigError::MissingRemoteUrl(name.clone()))?,
+            );
+            if client == "claude" {
+                rendered.insert("type".into(), Value::String("http".into()));
+            }
+            if let Some(headers) = object.get("headers") {
+                rendered.insert(
+                    if client == "codex" {
+                        "http_headers"
+                    } else {
+                        "headers"
+                    }
+                    .into(),
+                    translate_header_refs(headers),
+                );
+            }
+            if object.get("oauth").is_some() {
+                return Err(McpConfigError::UnsupportedClientField {
+                    server: name.clone(),
+                    client: client.to_owned(),
+                    field: "oauth".into(),
+                });
+            }
+        } else {
+            return Err(McpConfigError::InvalidType(name.clone()));
+        }
+        if let Some(timeout) = timeout {
+            let millis = |field: &str| timeout_ms(timeout, field);
+            if client == "codex" {
+                if let Some(ms) = millis("startup") {
+                    rendered.insert("startup_timeout_sec".into(), Value::from(ms.div_ceil(1000)));
+                }
+                if let Some(ms) = millis("execution") {
+                    rendered.insert("tool_timeout_sec".into(), Value::from(ms.div_ceil(1000)));
+                }
+            } else if let Some(ms) = millis("execution") {
+                rendered.insert("timeout".into(), Value::from(ms));
+            }
+        }
+        result.insert(name.clone(), Value::Object(rendered));
+    }
+    Ok(result)
+}
+
+fn timeout_ms(timeout: &Value, field: &str) -> Option<u64> {
+    if let Some(value) = timeout.as_u64() {
+        return Some(value);
+    }
+    if let Some(value) = timeout.get(field).and_then(Value::as_u64) {
+        return Some(value);
+    }
+    // Registry timeout numbers are serialized as exact positive integers.
+    timeout
+        .get(field)
+        .and_then(|v| v.as_str().and_then(|s| s.parse().ok()))
+}
+
+fn translate_header_refs(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), translate_header_refs(v)))
+                .collect(),
+        ),
+        Value::String(s) => {
+            let mut result = String::new();
+            let mut rest = s.as_str();
+            while let Some(start) = rest.find("{env:") {
+                result.push_str(&rest[..start]);
+                let after = &rest[start + 5..];
+                if let Some(end) = after.find('}') {
+                    result.push_str("${");
+                    result.push_str(&after[..end]);
+                    result.push('}');
+                    rest = &after[end + 1..];
+                } else {
+                    result.push_str(&rest[start..]);
+                    rest = "";
+                }
+            }
+            result.push_str(rest);
+            Value::String(result)
+        }
+        _ => value.clone(),
+    }
+}
+
 pub(crate) fn changed_override_paths(
     old: &Map<String, Value>,
     new: &Map<String, Value>,

@@ -40,9 +40,8 @@ pub(crate) fn create_profile(
             source,
         })?;
     let staged = temporary.path().join(profile_name.as_str());
-    let skills = staged.join("skills");
-    fs::create_dir_all(&skills).map_err(|source| ProfileManagementError::Io {
-        path: skills.clone(),
+    fs::create_dir_all(&staged).map_err(|source| ProfileManagementError::Io {
+        path: staged.clone(),
         source,
     })?;
 
@@ -58,7 +57,10 @@ pub(crate) fn create_profile(
     write_staged(&staged.join("profile.json"), &json_bytes(&metadata)?)?;
     let mcp = json!({"servers": []});
     write_staged(&staged.join("mcp.json"), &json_bytes(&mcp)?)?;
-    write_staged(&skills.join(".gitkeep"), &[])?;
+    write_staged(
+        &staged.join("skills.json"),
+        &json_bytes(&json!({"skills": []}))?,
+    )?;
 
     fs::create_dir(&destination).map_err(|source| ProfileManagementError::Io {
         path: destination.clone(),

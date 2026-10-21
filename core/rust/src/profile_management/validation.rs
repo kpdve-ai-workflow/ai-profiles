@@ -8,7 +8,7 @@ use crate::{
     filesystem::file_path,
     mcp::config::{definitions_to_map, desired_mcp, mcp_definition},
     model::RepositoryContext,
-    profile_management::payload::desired_files,
+    profile_management::payload::{desired_files, validate_skill_catalog},
     repository::{profile_metadata, profile_names},
 };
 
@@ -23,6 +23,7 @@ pub(crate) fn validate_sources(
     }
 
     if selected_profile.is_none() {
+        validate_skill_catalog(context)?;
         let registry = file_path(&context.sources, "mcp/servers")?;
         let mut definitions = fs::read_dir(&registry)
             .map_err(|source| ValidationError::Io {
@@ -89,7 +90,7 @@ pub(crate) fn validate_sources(
         {
             return Err(ValidationError::ScopedExampleMismatch(profile.to_owned()));
         }
-        println!("OK: profil {profile}, wspólne skille i definicje MCP są spójne");
+        println!("OK: profil {profile}, wybrane skille i definicje MCP są spójne");
         return Ok(());
     }
 

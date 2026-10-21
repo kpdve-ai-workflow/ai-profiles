@@ -130,6 +130,22 @@ pub(crate) fn config_for(project: &Path) -> Result<(Value, bool), ProjectError> 
     {
         return Err(ProjectError::InstructionsMustBeArray);
     }
+    if let Some(skills) = object.get("skills") {
+        if let Some(paths) = skills.get("paths") {
+            if !paths
+                .as_array()
+                .is_some_and(|entries| entries.iter().all(Value::is_string))
+            {
+                return Err(ProjectError::ConfigMustBeObject);
+            }
+        } else if (!skills.is_array() && !skills.is_object())
+            || skills
+                .as_array()
+                .is_some_and(|entries| !entries.iter().all(Value::is_string))
+        {
+            return Err(ProjectError::ConfigMustBeObject);
+        }
+    }
     Ok((config, existed))
 }
 

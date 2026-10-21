@@ -20,13 +20,13 @@ użyj `make update PROJECT=...` dla zainstalowanego WordPress albo
 
 Instalacja dostarcza:
 
-- wspólne i wordpressowe skille do `.opencode/skills/`;
+- wspólne i wordpressowe skille raz do `.opencode/ai-profile/plugin/skills/`, dostępne przez konfigurację OpenCode oraz pluginy Claude Code i Codex;
 - definicje MCP `novamira`, `figma` i `mariadb` w zarządzanej konfiguracji OpenCode;
 - adapter Rust `.opencode/ai-profile-mcp`, który uruchamia most Novamira;
 - launcher Rust `.opencode/mcp/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
 - tę instrukcję wraz z przykładami konfiguracji w `.opencode/ai-profile/README.md`;
-- skill SQL w `.opencode/skills/mcp-mariadb/`;
+- skill SQL w `.opencode/ai-profile/plugin/skills/mcp-mariadb/`;
 - skrypt importu UpdraftPlus i jego pliki pomocnicze w `.opencode/ai-profile/scripts/`.
 
 **Novamira i MariaDB są początkowo wyłączone**, aby instalacja działała bez sekretów
@@ -105,7 +105,7 @@ W katalogu **projektu WordPressa**, przed wpisaniem sekretów, dodaj do `.gitign
 
 Jeśli plik z sekretami był już śledzony przez Git, samo `.gitignore` nie wystarczy.
 Usuń go z indeksu i unieważnij ujawnione hasło. Nie zapisuj sekretów w przykładach
-wewnątrz `.opencode/skills/`: są to zarządzane, wersjonowane pliki profilu.
+wewnątrz `.opencode/ai-profile/plugin/skills/`: są to zarządzane pliki profilu.
 
 Utwórz `.env.novamira` w katalogu głównym projektu i ustaw prawa **przed** wpisaniem hasła:
 
@@ -514,6 +514,26 @@ Po zakończeniu korzystania z integracji możesz samodzielnie unieważnić jej h
 Nie wklejaj sekretów ani pełnych zrzutów środowiska do logów/czatu.
 Novamira daje szeroki dostęp do WordPressa; używaj jej na local/dev/staging,
 z backupami i zapisami ograniczonymi do zleconego zadania.
+
+## Audyt WCAG przez Playwright
+
+Profil udostępnia serwer MCP `playwright` i skill `wcag-audit`. Instalator tylko
+dostarcza Dockerfile i konfigurację Compose do `.opencode/mcp/playwright/`.
+Z katalogu głównego docelowego projektu wykonaj:
+
+```sh
+mkdir -p reports/wcag
+docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+```
+
+Do użycia potrzebny jest Docker Engine i plugin Compose, bez hostowego
+Node/npm/Chromium. Wspólny adapter MCP uruchamia kontener z lokalnego obrazu;
+nie ma osobnego launchera ani automatycznego buildu/pull. GHCR i publikacja
+obrazu nie są potrzebne. Konfiguracja sieci, zaufanego CA DDEV oraz prywatnego Playwright
+storage state jest opisana w [dokumentacji MCP](../../mcp/README.md).
+Artefakty audytu trafiają do `reports/wcag/<timestamp>/`; auth storage pozostaje
+poza raportami. Audyt nie zmienia kodu aplikacji i nie powinien wysyłać
+formularzy tworzących trwałe dane bez zgody.
 
 Źródła: [Novamira quick start](https://novamira.ai/quickstart/),
 [most WordPress 0.4.0](https://github.com/Automattic/mcp-wordpress-remote/tree/7190a4ccf9a16b909433133ecf90c52c9bb04da4),

@@ -1,4 +1,9 @@
-use std::{collections::HashMap, env, path::PathBuf, process::Command};
+use std::{
+    collections::HashMap,
+    env,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use serde_json::Value;
 use std::os::unix::process::CommandExt;
@@ -110,13 +115,30 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
         PathBuf::from(program)
     };
     let mut process = Command::new(program);
-    process.args(args).current_dir(cwd).envs(environment);
+    process.args(args).current_dir(cwd);
+    apply_environment(&mut process, &project, environment);
     let _exec_error = process.exec();
     Err(McpRuntimeError::Exec)
 }
 
+pub(crate) fn apply_environment(
+    process: &mut Command,
+    project: &Path,
+    environment: HashMap<String, String>,
+) {
+    // Reserved adapter metadata wins over inherited, dotenv and mapped values.
+    // Keep the native path (including non-UTF-8 bytes) scoped to the child.
+    process
+        .envs(environment)
+        .env("AI_PROFILE_PROJECT_DIR", project);
+}
+
 fn project_from_executable() -> Result<PathBuf, McpRuntimeError> {
     let executable = env::current_exe().map_err(|_| McpRuntimeError::ProjectLocation)?;
+    project_from_adapter(&executable)
+}
+
+pub(crate) fn project_from_adapter(executable: &Path) -> Result<PathBuf, McpRuntimeError> {
     let executable = executable
         .canonicalize()
         .map_err(|_| McpRuntimeError::ProjectLocation)?;
