@@ -99,6 +99,14 @@ pub(crate) fn desired_files(
                 ".opencode/mcp/mariadb/mariadb-launcher",
             )?;
         }
+        if name == "playwright" {
+            insert_native(
+                context,
+                &mut files,
+                "playwright-launcher",
+                ".opencode/mcp/playwright/playwright-launcher",
+            )?;
+        }
         let launcher = file_path(&context.sources, &format!("mcp/launchers/{name}"))?;
         if launcher.exists() {
             if !launcher.is_dir() {
@@ -266,6 +274,9 @@ pub(crate) fn validate_skill_catalog(context: &RepositoryContext) -> Result<(), 
     let mut entries = read_directory(&root)?;
     entries.sort();
     for entry in entries {
+        if entry.file_name().and_then(OsStr::to_str) == Some("README.md") {
+            continue;
+        }
         let metadata = fs::symlink_metadata(&entry).map_err(|source| PayloadError::Io {
             path: entry.clone(),
             source,

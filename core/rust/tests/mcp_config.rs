@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::{
     error::McpConfigError,
-    mcp::config::{merge, render, validate_servers},
+    mcp::config::{merge, native_client_mcp, render, validate_servers},
 };
 
 #[test]
@@ -38,4 +38,33 @@ fn invalid_registry_and_boolean_timeout_are_rejected() {
         validate_servers(servers.as_object().unwrap(), None),
         Err(McpConfigError::InvalidTimeout(_))
     ));
+}
+
+#[test]
+fn native_clients_render_local_remote_disabled_and_timeout_entries() {
+    let effective = json!({
+        "local":{"type":"local","command":["/project path/.opencode/ai-profile-mcp","local"],"timeout":{"startup":1500,"execution":2500}},
+        "figma":{"type":"remote","url":"https://mcp.figma.com/mcp","headers":{"Authorization":"Bearer {env:FIGMA_TOKEN}"}},
+        "off":{"type":"local","command":["/adapter","off"],"disabled":true}
+    });
+    let codex = native_client_mcp(effective.as_object().unwrap(), "codex").unwrap();
+    assert_eq!(
+        codex["local"]["command"],
+        "/project path/.opencode/ai-profile-mcp"
+    );
+    assert_eq!(codex["local"]["args"], json!(["local"]));
+    assert_eq!(codex["local"]["startup_timeout_sec"], 2);
+    assert_eq!(codex["local"]["tool_timeout_sec"], 3);
+    assert_eq!(
+        codex["figma"]["http_headers"]["Authorization"],
+        "Bearer ${FIGMA_TOKEN}"
+    );
+    assert!(codex.get("off").is_none());
+    let claude = native_client_mcp(effective.as_object().unwrap(), "claude").unwrap();
+    assert_eq!(claude["local"]["type"], "stdio");
+    assert_eq!(claude["figma"]["type"], "http");
+    assert_eq!(
+        claude["figma"]["headers"]["Authorization"],
+        "Bearer ${FIGMA_TOKEN}"
+    );
 }

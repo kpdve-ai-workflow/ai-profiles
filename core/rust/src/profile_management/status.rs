@@ -113,6 +113,32 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
     println!("Installed: {}", installed.unwrap_or("UNKNOWN"));
     println!("Available: {available}");
     println!("Status: {label}");
+    let (claude_mcp_status, codex_mcp_status) =
+        crate::profile_management::native::mcp_configuration_status(project, &old)
+            .map_err(StatusError::Native)?;
+    let selected_disabled = old
+        .pointer("/mcp_base")
+        .and_then(Value::as_object)
+        .map(|servers| {
+            servers
+                .iter()
+                .filter(|(_, entry)| {
+                    entry.get("disabled").and_then(Value::as_bool) == Some(true)
+                        || entry.get("enabled").and_then(Value::as_bool) == Some(false)
+                })
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    println!("MCP OpenCode: prepared; runtime connection not assessed");
+    println!("MCP Codex: {codex_mcp_status}");
+    println!("MCP Claude Code: {claude_mcp_status}");
+    if !selected_disabled.is_empty() {
+        println!(
+            "Selected but disabled MCP servers: {}",
+            selected_disabled.join(", ")
+        );
+    }
     if old.get("native").is_some() {
         let (open_configured, claude_configured, claude_disabled, codex_configured, codex_disabled) =
             crate::profile_management::native::current_status(project, &old)
@@ -141,8 +167,19 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
                 claude_state
             }
         );
-        println!("Codex last recorded native installation result: {}", if codex_disabled { "disabled (explicitly disabled by user)" } else if codex_state == "synchronized" { "synchronized (legacy result; native inventory not checked by status)" } else { codex_state });
-        println!("Codex session skill loading: not assessed; restart Codex and verify in a new session");
+        println!(
+            "Codex last recorded native installation result: {}",
+            if codex_disabled {
+                "disabled (explicitly disabled by user)"
+            } else if codex_state == "synchronized" {
+                "synchronized (legacy result; native inventory not checked by status)"
+            } else {
+                codex_state
+            }
+        );
+        println!(
+            "Codex session skill loading: not assessed; restart Codex and verify in a new session"
+        );
         if let Some(reason) = old
             .pointer("/native/claude/activation_reason")
             .and_then(Value::as_str)
@@ -155,7 +192,10 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
         {
             println!("Codex activation detail: {reason}");
         }
-        if let Some(stage) = old.pointer("/native/codex/activation_stage").and_then(Value::as_str) {
+        if let Some(stage) = old
+            .pointer("/native/codex/activation_stage")
+            .and_then(Value::as_str)
+        {
             println!("Codex activation stage: {stage}");
         }
         if !open_configured || !claude_configured || !codex_configured {
@@ -165,7 +205,9 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
         println!("Project payload/configuration: legacy state; native activation pending");
         println!("Claude plugin: pending");
         println!("Codex plugin: pending");
-        println!("Codex session skill loading: not assessed; restart Codex and verify in a new session");
+        println!(
+            "Codex session skill loading: not assessed; restart Codex and verify in a new session"
+        );
     }
     println!(
         "Source commit: {}",

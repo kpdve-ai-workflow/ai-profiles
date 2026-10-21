@@ -515,6 +515,17 @@ Nie wklejaj sekretów ani pełnych zrzutów środowiska do logów/czatu.
 Novamira daje szeroki dostęp do WordPressa; używaj jej na local/dev/staging,
 z backupami i zapisami ograniczonymi do zleconego zadania.
 
+## Audyt WCAG przez Playwright
+
+Profil udostępnia serwer MCP `playwright` i skill `wcag-audit`. Potrzebny jest
+działający Docker oraz dostęp do `ghcr.io/kpdve-ai-workflow/playwright:0.1.0`.
+Pierwsze ręczne wydanie obrazu jest jeszcze wymagane; instalator i projekt nie
+budują go. Konfiguracja sieci, zaufanego CA DDEV oraz prywatnego Playwright
+storage state jest opisana w [dokumentacji MCP](../../mcp/README.md).
+Artefakty audytu trafiają do `reports/wcag/<timestamp>/`; auth storage pozostaje
+poza raportami. Audyt nie zmienia kodu aplikacji i nie powinien wysyłać
+formularzy tworzących trwałe dane bez zgody.
+
 Źródła: [Novamira quick start](https://novamira.ai/quickstart/),
 [most WordPress 0.4.0](https://github.com/Automattic/mcp-wordpress-remote/tree/7190a4ccf9a16b909433133ecf90c52c9bb04da4),
 [OpenCode MCP](https://opencode.ai/v2/docs/mcp-servers),

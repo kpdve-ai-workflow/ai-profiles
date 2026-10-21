@@ -56,9 +56,6 @@ pub(crate) fn apply_profile(
         desired_files(context, profile)?,
     )
     .map_err(InstallationError::Native)?;
-    let (claude_settings, mut claude_state) =
-        crate::profile_management::native::configure_claude(project, old.as_ref())
-            .map_err(InstallationError::Native)?;
     let codex_catalog = files
         .iter()
         .find(|file| file.relative_path == ".agents/plugins/marketplace.json")
@@ -75,7 +72,23 @@ pub(crate) fn apply_profile(
         servers: mcp,
         overrides,
     } = configured_mcp(project, &base_mcp)?;
+    let (claude_settings, mut claude_state) =
+        crate::profile_management::native::configure_claude(project, old.as_ref(), &mcp)
+            .map_err(InstallationError::Native)?;
     let (mut config, existed) = config_for(project)?;
+    let codex_mcp = crate::mcp::config::native_client_mcp(&mcp, "codex")?;
+    let claude_mcp = crate::mcp::config::native_client_mcp(&mcp, "claude")?;
+    let (claude_mcp_config, claude_mcp_state) =
+        crate::profile_management::native::configure_claude_mcp(project, old.as_ref(), &claude_mcp)
+            .map_err(InstallationError::Native)?;
+    let (codex_mcp_config, codex_mcp_state) =
+        crate::profile_management::native::configure_codex_mcp(
+            &codex_config,
+            old.as_ref(),
+            &codex_mcp,
+            codex_state.get("config_had_file").and_then(Value::as_bool),
+        )
+        .map_err(InstallationError::Native)?;
 
     check_files(
         project,
@@ -99,6 +112,7 @@ pub(crate) fn apply_profile(
         "opencode.json",
         ".claude/settings.json",
         ".codex/config.toml",
+        ".mcp.json",
     ]);
     for relative in destinations {
         let destination = file_path(project, relative)?;
@@ -158,7 +172,13 @@ pub(crate) fn apply_profile(
         &claude_settings,
     )
     .map_err(InstallationError::Native)?;
-    crate::profile_management::native::write_config(project, ".codex/config.toml", &codex_config)
+    crate::profile_management::native::write_config(
+        project,
+        ".codex/config.toml",
+        &codex_mcp_config,
+    )
+    .map_err(InstallationError::Native)?;
+    crate::profile_management::native::write_config(project, ".mcp.json", &claude_mcp_config)
         .map_err(InstallationError::Native)?;
     let claude_installed = old
         .as_ref()
@@ -181,8 +201,12 @@ pub(crate) fn apply_profile(
         );
         object.remove("activation_reason");
         object.remove("activation_stage");
-        if let Some(reason) = claude_activation.get("reason") { object.insert("activation_reason".into(), reason.clone()); }
-        if let Some(stage) = claude_activation.get("stage") { object.insert("activation_stage".into(), stage.clone()); }
+        if let Some(reason) = claude_activation.get("reason") {
+            object.insert("activation_reason".into(), reason.clone());
+        }
+        if let Some(stage) = claude_activation.get("stage") {
+            object.insert("activation_stage".into(), stage.clone());
+        }
         if claude_activation.get("activation").and_then(Value::as_str) == Some("synchronized") {
             object.insert("installed_before".into(), Value::Bool(true));
         }
@@ -197,10 +221,18 @@ pub(crate) fn apply_profile(
         );
         object.remove("activation_reason");
         object.remove("activation_stage");
-        if let Some(reason) = codex_activation.get("reason") { object.insert("activation_reason".into(), reason.clone()); }
-        if let Some(stage) = codex_activation.get("stage") { object.insert("activation_stage".into(), stage.clone()); }
-        if let Some(value) = codex_activation.get("plugin_added") { object.insert("plugin_added".into(), value.clone()); }
-        if let Some(value) = codex_activation.get("marketplace_added") { object.insert("marketplace_added".into(), value.clone()); }
+        if let Some(reason) = codex_activation.get("reason") {
+            object.insert("activation_reason".into(), reason.clone());
+        }
+        if let Some(stage) = codex_activation.get("stage") {
+            object.insert("activation_stage".into(), stage.clone());
+        }
+        if let Some(value) = codex_activation.get("plugin_added") {
+            object.insert("plugin_added".into(), value.clone());
+        }
+        if let Some(value) = codex_activation.get("marketplace_added") {
+            object.insert("marketplace_added".into(), value.clone());
+        }
     }
 
     if let Some(old_state) = &old {
@@ -249,6 +281,8 @@ pub(crate) fn apply_profile(
         );
         native.insert("claude".into(), claude_state.clone());
         native.insert("codex".into(), codex_state.clone());
+        native.insert("mcp_claude".into(), claude_mcp_state);
+        native.insert("mcp_codex".into(), codex_mcp_state);
     }
     let state_path = file_path(project, STATE)?;
     write_bytes(&state_path, &json_bytes(&updated_state)?)?;
@@ -295,8 +329,13 @@ pub(crate) fn apply_profile(
             .get("marketplace_name")
             .and_then(Value::as_str)
             .unwrap_or("<marketplace>");
-        let plugin = codex_state.get("plugin_name").and_then(Value::as_str).unwrap_or("<plugin>");
-        let source = project.canonicalize().unwrap_or_else(|_| project.to_owned());
+        let plugin = codex_state
+            .get("plugin_name")
+            .and_then(Value::as_str)
+            .unwrap_or("<plugin>");
+        let source = project
+            .canonicalize()
+            .unwrap_or_else(|_| project.to_owned());
         println!("Codex activation pending: from the project, run `codex plugin marketplace add {} --json`, then `codex plugin add {plugin}@{marketplace} --json`; restart Codex to assess skill loading.", source.display());
     }
     if codex_state.get("activation").and_then(Value::as_str) == Some("failed") {

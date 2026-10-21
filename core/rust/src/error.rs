@@ -547,6 +547,12 @@ pub(crate) enum McpConfigError {
     InvalidOAuth(String),
     #[error("Invalid MCP protocol: {0}")]
     InvalidProtocol(String),
+    #[error("MCP {server} cannot be represented for {client}: unsupported field {field}")]
+    UnsupportedClientField {
+        server: String,
+        client: String,
+        field: String,
+    },
     #[error("env_file is supported only for local MCP: {0}")]
     RemoteEnvFile(String),
     #[error("Expected a relative path inside the project")]

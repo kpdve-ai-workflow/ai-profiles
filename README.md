@@ -29,8 +29,10 @@ Wybrane skille są dystrybuowane raz do
 `.opencode/ai-profile/plugin/skills/`. OpenCode otrzymuje jawne źródło skills;
 repozytorium nie instaluje kopii pod `.agents/skills/` ani `.claude/skills/`.
 Wtyczki Claude Code i Codex wymagają natywnej rejestracji i zaufania projektu.
-Skill może się załadować bez serwera MCP wymaganego przez jego instrukcje;
-eksport MCP do Claude/Codex nie jest wykonywany.
+Profile przygotowują wybrane MCP automatycznie dla OpenCode, Codex i Claude Code
+na poziomie projektu. Klienci mogą wymagać restartu, zaufania projektu,
+zatwierdzenia MCP lub osobnego logowania OAuth. Status potwierdza przygotowanie
+konfiguracji, nie połączenie z serwerem.
 
 ## Dokumentacja
 

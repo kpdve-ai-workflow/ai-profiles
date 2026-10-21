@@ -24,12 +24,107 @@ pub(crate) fn uninstall(context: &RepositoryContext, project: &Path) -> Result<(
     check_mcp(config_object, Some(&old), &Map::new())?;
     crate::profile_management::native::preflight_cleanup(project)
         .map_err(UninstallError::Native)?;
+    let empty_native_mcp = Map::new();
+    let (claude_mcp_bytes, _) = crate::profile_management::native::configure_claude_mcp(
+        project,
+        Some(&old),
+        &empty_native_mcp,
+    )
+    .map_err(UninstallError::Native)?;
+    let codex_config_path = file_path(project, ".codex/config.toml")?;
+    if old.pointer("/native/mcp_codex/entries").is_some() {
+        let codex_config_before = if codex_config_path.exists() {
+            fs::read(&codex_config_path).map_err(|source| UninstallError::Io {
+                path: codex_config_path.clone(),
+                source,
+            })?
+        } else {
+            Vec::new()
+        };
+        let _ = crate::profile_management::native::configure_codex_mcp(
+            &codex_config_before,
+            Some(&old),
+            &empty_native_mcp,
+            None,
+        )
+        .map_err(UninstallError::Native)?;
+    }
+    if old
+        .pointer("/native/claude/mcp_timeout/added")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        let settings = file_path(project, ".claude/settings.json")?;
+        let value = crate::codec::read_json(&settings)?;
+        let current = value.pointer("/env/MCP_TIMEOUT");
+        if current != old.pointer("/native/claude/mcp_timeout/expected") {
+            return Err(UninstallError::Native(
+                "managed Claude env.MCP_TIMEOUT was manually changed".into(),
+            ));
+        }
+    }
     let native_cleanup_warning = crate::profile_management::native::cleanup_claude(project, &old);
     let codex_cleanup_warning = crate::profile_management::native::cleanup_codex(project, &old);
     crate::profile_management::native::remove_claude(project, &old)
         .map_err(UninstallError::Native)?;
     crate::profile_management::native::remove_codex(project, &old)
         .map_err(UninstallError::Native)?;
+    if old.pointer("/native/mcp_codex/entries").is_some() {
+        let codex_config_after = if codex_config_path.exists() {
+            fs::read(&codex_config_path).map_err(|source| UninstallError::Io {
+                path: codex_config_path.clone(),
+                source,
+            })?
+        } else {
+            Vec::new()
+        };
+        let (codex_clean, _) = crate::profile_management::native::configure_codex_mcp(
+            &codex_config_after,
+            Some(&old),
+            &empty_native_mcp,
+            None,
+        )
+        .map_err(UninstallError::Native)?;
+        if old
+            .pointer("/native/mcp_codex/config_had_file")
+            .and_then(Value::as_bool)
+            == Some(false)
+            && String::from_utf8_lossy(&codex_clean).trim().is_empty()
+        {
+            if codex_config_path.exists() {
+                fs::remove_file(&codex_config_path).map_err(|source| UninstallError::Io {
+                    path: codex_config_path.clone(),
+                    source,
+                })?;
+            }
+        } else {
+            crate::profile_management::native::write_config(
+                project,
+                ".codex/config.toml",
+                &codex_clean,
+            )
+            .map_err(UninstallError::Native)?;
+        }
+    }
+    let claude_mcp_path = file_path(project, ".mcp.json")?;
+    let claude_json: Value =
+        serde_json::from_slice(&claude_mcp_bytes).map_err(|_| UninstallError::InvalidState)?;
+    if old
+        .pointer("/native/mcp_claude/had_file")
+        .and_then(Value::as_bool)
+        == Some(false)
+        && claude_json.as_object().is_some_and(Map::is_empty)
+    {
+        if claude_mcp_path.exists() {
+            fs::remove_file(&claude_mcp_path).map_err(|source| UninstallError::Io {
+                path: claude_mcp_path,
+                source,
+            })?;
+        }
+    } else if old.pointer("/native/mcp_claude/entries").is_some() {
+        crate::profile_management::native::write_config(project, ".mcp.json", &claude_mcp_bytes)
+            .map_err(UninstallError::Native)?;
+    }
 
     let old_files = old
         .get("files")

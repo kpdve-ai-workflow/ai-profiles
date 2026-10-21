@@ -3,8 +3,15 @@
 - brak hooka git conventional commits ( nie przepuszczamy commitow gd nie spelniaja tego wymogu )
 - zastanowic sie nad systemem zarzadzania agentami z wykorzystaniem herdr ( dodatkowo w tym uzyc agents ) ale nie tylko, w skrocie jakis ala systemik na poziomie systemu operacyjnego ( W RUST ) ktory pozwoli w dobry sposob zarzadzac procesami herdr ( o ile sam herdr nie jest wstanie tego robic ) po prostu na poziomie systemu operacyjnego tak aby jak najmniej umieszczac w skillach bo wiadomo ze AI halucynuje ;]
 - dodac blokade na bump wersji lub jakos bardziej pokierowac agenta ( obecny problem, trakuje mala zmianke jako major wersje )
-- nie uruchamianie wszystkich testow na raz oraz cache testow jesli nie ma obecnie
+
 - agent przy blednym pluginie sie zacinal w momencie aktualizacji pliku .md ( nie widac bylo w TUI po prostu ciagle pracowal jakis podlgad by sie przydal )
 
 # MCP
 - dodać MCP do przeglądarki ( przykład: Agent wykonuje audyt WCAG i chce abys sam przeklikał całą stronę i wykonał końcowy raport )
+
+# Testy
+- nie uruchamianie wszystkich testow na raz oraz cache testow jesli nie ma obecnie
+- przerobic uruchomienie testow w docker/vm
+
+# Ogólne
+- ujednolicić wszystkie errory w errors.rs na jezyk angielski

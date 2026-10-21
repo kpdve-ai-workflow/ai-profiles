@@ -13,6 +13,7 @@
     "sage-cpt-scaffold",
     "sage-page-sections",
     "styling",
-    "test-gap-discovery"
+    "test-gap-discovery",
+    "wcag-audit"
   ]
 }

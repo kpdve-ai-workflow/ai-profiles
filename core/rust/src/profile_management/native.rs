@@ -70,6 +70,7 @@ pub(crate) fn project_files(
 pub(crate) fn configure_claude(
     project: &Path,
     old: Option<&Value>,
+    mcp: &Map<String, Value>,
 ) -> Result<(Vec<u8>, Value), String> {
     let path = file_path(project, CLAUDE_SETTINGS).map_err(|error| error.to_string())?;
     let mut settings = if path.exists() {
@@ -137,6 +138,15 @@ pub(crate) fn configure_claude(
     if enabled_added && !explicitly_disabled {
         plugins.insert(enabled_key.clone(), Value::Bool(true));
     }
+    let required_timeout = mcp
+        .values()
+        .filter(|entry| {
+            entry.get("disabled").and_then(Value::as_bool) != Some(true)
+                && entry.get("enabled").and_then(Value::as_bool) != Some(false)
+        })
+        .filter_map(|entry| entry.pointer("/timeout/startup").and_then(Value::as_u64))
+        .max();
+    let timeout_meta = reconcile_claude_mcp_timeout(object, old, required_timeout)?;
     let metadata = json!({
         "marketplace_name":marketplace,
         "settings_had_file":settings_had_file,
@@ -146,15 +156,284 @@ pub(crate) fn configure_claude(
         "marketplace_expected":source,
         "enabled_previous":previous_enabled,
         "enabled_expected":true,
-        "enabled_current":if explicitly_disabled { false } else { true },
+        "enabled_current":!explicitly_disabled,
         "enabled_added":enabled_added,
         "installed_before":old.and_then(|state| state.pointer("/native/claude/installed_before")).and_then(Value::as_bool).unwrap_or_else(|| old.and_then(|state| state.pointer("/native/claude/activation")).and_then(Value::as_str) == Some("synchronized")),
+        "mcp_timeout":timeout_meta,
         "activation":"pending"
     });
     Ok((
         json_bytes(&settings).map_err(|error| error.to_string())?,
         metadata,
     ))
+}
+
+fn reconcile_claude_mcp_timeout(
+    object: &mut Map<String, Value>,
+    old: Option<&Value>,
+    required: Option<u64>,
+) -> Result<Value, String> {
+    let old_meta = old.and_then(|v| v.pointer("/native/claude/mcp_timeout"));
+    let old_added = old_meta
+        .and_then(|v| v.get("added"))
+        .and_then(Value::as_bool)
+        == Some(true);
+    let old_expected = old_meta.and_then(|v| v.get("expected"));
+    let env_had = object.get("env").is_some();
+    let env = object
+        .entry("env")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .ok_or("Claude settings env must be an object")?;
+    let current = env.get("MCP_TIMEOUT").cloned();
+    if old_added && current.as_ref() != old_expected {
+        return Err("managed Claude env.MCP_TIMEOUT was manually changed".into());
+    }
+    let previous = old_meta
+        .and_then(|v| v.get("previous"))
+        .cloned()
+        .unwrap_or_else(|| current.clone().unwrap_or(Value::Null));
+    let mut added = old_added;
+    if let Some(required) = required {
+        if old_added || current.is_none() {
+            let expected = Value::String(required.to_string());
+            env.insert("MCP_TIMEOUT".into(), expected.clone());
+            return Ok(
+                json!({"added":true,"expected":expected,"previous":previous,"env_had":old_meta.and_then(|v|v.get("env_had")).and_then(Value::as_bool).unwrap_or(env_had)}),
+            );
+        }
+        let configured = current.as_ref().and_then(|v| {
+            v.as_str()
+                .and_then(|s| s.parse::<u64>().ok())
+                .or_else(|| v.as_u64())
+        });
+        if configured.is_none_or(|value| value < required) {
+            eprintln!("WARNING: Claude Code env.MCP_TIMEOUT is below the selected MCP startup timeout ({required} ms); the user's value was preserved.");
+        }
+    } else if old_added {
+        if previous.is_null() {
+            env.remove("MCP_TIMEOUT");
+        } else {
+            env.insert("MCP_TIMEOUT".into(), previous.clone());
+        }
+        added = false;
+    }
+    if env.is_empty() && !env_had {
+        object.remove("env");
+    }
+    Ok(
+        json!({"added":added,"expected":old_expected.cloned().unwrap_or(Value::Null),"previous":previous,"env_had":old_meta.and_then(|v|v.get("env_had")).and_then(Value::as_bool).unwrap_or(env_had)}),
+    )
+}
+
+/// Reconcile Claude Code's project MCP file by entry ownership. Other root
+/// fields and unrelated server entries are preserved byte-for-byte semantically.
+pub(crate) fn configure_claude_mcp(
+    project: &Path,
+    old: Option<&Value>,
+    desired: &Map<String, Value>,
+) -> Result<(Vec<u8>, Value), String> {
+    let relative = ".mcp.json";
+    let path = file_path(project, relative).map_err(|e| e.to_string())?;
+    let had_file = path.exists();
+    let mut root = if had_file {
+        crate::codec::read_json(&path).map_err(|e| e.to_string())?
+    } else {
+        json!({})
+    };
+    let root_obj = root
+        .as_object_mut()
+        .ok_or(".mcp.json must contain an object")?;
+    let container_had_key = old
+        .and_then(|v| v.pointer("/native/mcp_claude/container_had_key"))
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| root_obj.contains_key("mcpServers"));
+    let prior = old
+        .and_then(|v| v.pointer("/native/mcp_claude/entries"))
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if desired.is_empty() && prior.is_empty() {
+        return Ok((
+            json_bytes(&root).map_err(|e| e.to_string())?,
+            json!({"entries":{},"had_file":old.and_then(|v|v.pointer("/native/mcp_claude/had_file")).and_then(Value::as_bool).unwrap_or(had_file),"container_had_key":container_had_key}),
+        ));
+    }
+    let entries = root_obj
+        .entry("mcpServers")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .ok_or(".mcp.json mcpServers must be an object")?;
+    for (name, expected) in &prior {
+        if entries.get(name) != Some(expected) {
+            return Err(format!(
+                "managed Claude MCP entry {name} was manually changed"
+            ));
+        }
+    }
+    for name in desired.keys() {
+        if entries.contains_key(name) && !prior.contains_key(name) {
+            return Err(format!("Claude MCP name collision: {name}"));
+        }
+    }
+    for name in prior.keys() {
+        entries.remove(name);
+    }
+    for (name, entry) in desired {
+        entries.insert(name.clone(), entry.clone());
+    }
+    if entries.is_empty() && !container_had_key {
+        root_obj.remove("mcpServers");
+    }
+    Ok((
+        json_bytes(&root).map_err(|e| e.to_string())?,
+        json!({"entries":desired,"had_file":old.and_then(|v|v.pointer("/native/mcp_claude/had_file")).and_then(Value::as_bool).unwrap_or(had_file),"container_had_key":container_had_key}),
+    ))
+}
+
+/// Reconcile Codex MCP entries with toml_edit, preserving comments and all
+/// unrelated TOML tables. This intentionally shares the file with plugin setup.
+pub(crate) fn configure_codex_mcp(
+    config: &[u8],
+    old: Option<&Value>,
+    desired: &Map<String, Value>,
+    original_config_existed: Option<bool>,
+) -> Result<(Vec<u8>, Value), String> {
+    let text = std::str::from_utf8(config).map_err(|e| e.to_string())?;
+    let mut document = text
+        .parse::<DocumentMut>()
+        .map_err(|e| format!("invalid Codex TOML: {e}"))?;
+    let prior = old
+        .and_then(|v| v.pointer("/native/mcp_codex/entries"))
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let table_had_key = old
+        .and_then(|v| v.pointer("/native/mcp_codex/table_had_key"))
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| document.get("mcp_servers").is_some());
+    let config_had_file = old
+        .and_then(|v| v.pointer("/native/mcp_codex/config_had_file"))
+        .and_then(Value::as_bool)
+        .or(original_config_existed)
+        .or_else(|| {
+            old.and_then(|v| v.pointer("/native/codex/config_had_file"))
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(!config.is_empty());
+    let existing = document
+        .get("mcp_servers")
+        .and_then(Item::as_table)
+        .cloned()
+        .unwrap_or_default();
+    for (name, expected) in &prior {
+        let current = existing.get(name).and_then(toml_item_to_json);
+        if current.as_ref() != Some(expected) {
+            return Err(format!(
+                "managed Codex MCP entry {name} was manually changed"
+            ));
+        }
+    }
+    for name in desired.keys() {
+        if existing.contains_key(name) && !prior.contains_key(name) {
+            return Err(format!("Codex MCP name collision: {name}"));
+        }
+    }
+    if desired.is_empty() && prior.is_empty() {
+        return Ok((
+            document.to_string().into_bytes(),
+            json!({"entries":{},"table_had_key":table_had_key,"config_had_file":config_had_file}),
+        ));
+    }
+    let table = document
+        .as_table_mut()
+        .entry("mcp_servers")
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or("Codex mcp_servers must be a table")?;
+    for name in prior.keys() {
+        table.remove(name);
+    }
+    for (name, entry) in desired {
+        let item = json_to_toml(entry).ok_or_else(|| format!("cannot encode Codex MCP {name}"))?;
+        table.insert(name, item);
+    }
+    if table.is_empty() && !table_had_key {
+        document.as_table_mut().remove("mcp_servers");
+    }
+    Ok((
+        document.to_string().into_bytes(),
+        json!({"entries":desired,"table_had_key":table_had_key,"config_had_file":config_had_file}),
+    ))
+}
+
+fn toml_item_to_json(item: &Item) -> Option<Value> {
+    match item {
+        Item::Value(value) => toml_value_to_json(value),
+        Item::Table(table) => Some(Value::Object(
+            table
+                .iter()
+                .filter_map(|(k, v)| Some((k.to_owned(), toml_item_to_json(v)?)))
+                .collect(),
+        )),
+        _ => None,
+    }
+}
+
+fn toml_value_to_json(value: &toml_edit::Value) -> Option<Value> {
+    Some(match value {
+        toml_edit::Value::String(v) => Value::String(v.value().clone()),
+        toml_edit::Value::Integer(v) => Value::from(*v.value()),
+        toml_edit::Value::Float(v) => Value::Number(serde_json::Number::from_f64(*v.value())?),
+        toml_edit::Value::Boolean(v) => Value::Bool(*v.value()),
+        toml_edit::Value::Datetime(v) => Value::String(v.value().to_string()),
+        toml_edit::Value::Array(a) => Value::Array(
+            a.iter()
+                .map(toml_value_to_json)
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        toml_edit::Value::InlineTable(t) => Value::Object(
+            t.iter()
+                .map(|(k, v)| Some((k.to_owned(), toml_value_to_json(v)?)))
+                .collect::<Option<serde_json::Map<_, _>>>()?,
+        ),
+    })
+}
+
+fn json_to_toml(value: &Value) -> Option<Item> {
+    use toml_edit::{Array, InlineTable, Value as TomlValue};
+    Some(match value {
+        Value::Null => return None,
+        Value::Bool(v) => Item::Value(TomlValue::from(*v)),
+        Value::Number(v) => {
+            if let Some(i) = v.as_i64() {
+                Item::Value(TomlValue::from(i))
+            } else {
+                Item::Value(TomlValue::from(v.as_f64()?))
+            }
+        }
+        Value::String(v) => Item::Value(TomlValue::from(v.as_str())),
+        Value::Array(values) => {
+            let mut a = Array::new();
+            for v in values {
+                let Item::Value(v) = json_to_toml(v)? else {
+                    return None;
+                };
+                a.push(v);
+            }
+            Item::Value(TomlValue::Array(a))
+        }
+        Value::Object(values) => {
+            let mut t = InlineTable::new();
+            for (k, v) in values {
+                let Item::Value(v) = json_to_toml(v)? else {
+                    return None;
+                };
+                t.insert(k, v);
+            }
+            Item::Value(TomlValue::InlineTable(t))
+        }
+    })
 }
 
 pub(crate) fn configure_codex(
@@ -273,6 +552,76 @@ pub(crate) fn write_config(project: &Path, relative: &str, bytes: &[u8]) -> Resu
     write_bytes(&path, bytes).map_err(|error| error.to_string())
 }
 
+pub(crate) fn mcp_configuration_status(
+    project: &Path,
+    state: &Value,
+) -> Result<(String, String), String> {
+    let claude_owned = state
+        .pointer("/native/mcp_claude/entries")
+        .and_then(Value::as_object);
+    let codex_owned = state
+        .pointer("/native/mcp_codex/entries")
+        .and_then(Value::as_object);
+    let Some(claude_owned) = claude_owned else {
+        return Ok((
+            "not tracked; run update".into(),
+            "not tracked; run update".into(),
+        ));
+    };
+    let claude_path = file_path(project, ".mcp.json").map_err(|e| e.to_string())?;
+    let claude_value = if claude_path.exists() {
+        crate::codec::read_json(&claude_path).map_err(|e| e.to_string())?
+    } else {
+        json!({})
+    };
+    let current = claude_value
+        .pointer("/mcpServers")
+        .and_then(Value::as_object);
+    let claude_changes = claude_owned
+        .iter()
+        .filter(|(name, expected)| current.and_then(|m| m.get(*name)) != Some(*expected))
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    let codex_path = file_path(project, CODEX_CONFIG).map_err(|e| e.to_string())?;
+    let codex_text = if codex_path.exists() {
+        fs::read_to_string(&codex_path).map_err(|e| e.to_string())?
+    } else {
+        String::new()
+    };
+    let doc = codex_text
+        .parse::<DocumentMut>()
+        .map_err(|e| format!("invalid Codex TOML: {e}"))?;
+    let table = doc.get("mcp_servers").and_then(Item::as_table);
+    let mut codex_changes = Vec::new();
+    if let Some(codex_owned) = codex_owned {
+        for (name, expected) in codex_owned {
+            if table
+                .and_then(|t| t.get(name))
+                .and_then(toml_item_to_json)
+                .as_ref()
+                != Some(expected)
+            {
+                codex_changes.push(name.clone());
+            }
+        }
+    } else if claude_owned.is_empty() { /* legacy state can be migrated by update */
+    }
+    let format = |changes: Vec<String>, owned: &Map<String, Value>| {
+        if !changes.is_empty() {
+            format!("locally modified ({})", changes.join(", "))
+        } else if owned.is_empty() {
+            "prepared (no enabled servers)".to_owned()
+        } else {
+            "prepared; runtime connection not assessed".to_owned()
+        }
+    };
+    let claude = format(claude_changes, claude_owned);
+    let codex = codex_owned
+        .map(|owned| format(codex_changes, owned))
+        .unwrap_or_else(|| "not tracked; run update".into());
+    Ok((claude, codex))
+}
+
 pub(crate) fn remove_claude(project: &Path, old: &Value) -> Result<(), String> {
     let path = file_path(project, CLAUDE_SETTINGS).map_err(|error| error.to_string())?;
     if !path.exists() {
@@ -282,6 +631,37 @@ pub(crate) fn remove_claude(project: &Path, old: &Value) -> Result<(), String> {
     let object = settings
         .as_object_mut()
         .ok_or_else(|| "Claude settings must be an object".to_owned())?;
+    if old
+        .pointer("/native/claude/mcp_timeout/added")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        let expected = old
+            .pointer("/native/claude/mcp_timeout/expected")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let previous = old
+            .pointer("/native/claude/mcp_timeout/previous")
+            .cloned()
+            .unwrap_or(Value::Null);
+        if let Some(env) = object.get_mut("env").and_then(Value::as_object_mut) {
+            if env.get("MCP_TIMEOUT") == Some(&expected) {
+                if previous.is_null() {
+                    env.remove("MCP_TIMEOUT");
+                } else {
+                    env.insert("MCP_TIMEOUT".into(), previous);
+                }
+            }
+            if env.is_empty()
+                && old
+                    .pointer("/native/claude/mcp_timeout/env_had")
+                    .and_then(Value::as_bool)
+                    != Some(true)
+            {
+                object.remove("env");
+            }
+        }
+    }
     if old
         .pointer("/native/claude/marketplace_added")
         .and_then(Value::as_bool)
@@ -873,7 +1253,7 @@ pub(crate) fn activate_codex_with_runner(
         let installed = run_cli(
             runner,
             "codex",
-            &["plugin", "add", &selector, "--json"],
+            &["plugin", "add", selector, "--json"],
             project,
         );
         if !installed.succeeded() {

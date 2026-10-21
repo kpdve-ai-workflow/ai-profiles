@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["target", "scanner", "scope", "coverage", "findings"],
+  "properties": {
+    "target": {"type": "string"},
+    "scanner": {"type": "object", "required": ["name", "version"]},
+    "scope": {"type": "object", "required": ["origin", "selected", "omissions"]},
+    "coverage": {"type": "array", "items": {"type": "object", "required": ["url", "state", "status"]}},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "rule", "criterion", "evidence", "locations"],
+        "properties": {
+          "id": {"type": "string"},
+          "severity": {"enum": ["critical", "serious", "moderate", "minor", "needs-review"]},
+          "rule": {"type": "string"},
+          "criterion": {"type": "string"},
+          "evidence": {"type": "string"},
+          "reproduction": {"type": "array", "items": {"type": "string"}},
+          "suggestedCorrection": {"type": "string"},
+          "locations": {"type": "array", "items": {"type": "object", "required": ["url", "state", "selector"]}}
+        }
+      }
+    }
+  }
+}

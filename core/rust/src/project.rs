@@ -138,11 +138,10 @@ pub(crate) fn config_for(project: &Path) -> Result<(Value, bool), ProjectError> 
             {
                 return Err(ProjectError::ConfigMustBeObject);
             }
-        } else if !skills.is_array() && !skills.is_object() {
-            return Err(ProjectError::ConfigMustBeObject);
-        } else if skills
-            .as_array()
-            .is_some_and(|entries| !entries.iter().all(Value::is_string))
+        } else if (!skills.is_array() && !skills.is_object())
+            || skills
+                .as_array()
+                .is_some_and(|entries| !entries.iter().all(Value::is_string))
         {
             return Err(ProjectError::ConfigMustBeObject);
         }

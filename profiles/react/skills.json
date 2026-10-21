@@ -6,6 +6,7 @@
     "make-roadmap",
     "react-frontend",
     "refine-plan",
-    "test-gap-discovery"
+    "test-gap-discovery",
+    "wcag-audit"
   ]
 }

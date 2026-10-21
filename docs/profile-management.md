@@ -80,8 +80,12 @@ Uruchom ponownie Codex, aby ocenić je w nowej sesji. Wpisy `Dir` lub `File` w
 selektorze wzmianek nie potwierdzają wykrycia skilla.
 
 Skill może się załadować, gdy jego wymagany serwer MCP nie jest dostępny w tym
-hoście. Instalator konfiguruje MCP wyłącznie dla OpenCode; eksport MCP do Claude
-Code ani Codex nie jest wykonywany. Skille mogą też zachowywać metadane
+hoście. Instalator przygotowuje wybrane MCP w `opencode.json`,
+`.codex/config.toml` oraz `.mcp.json` na podstawie wspólnego rejestru i lokalnych
+nadpisań. Status opisuje konfigurację; nie sprawdza połączenia MCP. Po instalacji
+lub aktualizacji uruchom ponownie klienta, zatwierdź projekt i MCP zgodnie z
+jego natywnymi ustawieniami, a zdalne OAuth zaloguj osobno w każdym kliencie.
+Skille mogą też zachowywać metadane
 `opencode/slash`, ale składnia wywołania i automatyczna aktywacja zależą od hosta.
 
 Przy aktualizacji instalacji ze starszego układu pliki z
@@ -186,3 +190,10 @@ make update PROJECT=~/projects/my-api
 
 Migracja uznaje istniejące pliki za punkt odniesienia. Walidację repozytorium
 uruchom przez `make validate`; szczegóły walidacji MCP są w dokumentacji MCP.
+
+Starsze instalacje zyskają konfigurację Codex i Claude Code przez
+`make update PROJECT=<projekt>`. Przygotowanie konfiguracji nie wymaga obecności
+CLI tych klientów. Playwright WCAG wymaga Docker Engine i dostępu do
+`ghcr.io/kpdve-ai-workflow/playwright:0.1.0`; publikację i aktualizację obrazu
+wykonuje się ręcznie zgodnie z procedurą w `mcp/README.md`. Do czasu pierwszej
+publikacji serwer zgłosi błąd pobrania. Instalator nigdy nie buduje obrazu.

@@ -1,0 +1,6 @@
+{
+  "type": "local",
+  "command": [".opencode/mcp/playwright/playwright-launcher"],
+  "enabled": true,
+  "environment": {}
+}

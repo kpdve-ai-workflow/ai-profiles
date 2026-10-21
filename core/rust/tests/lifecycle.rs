@@ -11,6 +11,46 @@ use crate::{
     },
 };
 
+#[test]
+fn client_mcp_ownership_preserves_unrelated_config_and_rejects_manual_changes() {
+    use crate::profile_management::native::{configure_claude_mcp, configure_codex_mcp};
+    let project = tempfile::tempdir().unwrap();
+    let mut desired = serde_json::Map::new();
+    desired.insert("figma".into(), json!({"url":"https://mcp.figma.com/mcp","http_headers":{"Authorization":"Bearer ${TOKEN}"}}));
+    let codex_input = b"# keep this comment\nmodel = \"gpt-5\"\n[other]\nkeep = true\n";
+    let (codex, codex_state) =
+        configure_codex_mcp(codex_input, None, &desired, Some(true)).unwrap();
+    let codex = String::from_utf8(codex).unwrap();
+    assert!(codex.contains("# keep this comment"));
+    assert!(codex.contains("[other]"));
+    let old = json!({"native":{"mcp_codex":codex_state}});
+    let (codex_again, _) =
+        configure_codex_mcp(codex.as_bytes(), Some(&old), &desired, Some(true)).unwrap();
+    assert_eq!(codex_again, codex.as_bytes());
+    let modified = codex.replace("mcp.figma.com", "changed.example");
+    assert!(configure_codex_mcp(modified.as_bytes(), Some(&old), &desired, Some(true)).is_err());
+
+    let claude_initial = project.path().join(".mcp.json");
+    fs::write(
+        &claude_initial,
+        br#"{"otherRoot":true,"mcpServers":{"unrelated":{"command":"keep"}}}"#,
+    )
+    .unwrap();
+    let (claude, claude_state) = configure_claude_mcp(project.path(), None, &desired).unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&claude).unwrap();
+    assert_eq!(parsed["otherRoot"], true);
+    assert_eq!(parsed["mcpServers"]["unrelated"]["command"], "keep");
+    let old = json!({"native":{"mcp_claude":claude_state}});
+    fs::write(&claude_initial, &claude).unwrap();
+    let (again, _) = configure_claude_mcp(project.path(), Some(&old), &desired).unwrap();
+    assert_eq!(again, claude);
+    let changed: serde_json::Value = serde_json::from_slice(&claude).unwrap();
+    let mut changed = changed;
+    changed["mcpServers"]["figma"]["url"] = json!("https://changed.example");
+    fs::write(&claude_initial, crate::codec::json_bytes(&changed).unwrap()).unwrap();
+    assert!(configure_claude_mcp(project.path(), Some(&old), &desired).is_err());
+}
+
 fn put(root: &Path, relative: &str, contents: &[u8]) {
     let path = root.join(relative);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -125,7 +165,8 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
     put(
         project.path(),
         ".claude/settings.json",
-        &json_bytes(&json!({"enabledPlugins":{format!("ai-profile@{marketplace}"):false}})).unwrap(),
+        &json_bytes(&json!({"enabledPlugins":{format!("ai-profile@{marketplace}"):false}}))
+            .unwrap(),
     );
     put(
         project.path(),
@@ -160,8 +201,18 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
     }
     let state_path = project.path().join(".opencode/ai-profile-state.json");
     let state = read_json(&state_path).unwrap();
-    assert_eq!(state.pointer("/native/claude/activation").and_then(serde_json::Value::as_str), Some("disabled"));
-    assert_eq!(state.pointer("/native/codex/activation").and_then(serde_json::Value::as_str), Some("disabled"));
+    assert_eq!(
+        state
+            .pointer("/native/claude/activation")
+            .and_then(serde_json::Value::as_str),
+        Some("disabled")
+    );
+    assert_eq!(
+        state
+            .pointer("/native/codex/activation")
+            .and_then(serde_json::Value::as_str),
+        Some("disabled")
+    );
     assert!(state["files"]
         .as_object()
         .unwrap()
@@ -184,8 +235,27 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
         state["mcp_base"]["mariadb"]["command"],
         json!([".opencode/mcp/mariadb/mariadb-launcher"])
     );
+    let claude_mcp = read_json(&project.path().join(".mcp.json")).unwrap();
+    assert_eq!(claude_mcp["mcpServers"]["mariadb"]["type"], "stdio");
+    assert!(claude_mcp["mcpServers"]["mariadb"]["command"]
+        .as_str()
+        .unwrap()
+        .contains(".opencode/ai-profile-mcp"));
+    let codex = fs::read_to_string(project.path().join(".codex/config.toml")).unwrap();
+    assert!(codex.contains("mcp_servers"));
+    assert!(codex.contains("args = [\"mariadb\"]"));
     apply_profile(&context, project.path(), "wordpress").unwrap();
     assert_eq!(read_json(&state_path).unwrap(), state);
+    crate::profile_management::uninstall::uninstall(&context, project.path()).unwrap();
+    assert!(!project.path().join(".mcp.json").exists());
+    let codex = fs::read_to_string(project.path().join(".codex/config.toml")).unwrap();
+    assert!(!codex.contains("mcp_servers"));
+    assert!(codex.contains(&format!("ai-profile@{marketplace}")));
+    assert!(read_json(&project.path().join("opencode.json")).unwrap()["theme"] == "keep");
+    assert_eq!(
+        fs::read(project.path().join("user.py")).unwrap(),
+        b"user owned"
+    );
 }
 
 #[test]
