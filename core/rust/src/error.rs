@@ -120,6 +120,16 @@ pub(crate) enum ProjectError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ProfileManagementError {
+    #[error("Nowa nazwa profilu musi różnić się od obecnej")]
+    SameProfileName,
+    #[error("Nie udało się zapisać metadanych ({source}) ani przywrócić nazwy katalogu ({rollback}). Profil pozostał w {destination}; przywróć go ręcznie do {original}.")]
+    RenameRollback {
+        original: PathBuf,
+        destination: PathBuf,
+        #[source]
+        source: std::io::Error,
+        rollback: std::io::Error,
+    },
     #[error("Nazwa profilu musi zawierać małe litery/cyfry rozdzielone pojedynczymi myślnikami")]
     InvalidProfileName,
     #[error("Opis profilu nie może być pusty")]

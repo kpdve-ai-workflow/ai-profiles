@@ -81,6 +81,81 @@ pub(crate) fn create_profile(
     Ok(())
 }
 
+pub(crate) fn rename_profile(
+    context: &RepositoryContext,
+    profile: &str,
+    new_name: &str,
+) -> Result<(), ProfileManagementError> {
+    let old =
+        ProfileName::from_str(profile).map_err(|_| ProfileManagementError::InvalidProfileName)?;
+    let new =
+        ProfileName::from_str(new_name).map_err(|_| ProfileManagementError::InvalidProfileName)?;
+    if old == new {
+        return Err(ProfileManagementError::SameProfileName);
+    }
+    let original = file_path(&context.sources, &format!("profiles/{}", old.as_str()))?;
+    let destination = file_path(&context.sources, &format!("profiles/{}", new.as_str()))?;
+    if !original.is_dir() {
+        return Err(ProfileManagementError::UnknownProfile(profile.to_owned()));
+    }
+    if destination.exists() {
+        return Err(ProfileManagementError::ProfileAlreadyExists(
+            new_name.to_owned(),
+        ));
+    }
+    let metadata_path = file_path(
+        &context.sources,
+        &format!("profiles/{profile}/profile.json"),
+    )?;
+    let mut metadata = profile_metadata(context, profile)?;
+    let object = metadata
+        .as_object_mut()
+        .ok_or_else(|| crate::error::RepositoryError::InvalidMetadata(profile.to_owned()))?;
+    object.insert("name".to_owned(), Value::String(new.as_str().to_owned()));
+    let bytes = json_bytes(&metadata)?;
+    let permissions = fs::metadata(&metadata_path)
+        .map_err(|source| ProfileManagementError::Io {
+            path: metadata_path.clone(),
+            source,
+        })?
+        .permissions();
+    // Stage outside the moved directory so the temporary path remains valid.
+    let parent = original
+        .parent()
+        .ok_or(ProfileManagementError::InvalidProfileName)?;
+    let mut temporary = Builder::new()
+        .prefix(".rename-")
+        .tempfile_in(parent)
+        .map_err(|source| ProfileManagementError::Io {
+            path: parent.to_owned(),
+            source,
+        })?;
+    temporary
+        .write_all(&bytes)
+        .map_err(|source| ProfileManagementError::Io {
+            path: temporary.path().to_owned(),
+            source,
+        })?;
+    set_temporary_permissions(&mut temporary, permissions)?;
+    fs::rename(&original, &destination).map_err(|source| ProfileManagementError::Io {
+        path: original.clone(),
+        source,
+    })?;
+    if let Err(error) = temporary.persist(destination.join("profile.json")) {
+        if let Err(rollback) = fs::rename(&destination, &original) {
+            return Err(ProfileManagementError::RenameRollback {
+                original,
+                destination,
+                source: error.error,
+                rollback,
+            });
+        }
+        return Err(ProfileManagementError::Persist(error.error.to_string()));
+    }
+    println!("OK: zmieniono nazwę profilu {profile} -> {new_name} w repozytorium ai-profiles. Zainstalowane projekty nie zostały zmienione.");
+    Ok(())
+}
+
 fn write_staged(path: &Path, contents: &[u8]) -> Result<(), ProfileManagementError> {
     let mut file = fs::File::create(path).map_err(|source| ProfileManagementError::Io {
         path: path.to_owned(),

@@ -10,7 +10,7 @@ use crate::{
     profile_management::{
         installation::apply_profile,
         migration::migrate_legacy,
-        profiles::{bump_profile, create_profile},
+        profiles::{bump_profile, create_profile, rename_profile},
         status::status,
         uninstall::uninstall,
         validation::validate_sources,
@@ -23,50 +23,7 @@ use crate::{
 #[path = "../../tests/cli.rs"]
 mod cli_tests;
 
-const COMMAND_HELP: &str = "ai-profiles — zarządzanie profilami
-
-TWORZENIE PROFILU
-  make create PROFILE=NAZWA
-    Tworzy profil 1.0.0 z pustym MCP i katalogiem skilli. Nie nadpisuje plików.
-    Opcjonalny opis: DESCRIPTION=\"Opis profilu\"
-
-PRACA Z PROJEKTEM
-  make install PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
-    Instaluje profil w projekcie, który jeszcze go nie ma.
-  make switch PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
-    Zmienia zainstalowany profil na inny.
-  make status PROJECT=SCIEZKA_DO_PROJEKTU
-    Pokazuje wersje i lokalne zmiany.
-  make update PROJECT=SCIEZKA_DO_PROJEKTU
-    Aktualizuje profil z lokalnych źródeł, bez pobierania zmian z sieci.
-  make pull-update PROJECT=SCIEZKA_DO_PROJEKTU
-    Pobiera źródła przez git pull --ff-only, potem aktualizuje profil.
-  make uninstall PROJECT=SCIEZKA_DO_PROJEKTU
-    Usuwa profil, zachowując własne pliki i ustawienia użytkownika.
-
-UTRZYMANIE REPOZYTORIUM
-  make bump PROFILE=NAZWA
-    Zwiększa wersję profilu. Opcjonalnie: PART=patch|minor|major (domyślnie patch).
-  make validate
-    Sprawdza wszystkie profile, skille i konfigurację MCP.
-  make validate PROFILE=NAZWA
-    Sprawdza tylko wybrany profil, wspólne skille i jego wpisy w mcp/example.json.
-    Cały rejestr MCP i nadmiarowe wpisy sprawdza pełne make validate.
-  make test
-    Uruchamia testy w tymczasowych kopiach repozytorium.
-  make help
-    Pokazuje pomoc. Samo make również pokazuje pomoc.
-
-ARGUMENTY
-  PROFILE      Wymagany tam, gdzie podano. Nie ma domyślnego profilu.
-               create: nowa nazwa, małe litery/cyfry i pojedyncze myślniki.
-               install/switch/bump/validate: nazwa istniejącego profilu.
-               validate: PROFILE jest opcjonalny; bez niego sprawdza wszystko.
-  PROJECT      Wymagany tam, gdzie podano: istniejący katalog poza ai-profiles.
-  DESCRIPTION  Opcjonalny opis dla create; domyślnie „Profil NAZWA”.
-  PART         Opcjonalny rodzaj zmiany wersji dla bump.
-
-";
+const COMMAND_HELP: &str = include_str!("../../help.txt");
 
 struct Options {
     action: Option<ProfileAction>,
@@ -75,6 +32,7 @@ struct Options {
     accept_existing: bool,
     part: Option<VersionBump>,
     description: Option<String>,
+    new_name: Option<String>,
 }
 
 enum CliFailure {
@@ -124,6 +82,7 @@ fn parse_args(args: Vec<OsString>) -> Result<ParseResult, String> {
     let mut accept_existing = false;
     let mut part = None;
     let mut description = None;
+    let mut new_name = None;
     let mut positional_only = false;
     let mut index = 0;
     while index < args.len() {
@@ -178,6 +137,10 @@ fn parse_args(args: Vec<OsString>) -> Result<ParseResult, String> {
             description = Some(option_value(&args, &mut index, "--description")?);
             continue;
         }
+        if !positional_only && (text == "--new-name" || text.starts_with("--new-name=")) {
+            new_name = Some(option_value(&args, &mut index, "--new-name")?);
+            continue;
+        }
         if !positional_only && text.starts_with('-') {
             return Err(format!("unrecognized arguments: {text}"));
         }
@@ -197,6 +160,7 @@ fn parse_args(args: Vec<OsString>) -> Result<ParseResult, String> {
         accept_existing,
         part,
         description,
+        new_name,
     }))
 }
 
@@ -236,6 +200,7 @@ fn attached_os_value(argument: &OsStr, prefix: &[u8]) -> Option<OsString> {
 fn parse_action(value: &str) -> Result<ProfileAction, String> {
     match value {
         "create" => Ok(ProfileAction::Create),
+        "rename" => Ok(ProfileAction::Rename),
         "help" => Ok(ProfileAction::Help),
         "install" => Ok(ProfileAction::Install),
         "update" => Ok(ProfileAction::Update),
@@ -251,6 +216,14 @@ fn parse_action(value: &str) -> Result<ProfileAction, String> {
 
 fn validate_option_combinations(options: &Options) -> Result<(), String> {
     let action = options.action;
+    if options.new_name.is_some() && action != Some(ProfileAction::Rename) {
+        return Err("--new-name jest dostępne tylko dla rename".to_owned());
+    }
+    if action == Some(ProfileAction::Rename)
+        && options.new_name.as_deref().is_none_or(str::is_empty)
+    {
+        return Err("rename wymaga --new-name NOWA_NAZWA".to_owned());
+    }
     if options.part.is_some() && action != Some(ProfileAction::Bump) {
         return Err("--part jest dostępne tylko dla bump".to_owned());
     }
@@ -262,6 +235,7 @@ fn validate_option_combinations(options: &Options) -> Result<(), String> {
             action,
             Some(
                 ProfileAction::Create
+                    | ProfileAction::Rename
                     | ProfileAction::Install
                     | ProfileAction::Switch
                     | ProfileAction::Bump
@@ -277,6 +251,7 @@ fn validate_option_combinations(options: &Options) -> Result<(), String> {
             None | Some(
                 ProfileAction::Help
                     | ProfileAction::Create
+                    | ProfileAction::Rename
                     | ProfileAction::Bump
                     | ProfileAction::Validate
             )
@@ -295,6 +270,7 @@ fn run(options: Options) -> Result<(), CliFailure> {
         options.action,
         Some(
             ProfileAction::Create
+                | ProfileAction::Rename
                 | ProfileAction::Install
                 | ProfileAction::Switch
                 | ProfileAction::Bump
@@ -311,10 +287,15 @@ fn run(options: Options) -> Result<(), CliFailure> {
     let context = RepositoryContext::discover().map_err(operation_error)?;
     if matches!(
         options.action,
-        Some(ProfileAction::Install | ProfileAction::Switch | ProfileAction::Bump)
+        Some(
+            ProfileAction::Install
+                | ProfileAction::Switch
+                | ProfileAction::Bump
+                | ProfileAction::Rename
+        )
     ) {
         let profile = options.profile.as_deref().ok_or_else(|| {
-            CliFailure::Parse("install/switch/bump wymagają nazwy profilu".to_owned())
+            CliFailure::Parse("install/switch/bump/rename wymagają nazwy profilu".to_owned())
         })?;
         if !profile_names(&context)
             .map_err(operation_error)?
@@ -326,6 +307,18 @@ fn run(options: Options) -> Result<(), CliFailure> {
     }
 
     match options.action {
+        Some(ProfileAction::Rename) => rename_profile(
+            &context,
+            options
+                .profile
+                .as_deref()
+                .ok_or_else(|| CliFailure::Parse("rename wymaga nazwy profilu".to_owned()))?,
+            options
+                .new_name
+                .as_deref()
+                .ok_or_else(|| CliFailure::Parse("rename wymaga --new-name".to_owned()))?,
+        )
+        .map_err(operation_error),
         Some(ProfileAction::Create) => create_profile(
             &context,
             options
@@ -410,6 +403,7 @@ fn action_name(action: ProfileAction) -> &'static str {
     match action {
         ProfileAction::Help => "help",
         ProfileAction::Create => "create",
+        ProfileAction::Rename => "rename",
         ProfileAction::Install => "install",
         ProfileAction::Update => "update",
         ProfileAction::Uninstall => "uninstall",

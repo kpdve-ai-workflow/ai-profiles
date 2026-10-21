@@ -6,7 +6,9 @@ use crate::{
     codec::{json_bytes, read_json, sha},
     filesystem::check_files,
     model::RepositoryContext,
-    profile_management::{installation::apply_profile, payload::desired_files},
+    profile_management::{
+        installation::apply_profile, payload::desired_files, profiles::rename_profile,
+    },
 };
 
 fn put(root: &Path, relative: &str, contents: &[u8]) {
@@ -78,6 +80,14 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     }
     let context = RepositoryContext::from_sources(source.path().to_owned()).unwrap();
     (source, context)
+}
+
+#[test]
+fn renamed_wordpress_profile_keeps_its_native_payload() {
+    let (_source, context) = native_source();
+    let before = desired_files(&context, "wordpress").unwrap();
+    rename_profile(&context, "wordpress", "custom-wordpress").unwrap();
+    assert_eq!(desired_files(&context, "custom-wordpress").unwrap(), before);
 }
 
 #[test]

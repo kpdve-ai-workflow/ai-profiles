@@ -3,20 +3,27 @@ RUST_TARGET := $(abspath core/rust/target)
 PROFILE_CLI := "$(RUST_TARGET)/release/ai-profile"
 PROJECT ?=
 PROFILE ?=
+NEW_NAME ?=
 DESCRIPTION ?=
 PART ?= patch
 .DEFAULT_GOAL := help
 
-.PHONY: help create check-profile check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy
+.PHONY: help create rename check-profile check-new-name check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy
 
 help:
-	@$(PROFILE_CLI) help
+	@cat core/rust/help.txt
 
 check-profile:
 	@test -n "$(PROFILE)" || (echo "Podaj PROFILE=nazwa-profilu" >&2; exit 2)
 
 create: check-profile
 	$(PROFILE_CLI) create "$(PROFILE)" $(if $(DESCRIPTION),--description "$(DESCRIPTION)")
+
+check-new-name:
+	@test -n "$(NEW_NAME)" || (echo "Podaj NEW_NAME=nowa-nazwa-profilu" >&2; exit 2)
+
+rename: check-profile check-new-name
+	$(PROFILE_CLI) rename "$(PROFILE)" --new-name "$(NEW_NAME)"
 
 check-project:
 	@test -n "$(PROJECT)" || (echo "Podaj PROJECT=/sciezka/do/projektu" >&2; exit 2)
@@ -49,7 +56,7 @@ rust-build:
 	cargo build --manifest-path $(RUST_MANIFEST) --target-dir "$(RUST_TARGET)" --locked --release --bins
 
 # Build the manager and every native payload from the same sources before use.
-help create install update uninstall switch status validate bump migrate-legacy: rust-build
+create rename install update uninstall switch status validate bump migrate-legacy: rust-build
 
 migrate-legacy: check-project
 	$(PROFILE_CLI) migrate-legacy --accept-existing --project "$(PROJECT)"

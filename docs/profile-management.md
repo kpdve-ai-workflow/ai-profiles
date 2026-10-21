@@ -29,6 +29,23 @@ jest oddzielony od zawartości profili.
 
 ## Wersje i publikowanie
 
+Nazwę istniejącego profilu zmieniaj poleceniem:
+
+```bash
+make rename PROFILE=stara-nazwa NEW_NAME=nowa-nazwa
+```
+
+Komenda zmienia katalog `profiles/stara-nazwa` na `profiles/nowa-nazwa`
+oraz pole `name` w jego `profile.json`. Zachowuje wersję, opis, dodatkowe
+metadane, skille, skrypty i wybór MCP. Nie zastępuje nazw w treści dokumentacji.
+Nowa nazwa musi być wolna i składać się z małych liter/cyfr rozdzielonych
+pojedynczymi myślnikami. Nie używa `PROJECT` i odrzuca opcję `--project`.
+Odpowiednik CLI: `ai-profile rename stara-nazwa --new-name nowa-nazwa`.
+
+Istniejące instalacje pozostają bez zmian i nadal wskazują starą nazwę.
+Komenda nie tworzy aliasu; ich `status` i `update` mogą odrzucić profil,
+którego stara nazwa nie istnieje już w źródłach.
+
 Każdy profil ma niezależną stabilną wersję `MAJOR.MINOR.PATCH`. Aktualizuj ją
 poleceniem `make bump PROFILE=<nazwa> PART=patch|minor|major` (domyślnie `patch`):
 
@@ -51,7 +68,7 @@ pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
 referencyjny. Aktualizacja usuwa dawne zarządzane `.py` po sprawdzeniu hashy;
 obce i lokalnie zmienione pliki zachowują dotychczasową ochronę.
 
-Make wymaga `PROFILE` przy `create`, `install`, `switch` i `bump`, oraz `PROJECT`
+Make wymaga `PROFILE` przy `create`, `rename`, `install`, `switch` i `bump`, oraz `PROJECT`
 przy komendach projektowych. CLI domyślnie działa na bieżącym katalogu.
 `status` i `update` korzystają z lokalnego checkoutu i nie pobierają zmian;
 `pull-update` wykonuje `git pull --ff-only`, a następnie `update`. Przed oceną

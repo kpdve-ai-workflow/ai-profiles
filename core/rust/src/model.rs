@@ -49,6 +49,7 @@ pub(crate) enum VersionBump {
 pub(crate) enum ProfileAction {
     Help,
     Create,
+    Rename,
     Install,
     Update,
     Switch,

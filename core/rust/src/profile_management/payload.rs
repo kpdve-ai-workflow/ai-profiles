@@ -95,7 +95,7 @@ pub(crate) fn desired_files(
 
     let readme = file_path(&context.sources, &format!("profiles/{profile}/README.md"))?;
     let scripts = file_path(&context.sources, &format!("profiles/{profile}/scripts"))?;
-    if profile == "wordpress" {
+    if scripts.join("restore-updraft.py").is_file() {
         insert_native(
             context,
             &mut files,
@@ -117,7 +117,7 @@ pub(crate) fn desired_files(
             if contains_component(relative, "__pycache__") || has_extension(&source, "pyc") {
                 continue;
             }
-            if profile == "wordpress" && relative == Path::new("restore-updraft.py") {
+            if relative == Path::new("restore-updraft.py") {
                 continue; // Preserved reference; distributed as restore-updraft.
             }
             if source.is_file() {
