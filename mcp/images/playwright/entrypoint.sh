@@ -12,6 +12,10 @@ fi
 uid=${HOST_UID:-1000}
 gid=${HOST_GID:-1000}
 case "$uid:$gid" in *[!0-9:]*|:*|*:) echo "playwright: HOST_UID/HOST_GID must be numeric" >&2; exit 2;; esac
+home=/tmp/playwright-home-$uid
+mkdir -p "$home"
+chown "$uid:$gid" "$home"
+chmod 700 "$home"
 exec setpriv --reuid="$uid" --regid="$gid" --clear-groups \
-  node /opt/playwright/node_modules/@playwright/mcp/cli.js \
-  --headless --isolated --init-script /opt/playwright/node_modules/axe-core/axe.min.js
+  env HOME="$home" XDG_CACHE_HOME="$home/.cache" node /opt/playwright/node_modules/@playwright/mcp/cli.js \
+  --browser chromium --headless --isolated --init-script /opt/playwright/node_modules/axe-core/axe.min.js

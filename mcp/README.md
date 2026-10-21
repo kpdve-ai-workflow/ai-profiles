@@ -121,16 +121,28 @@ odczytu, a `reports/wcag` zapisywalnie pod tą samą ścieżką hosta. Każda se
 klienta ma własny kontener i sesję przeglądarki. Brak obrazu wywołuje pull,
 nigdy lokalny build.
 
+Użytkownicy instalują profil zwykłym `make install PROFILE=<profil>
+PROJECT=<projekt>`. Docker jest wymagany podczas korzystania z MCP; przy pierwszym
+starcie launcher automatycznie pobiera brakujący obraz. Nie trzeba uruchamiać
+npm, tworzyć `node_modules`, instalować Node/Chromium na hoście, budować obrazu
+ani ręcznie uruchamiać kontenera. Node, npm dependencies, Chromium i jego
+systemowe biblioteki znajdują się w obrazie. Docker-managed image storage oraz
+żądane raporty w `reports/wcag/` są oczekiwanymi danymi hosta; hostowe instalacje
+npm/przeglądarki nie są wymagane.
+
 Deskryptor `mcp/launchers/playwright/image.json` wskazuje
 `ghcr.io/kpdve-ai-workflow/playwright:0.1.0`. Pierwszy release nie został
 opublikowany, więc Playwright nie jest jeszcze dostępny w projektach.
 
 ### Ręczne wydanie obrazu
 
-Źródła są w `mcp/images/playwright/`. Aktualizując zależności, przypnij dokładne
-wersje `@playwright/mcp` i `axe-core`, wygeneruj committed `package-lock.json`,
-sprawdź wersję Playwright zależną od MCP, a następnie zbuduj, przetestuj i
-opublikuj nowy tag obrazu. Nie nadpisuj istniejących wersji. Pierwsze wydanie:
+Źródła są w `mcp/images/playwright/`. Dokładne wersje `@playwright/mcp` i
+`axe-core` deklaruje bezpośrednio Dockerfile; nie utrzymujemy tutaj npm manifestu
+ani lockfile. Maintainerzy budują, testują i publikują nowy tag obrazu. Przypięte
+wersje bezpośrednich zależności nie gwarantują identycznego rozstrzygnięcia
+zależności przechodnich przy przyszłych rebuildach; dystrybucja jednego już
+zbudowanego obrazu zapewnia wszystkim użytkownikom ten sam zestaw. Nie nadpisuj
+istniejących wersji. Pierwsze wydanie:
 
 ```sh
 docker login ghcr.io
@@ -147,8 +159,8 @@ nowy niezmienny tag, a następnie zmienia deskryptor i wymaga `make update` w
 projektach. Obecnie descriptor nie zawiera digestu, bo nie ma opublikowanego
 digestu do wpisania. Nie ma workflow publikującego; publikacja jest ręczna.
 
-Obraz ma przypięty Node `22.16.0-bookworm-slim`, dokładny lockfile i instaluje
-Chromium zależne od pakietu Playwright w czasie budowy. Skrypt axe jest
+Obraz bazuje na Node `22.16.0-bookworm-slim`; npm dependencies, Chromium i
+systemowe biblioteki są instalowane wewnątrz obrazu w czasie budowy. Skrypt axe jest
 przekazywany przez opcję MCP `--init-script`, więc ładuje się po nawigacji i w
 nowych stronach, nie wymaga CDN ani instalacji w aplikacji.
 
