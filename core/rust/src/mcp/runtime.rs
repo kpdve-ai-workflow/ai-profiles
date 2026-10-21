@@ -60,7 +60,7 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
         return Err(McpRuntimeError::InvalidState);
     };
 
-    let (servers, _) = config::resolve(&project, base)?;
+    let servers = config::resolve(&project, base)?.servers;
     let Some(entry) = servers.get(server_name).and_then(Value::as_object) else {
         return Err(McpRuntimeError::UnknownLocalServer);
     };
@@ -103,6 +103,12 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
         project.join(cwd)
     };
 
+    // Managed launchers remain rooted in the project even with a custom cwd.
+    let program = if program.starts_with(".opencode/mcp/") {
+        config::project_path(&project, program)?
+    } else {
+        PathBuf::from(program)
+    };
     let mut process = Command::new(program);
     process.args(args).current_dir(cwd).envs(environment);
     let _exec_error = process.exec();

@@ -20,7 +20,7 @@ use crate::{
 
 const TIMEOUT_FIELDS: [&str; 3] = ["startup", "catalog", "execution"];
 const LOCAL_CONFIG: &str = ".opencode/ai-profile.local.json";
-const PYTHON_LAUNCHER: &str = ".opencode/ai-profile-mcp.py";
+const NATIVE_LAUNCHER: &str = ".opencode/ai-profile-mcp";
 const OVERRIDE_FIELDS: [&str; 14] = [
     "type",
     "command",
@@ -396,10 +396,15 @@ pub(crate) fn apply_access_mode(entry: &mut Value) -> Result<(), McpConfigError>
     Ok(())
 }
 
+pub(crate) struct McpConfiguration {
+    pub(crate) servers: Map<String, Value>,
+    pub(crate) overrides: Map<String, Value>,
+}
+
 pub(crate) fn resolve(
     project: &Path,
     base: &Map<String, Value>,
-) -> Result<(Map<String, Value>, Map<String, Value>), McpConfigError> {
+) -> Result<McpConfiguration, McpConfigError> {
     let overrides = load_local(project, base)?;
     let mut effective = Map::new();
     for (name, entry) in base {
@@ -422,7 +427,10 @@ pub(crate) fn resolve(
             .ok_or_else(|| McpConfigError::InvalidMcpObject("postgres".to_owned()))?;
         apply_access_mode(postgres)?;
     }
-    Ok((effective, overrides))
+    Ok(McpConfiguration {
+        servers: effective,
+        overrides,
+    })
 }
 
 pub(crate) fn render(effective: &Map<String, Value>) -> Result<Map<String, Value>, McpConfigError> {
@@ -438,8 +446,7 @@ pub(crate) fn render(effective: &Map<String, Value>) -> Result<Map<String, Value
             object.insert(
                 "command".to_owned(),
                 Value::Array(vec![
-                    Value::String("python3".to_owned()),
-                    Value::String(PYTHON_LAUNCHER.to_owned()),
+                    Value::String(format!("./{NATIVE_LAUNCHER}")),
                     Value::String(name.clone()),
                 ]),
             );
@@ -451,8 +458,11 @@ pub(crate) fn render(effective: &Map<String, Value>) -> Result<Map<String, Value
 pub(crate) fn configured_mcp(
     project: &Path,
     base: &Map<String, Value>,
-) -> Result<(Map<String, Value>, Map<String, Value>), McpConfigError> {
-    let (effective, overrides) = resolve(project, base)?;
+) -> Result<McpConfiguration, McpConfigError> {
+    let McpConfiguration {
+        servers: effective,
+        overrides,
+    } = resolve(project, base)?;
     let mut rendered = render(&effective)?;
     for (name, entry) in &mut rendered {
         if effective
@@ -468,14 +478,16 @@ pub(crate) fn configured_mcp(
             object.insert(
                 "command".to_owned(),
                 Value::Array(vec![
-                    Value::String("python3".to_owned()),
-                    Value::String(project.join(PYTHON_LAUNCHER).to_string_lossy().into_owned()),
+                    Value::String(project.join(NATIVE_LAUNCHER).to_string_lossy().into_owned()),
                     Value::String(name.clone()),
                 ]),
             );
         }
     }
-    Ok((rendered, overrides))
+    Ok(McpConfiguration {
+        servers: rendered,
+        overrides,
+    })
 }
 
 pub(crate) fn changed_override_paths(

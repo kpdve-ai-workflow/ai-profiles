@@ -22,8 +22,8 @@ Instalacja dostarcza:
 
 - wspólne i wordpressowe skille do `.opencode/skills/`;
 - definicje MCP `novamira`, `figma` i `mariadb` w zarządzanej konfiguracji OpenCode;
-- adapter `.opencode/ai-profile-mcp.py`, który uruchamia most Novamira;
-- launcher MariaDB `.opencode/mcp/mariadb/launch.py`, który buduje i uruchamia
+- adapter Rust `.opencode/ai-profile-mcp`, który uruchamia most Novamira;
+- launcher Rust `.opencode/mcp/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
 - tę instrukcję wraz z przykładami konfiguracji w `.opencode/ai-profile/README.md`;
 - skill SQL w `.opencode/skills/mcp-mariadb/`;
@@ -37,7 +37,8 @@ zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfigurac
 
 ## 2. Przygotuj środowisko
 
-- Python 3.10+ dla naszego adaptera oraz Git dla menedżera profili.
+- Rust/Cargo 1.85+, Make i Git w checkoutcie instalatora. Zainstalowany adapter
+  Rust nie wymaga Python ani Cargo.
 - OpenCode dostępny na hoście, na którym pracujesz.
 - Node.js **24.21.0 lub nowszy z linii 24** i npm z dostępnym `npx` na tym samym
   hoście. Profil używa `NODE_OPTIONS=--use-system-ca`, więc potrzebna jest wersja
@@ -330,7 +331,7 @@ Serwer WWW musi blokować dostęp HTTP do `.env*` i `.opencode/`.
 
 ## 9. Import bazy UpdraftPlus do lokalnego DDEV
 
-Profil dostarcza skrypt **`restore-updraft.py`**. Pobierasz plik bazy z UpdraftPlus
+Profil dostarcza natywne narzędzie Rust **`restore-updraft`**. Pobierasz plik bazy z UpdraftPlus
 ręcznie, wskazujesz jego ścieżkę, a narzędzie wykonuje lokalny backup, import
 i dostosowanie URL. To **zastąpienie całej bazy `db`**, nie dopisanie rekordów
 ani synchronizacja wybranych tabel. Nie używa MCP i nie pobiera nic z produkcji.
@@ -338,7 +339,8 @@ Sama instalacja/aktualizacja profilu nigdy nie uruchamia importu.
 
 ### Wymagania
 
-- Python 3.10+ na hoście Linux/macOS, Docker i DDEV oraz uruchomiony projekt.
+- Host Linux/Unix, Docker i DDEV oraz uruchomiony projekt. Python ani Cargo
+  nie są wymagane do uruchomienia zainstalowanego narzędzia.
 - **Nie instalujesz globalnie WP-CLI.** Korzystamy z WP-CLI w kontenerze `web`:
   `ddev exec -- wp ...`. Standardowy obraz webowy DDEV dostarcza WP-CLI.
 - Zainstalowany/zaktualizowany profil WordPress i standardowy WordPress
@@ -363,7 +365,7 @@ sandboxem ani pełnym audytem bezpieczeństwa dumpa. Nie importuj nieznanych pli
 W katalogu projektu, po aktualizacji profilu:
 
 ```bash
-python3 .opencode/ai-profile/scripts/restore-updraft.py \
+.opencode/ai-profile/scripts/restore-updraft \
   ~/Downloads/backup-twoja-strona-db.gz \
   --project "$PWD" \
   --map https://twoja-strona.pl=https://moj-wordpress.ddev.site
@@ -372,7 +374,7 @@ python3 .opencode/ai-profile/scripts/restore-updraft.py \
 Dla multisite podaj **każdą witrynę**, np. dodatkowo:
 
 ```bash
-python3 .opencode/ai-profile/scripts/restore-updraft.py \
+.opencode/ai-profile/scripts/restore-updraft \
   ~/Downloads/backup-twoja-strona-db.gz \
   --project "$PWD" \
   --map https://twoja-strona.pl=https://moj-wordpress.ddev.site \

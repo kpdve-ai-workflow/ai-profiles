@@ -2,7 +2,9 @@
 
 Repozytorium lokalnych profili OpenCode. Umożliwia instalowanie, aktualizowanie,
 przełączanie i walidowanie zestawów umiejętności oraz konfiguracji dla projektów.
-Wymagania: Python 3.10+, Git i opcjonalnie Make.
+Wymagania: Rust/Cargo 1.85+, Git i Make na Linux/Unix. Instalator buduje
+natywne narzędzia Rust; Python nie jest wymagany. Zainstalowane runtime nie
+potrzebują Cargo ani dostępu do repozytorium.
 
 ## Szybki start
 
@@ -17,7 +19,8 @@ make validate
 make test
 ```
 
-Bez Make można użyć `python3 core/python/profile_management/ai-profile.py help`.
+Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
+`core/rust/target/release/ai-profile help`.
 Po instalacji, aktualizacji lub zmianie profilu zrestartuj OpenCode.
 
 ## Dokumentacja

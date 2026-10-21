@@ -11,14 +11,9 @@ use crate::{
 };
 
 pub(crate) fn is_source_root(path: &Path) -> bool {
-    [
-        "core/python/profile_management",
-        "profiles",
-        "common/skills",
-        "mcp/servers",
-    ]
-    .into_iter()
-    .all(|relative| path.join(relative).is_dir())
+    ["core/rust/src", "profiles", "common/skills", "mcp/servers"]
+        .into_iter()
+        .all(|relative| path.join(relative).is_dir())
 }
 
 pub(crate) fn validate_source_root(path: &Path) -> Result<(), RepositoryError> {

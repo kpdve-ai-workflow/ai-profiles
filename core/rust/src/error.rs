@@ -11,19 +11,19 @@ pub(crate) enum ModelError {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CodecError {
     #[error("Nie mogę odczytać JSON z {path}: {source}")]
-    ReadJson {
+    Read {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
     #[error("Nieprawidłowy JSON w {path}: {source}")]
-    ParseJson {
+    Parse {
         path: PathBuf,
         #[source]
         source: serde_json::Error,
     },
     #[error("Nie mogę serializować JSON: {0}")]
-    SerializeJson(#[from] serde_json::Error),
+    Serialize(#[from] serde_json::Error),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -150,6 +150,10 @@ pub(crate) enum ProfileManagementError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PayloadError {
+    #[error("Brak natywnego pliku wykonywalnego {0}; wykonaj make rust-build")]
+    MissingNativeBinary(PathBuf),
+    #[error("Python nie jest dozwolony w instalowanym payloadzie: {0}")]
+    PythonPayload(PathBuf),
     #[error("Brak katalogu skills: {0}")]
     MissingSkills(PathBuf),
     #[error("Nieprawidłowy katalog skilla: {0}")]

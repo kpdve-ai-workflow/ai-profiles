@@ -1,7 +1,7 @@
 //! Native Rust implementation of the AI Profiles tooling.
 //!
-//! The Python implementation remains supported; this crate is an additional,
-//! explicitly selected implementation.
+//! Make and installed project tooling use this implementation. Python sources
+//! remain in the repository as migration reference only.
 
 mod codec;
 mod error;

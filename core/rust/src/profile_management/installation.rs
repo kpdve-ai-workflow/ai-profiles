@@ -5,12 +5,15 @@ use serde_json::{Map, Value};
 use crate::{
     codec::{json_bytes, sha},
     error::InstallationError,
-    filesystem::{check_files, cleanup_empty_directories, file_path, write_bytes},
+    filesystem::{
+        check_files, cleanup_empty_directories, file_path, write_bytes, write_executable,
+    },
     mcp::config::{
         changed_override_paths, check_mcp, configured_mcp, definitions_to_map, desired_mcp,
+        McpConfiguration,
     },
     model::{RepositoryContext, Version},
-    profile_management::payload::{desired_files, PayloadFile},
+    profile_management::payload::{desired_files, PayloadFile, PayloadKind},
     project::{config_for, remove_gitignore_line, state_for},
     repository::{profile_metadata, source_commit},
 };
@@ -44,7 +47,10 @@ pub(crate) fn apply_profile(
     let files = desired_files(context, profile)?;
     let desired_definitions = desired_mcp(context, profile)?;
     let base_mcp = definitions_to_map(&desired_definitions);
-    let (mcp, overrides) = configured_mcp(project, &base_mcp)?;
+    let McpConfiguration {
+        servers: mcp,
+        overrides,
+    } = configured_mcp(project, &base_mcp)?;
     let (mut config, existed) = config_for(project)?;
 
     check_files(
@@ -102,7 +108,10 @@ pub(crate) fn apply_profile(
     }
     for file in &files {
         let path = file_path(project, &file.relative_path)?;
-        write_bytes(&path, &file.contents)?;
+        match file.kind {
+            PayloadKind::Data => write_bytes(&path, &file.contents)?,
+            PayloadKind::Executable => write_executable(&path, &file.contents)?,
+        }
     }
     let config_path = file_path(project, "opencode.json")?;
     write_bytes(&config_path, &json_bytes(&config)?)?;
@@ -131,17 +140,17 @@ pub(crate) fn apply_profile(
             cleanup_empty_directories(project, &old_paths)?;
         }
     }
-    let updated_state = build_updated_state(
+    let updated_state = build_updated_state(InstallationState {
         profile,
         version,
         commit,
-        &files,
-        &mcp,
-        &base_mcp,
-        &overrides,
-        old.as_ref(),
+        files: &files,
+        mcp: &mcp,
+        base_mcp: &base_mcp,
+        overrides: &overrides,
+        old: old.as_ref(),
         existed,
-    )?;
+    })?;
     let state_path = file_path(project, STATE)?;
     write_bytes(&state_path, &json_bytes(&updated_state)?)?;
 
@@ -260,17 +269,30 @@ fn is_truthy(value: &Value) -> bool {
     }
 }
 
-fn build_updated_state(
-    profile: &str,
-    version: &str,
+struct InstallationState<'a> {
+    profile: &'a str,
+    version: &'a str,
     commit: Option<String>,
-    files: &[PayloadFile],
-    mcp: &Map<String, Value>,
-    base_mcp: &Map<String, Value>,
-    overrides: &Map<String, Value>,
-    old: Option<&Value>,
+    files: &'a [PayloadFile],
+    mcp: &'a Map<String, Value>,
+    base_mcp: &'a Map<String, Value>,
+    overrides: &'a Map<String, Value>,
+    old: Option<&'a Value>,
     existed: bool,
-) -> Result<Value, InstallationError> {
+}
+
+fn build_updated_state(input: InstallationState<'_>) -> Result<Value, InstallationError> {
+    let InstallationState {
+        profile,
+        version,
+        commit,
+        files,
+        mcp,
+        base_mcp,
+        overrides,
+        old,
+        existed,
+    } = input;
     let mut file_hashes = Map::new();
     for file in files {
         file_hashes.insert(

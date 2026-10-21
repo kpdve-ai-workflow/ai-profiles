@@ -2,36 +2,37 @@
 
 ## Stan i sposób pracy
 
-**Gotowość planu: READY.** **Implementacja: 19/25 zadań. Walidacja wykonania: NOT RUN.**
+**Gotowość planu: READY.** **Implementacja: T-01…T-24 oraz korekta T-24a IMPLEMENTED. T-25: PASSED po zleconych poprawkach (2026-10-21). Przygotowany zestaw: 22 testy PASSED, 0 FAILED, 0 IGNORED.**
 
-Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust, z pozostawieniem działającego Pythona. W sprawdzonym checkoutcie istnieje `core/python/`; nie ma jeszcze `core/rust/`. Nie uruchomiono kodu, kompilacji ani testów podczas planowania.
+Celem jest funkcjonalny port całego kodu produkcyjnego Python do Rust. Źródła Python pozostają wyłącznie w repozytorium jako referencja. `core/rust/` zawiera implementację oraz przygotowane, nieuruchomione testy.
 
 **Obowiązuje ostatnia decyzja użytkownika: najpierw cała implementacja 1:1, dopiero na końcu jedno zbiorcze uruchomienie walidacji. Nie stosujemy TDD, RED/GREEN, testów pośrednich ani baseline testowego.** Jest to jawny wyjątek od test-first w skillu `make-plan` i od wcześniejszych zaleceń tej rozmowy.
 
 Agent realizuje **jedno zadanie `T-xx` na jedno zlecenie**, zapisuje stan i zatrzymuje się. Nie przechodzi samodzielnie do następnego zadania. `IMPLEMENTED` oznacza powstanie kodu, **nie** potwierdzoną zgodność. Do T-25 weryfikacja zachowania pozostaje `NOT RUN — PROHIBITED AT THIS STAGE`.
 
-**Następne działanie: T-20 — wyłącznie preflight WordPress.**
+**Następne działanie: brak kolejnego zadania w tym planie. Wynik końcowego zestawu zapisano w T-25.**
 
 ## Wymagania i decyzje użytkownika
 
-**Najnowsza decyzja użytkownika (po T-23):** Python nie jest dozwolonym runtime/test runnerem po refaktorze. Produkcyjny kod Python pozostaje zachowany jako wymagano wcześniej, ale Make, walidacja i testy migracji mają uruchamiać wyłącznie Rust. Ta decyzja zastępuje w T-23/T-24/T-25 wybór Rust jako opt-in, Pythonowe cele Make, Python parity harness oraz końcowe `make validate`/`make test` w ich dotychczasowej postaci. Nie uruchamiać ani nie importować Python w T-24/T-25.
+**Najnowsza decyzja użytkownika (T-24a):** używamy `make install`, bez `make install2`. Make, manager, walidacja, testy oraz cały instalowany runtime i konfiguracja mają używać Rust. Python pozostaje wyłącznie jako źródła w repozytorium; nie instalować `.py` do projektów. Ta decyzja zastępuje wcześniejsze wymagania zgodności payloadu Python w K-03/K-05/K-06 i T-07/T-10/T-23. Zachować reguły ownership, hashy i ochrony danych. Zewnętrzne serwery MCP i PHP helpers zachowują własne runtime; upstreamowy serwer MariaDB w Dockerze nie podlega portowaniu.
 
 | ID | Wymaganie | Pochodzenie |
 | --- | --- | --- |
 | BR-01 | Przenieść całą funkcjonalność produkcyjną Python do natywnego Rust, zachowując zachowanie 1:1. | USER-APPROVED — żądanie portu i ostatnie doprecyzowanie |
-| BR-02 | Nie usuwać implementacji Python po wykonaniu portu. | USER-APPROVED |
+| BR-02 | Zachować źródła Python wyłącznie w repozytorium jako referencję; nie instalować ich do projektów. | USER-APPROVED — doprecyzowanie T-24a |
 | BR-03 | Grupować implementacje według języka: Python w `core/python/`, Rust w `core/rust/`; bez `implementations/<język>/`. | USER-APPROVED — wybrana struktura repozytorium |
 | BR-04 | Agent używa skilla `rust` podczas implementacji i przeglądu Rust. | USER-APPROVED |
 | BR-05 | Wykonywać pracę małymi etapami, a nie jednym ogromnym refaktorem. | USER-APPROVED — zlecenie tego planu |
 | BR-06 | Nie pisać testów przed implementacją i nie uruchamiać testów pośrednich; na końcu jedno pełne uruchomienie walidacji. | USER-APPROVED — ostatnia wiadomość; zastępuje wcześniejsze test-first |
 | BR-07 | Nie naruszać danych projektów, lokalnej konfiguracji, własności plików ani zabezpieczeń. | APPROVED SPEC — `AGENTS.md`, dokumentacja profili i MCP |
-| BR-08 | Po refaktorze Make, walidacja i test runner są Rust-only; Python nie jest wymagany ani uruchamiany. Zachować istniejące źródła Python. | USER-APPROVED — najnowsze doprecyzowanie |
+| BR-08 | Make, manager, walidacja, test runner, instalowany payload i jego konfiguracja używają Rust. Instalacja przez `make install`, bez `install2`. Zachować źródła Python w repozytorium. | USER-APPROVED — najnowsze doprecyzowanie T-24a |
 
 Wcześniejsze zalecenie pełnych testów przy każdym zakończeniu pracy jest **SUPERSEDED dla tej migracji**. Wcześniej wskazany flow PR `feature → develop`, `develop → main` pozostaje kontekstem CI; nie dodajemy wdrożeń ani wcześniejszych przebiegów testów. T-25 jest ostatnim, wyraźnie dozwolonym etapem pełnej walidacji.
 
 ## Ustalenia sprawdzone w repozytorium
 
-Poniższe fakty wynikają z odczytu plików, nie z ich uruchamiania.
+Poniższa tabela to historyczny odczyt sprzed T-01, nie aktualny stan checkoutu.
+Wpisy o braku Rust, domyślnym Python i lokalnych zmianach nie opisują obecnego stanu.
 
 | Ustalenie | Dowód | Znaczenie |
 | --- | --- | --- |
@@ -55,9 +56,9 @@ Poniższe fakty wynikają z odczytu plików, nie z ich uruchamiania.
 
 | Wybór | Reguła | Pochodzenie |
 | --- | --- | --- |
-| Jeden pakiet Cargo | `core/rust/Cargo.toml`, biblioteka `ai_profiles_core`, cztery cienkie binaria. Bez workspace i osobnego crate na każdą operację. | PLANNER-SELECTED |
-| Współistnienie | Python pozostaje domyślny w Make. Rust jest dodatkową, jawnie uruchamianą implementacją. Zmiana domyślnego silnika wymaga osobnego zlecenia. | PLANNER-SELECTED — minimalizuje skutki portu |
-| Zgodność dystrybucji | Rust manager dostarcza ten sam payload co Python, w tym dotychczasowe `.py`. Natywne odpowiedniki runtime powstają jako osobne binaria, bez automatycznej podmiany plików projektów. | PLANNER-SELECTED — zachowanie istniejących profili i hashy |
+| Jeden pakiet Cargo | `core/rust/Cargo.toml`, biblioteka `ai_profiles_core`, cztery binaria główne i `test-inventory` dodane w T-24a dla wspólnego skilla. Bez workspace i osobnego crate na każdą operację. | PLANNER-SELECTED + korekta T-24a |
+| Współistnienie | Make używa Rust. Python pozostaje w repozytorium jako kod referencyjny. | USER-APPROVED — BR-08/T-24a |
+| Dystrybucja | `make install` buduje wszystkie binaria release. Manager kopiuje adapter MCP, wybrany launcher MariaDB, restore WordPress i inwentaryzację testów do projektu, nadając 0755. Wycofane zarządzane pliki Python usuwa po kontroli hashy. | USER-APPROVED — BR-08/T-24a |
 | Małe etapy | T-01…T-23 to wyłącznie implementacja i statyczny przegląd; T-24 przygotowuje walidator po implementacji; T-25 uruchamia go zbiorczo. | PLANNER-SELECTED w wykonaniu BR-05/06 |
 | Kompilacja ≠ test | Po zadaniu wolno wykonać `cargo fmt --manifest-path core/rust/Cargo.toml` i `cargo check --manifest-path core/rust/Cargo.toml --locked --lib --bins`. Nie wolno uruchamiać testów, smoke tests, programów `--help` ani operacji przykładowych. | PLANNER-SELECTED — kontrola poprawności składni bez wykonywania funkcjonalności |
 | Brak zmian funkcjonalnych przy okazji | Nie poprawiać modelu profili, protokołu MCP, domyślnych uprawnień ani restore. Nie odtwarzać oczywistych błędów fixture'ów jako funkcji produktu. | PLANNER-SELECTED |
@@ -109,7 +110,8 @@ core/rust/
 │       ├── ai-profile.rs
 │       ├── ai-profile-mcp.rs
 │       ├── mariadb-launcher.rs
-│       └── restore-updraft.rs
+│       ├── restore-updraft.rs
+│       └── test-inventory.rs         # T-24a: Python osadzony w skillu
 └── tests/                         # dopiero T-24
 ```
 
@@ -148,7 +150,7 @@ Wszystkie poniższe scenariusze uruchamia dopiero T-25. Ich przygotowanie nastę
 Nowe `model.rs`, `error.rs`, `codec.rs`, `filesystem.rs`, `repository.rs`, `project.rs`, `process.rs` odwzorowują obecne `versioning.py`, `constants.py` i `infrastructure/{filesystem,repository,project}.py`.
 
 - Nazwy profili: lowercase kebab-case; wersje: trzy nieujemne segmenty dziesiętne bez zer wiodących. Nie dodawać ograniczenia `u64`, którego Python nie ma: segment przechowuje zwalidowane cyfry, porównuje długość i zapis leksykograficzny, a bump wykonuje dodawanie dziesiętne.
-- `RepositoryContext` ma jawny katalog źródeł. Domyślnie manager znajduje najbliższego przodka własnego pliku wykonywalnego zawierającego `core/python/profile_management/`, `profiles/`, `common/skills/`, `mcp/servers/`. Nie używa cwd ani `env!("CARGO_MANIFEST_DIR")` jako źródeł użytkownika. Brak właściwego checkoutu jest błędem, nie fallbackiem do przypadkowego katalogu.
+- `RepositoryContext` ma jawny katalog źródeł. Domyślnie manager znajduje najbliższego przodka własnego pliku wykonywalnego zawierającego `core/rust/src/`, `profiles/`, `common/skills/`, `mcp/servers/`. Nie używa cwd ani `env!("CARGO_MANIFEST_DIR")` jako źródeł użytkownika. Brak właściwego checkoutu jest błędem, nie fallbackiem do przypadkowego katalogu.
 - Domyślny projekt to cwd wywołującego; `~` jest rozwijane. Projekt musi istnieć i leżeć poza checkoutem źródeł.
 - Ścieżki zarządzane: brak absolutnych, `..` i symlinków w komponentach. SHA-256 dotyczy rzeczywistych bajtów. Plik zmodyfikowany/usunięty albo kolizja z niezarządzanym plikiem blokuje zapis.
 - JSON: UTF-8 bez wymuszania ASCII, indent 2, końcowy LF, zachowanie kolejności i nieznanych pól; formatter musi odpowiadać `json_bytes`, także dla pustych kolekcji, Unicode i liczb. Nie zmieniać serializacji override'ów używanej w `mcp_local_hash`.
@@ -170,7 +172,7 @@ Nowe `model.rs`, `error.rs`, `codec.rs`, `filesystem.rs`, `repository.rs`, `proj
 
 `mcp/config.rs` przejmuje `infrastructure/mcp.py` i `mcp_runtime.{load_local,merge,validate_servers,resolve,render,changed_override_paths}`. Manifest profilu ma dokładnie `{"servers": [...]}`; serwery są jawnie wybierane z `mcp/servers/`. Walidacja musi obejmować wszystkie warunki obecnego `validate_servers`, nie tylko command/url. Timeout jest dodatnią liczbą całkowitą, nie boolem. Zachować `protocol`, `oauth`, `enabled/disabled`, `codemode`, environment/headers i reguły env_file.
 
-Override obiektów scala się rekurencyjnie, tablice zastępuje; nie wolno zmienić transportu ani nadpisać serwera niezarządzanego. Dla lokalnego postgres dedykowane `access_mode` jest jedynym źródłem prawdy; domyślnie `unrestricted`, jeden końcowy argument `--access-mode=...`, duplikaty/stare niepoprawne argumenty są błędem. `render` usuwa z lokalnego wpisu `env_file/environment/cwd/access_mode`, zachowuje natywny remote i przygotowuje dotychczasowy launcher Python w zarządzanej konfiguracji. Sekrety nie trafiają do konfiguracji ani komunikatów zmian upstream.
+Override obiektów scala się rekurencyjnie, tablice zastępuje; nie wolno zmienić transportu ani nadpisać serwera niezarządzanego. Dla lokalnego postgres dedykowane `access_mode` jest jedynym źródłem prawdy; domyślnie `unrestricted`, jeden końcowy argument `--access-mode=...`, duplikaty/stare niepoprawne argumenty są błędem. `render` usuwa z lokalnego wpisu `env_file/environment/cwd/access_mode`, zachowuje natywny remote i kieruje lokalne MCP do binarium `.opencode/ai-profile-mcp`. Zarządzana konfiguracja używa absolutnej ścieżki adaptera. Sekrety nie trafiają do konfiguracji ani komunikatów zmian upstream.
 
 **Końcowa walidacja:** `core/rust/tests/mcp_config.rs`; oracle: `mcp/README.md`, `test_mcp_configuration.py`, odpowiednie `test_legacy.py`. PASS: dokładny wybór serwerów, błędy przed zapisem, zgodne merge/render i single-flag access mode. Osobno sprawdzić, że walidacja wybranego profilu nie odrzuca niewybranego uszkodzonego registry, a pełna ją odrzuca.
 
@@ -182,19 +184,19 @@ Override obiektów scala się rekurencyjnie, tablice zastępuje; nie wolno zmien
 
 `mcp/runtime.rs` i `bin/ai-profile-mcp.rs`: jeden argument SERVER; projekt z katalogu nadrzędnego `.opencode` zawierającego uruchomiony binarny adapter. Do użycia natywnego runtime w walidacji kopiuje się plik wykonywalny do tymczasowego `project/.opencode/ai-profile-mcp`; nie tworzy symlinka do checkoutu. Czyta istniejący stan i override na każdy start, wymaga `mcp_base`, sprawdza lokalny/włączony serwer, ustala cwd i używa `exec` z zachowaniem stdio. Kody 0/1/2 i bezpieczne komunikaty odpowiadają Pythonowi; brak automatycznego restartu i retry.
 
-**Końcowa walidacja:** `core/rust/tests/mcp_runtime.rs` oraz końcowy harness Python. Oracle: `test_mcp_runtime.py`, `test_contract_runtime.py`. Fikcyjny serwer wypisuje argv/env/cwd i echo stdin; żadnego prawdziwego MCP. PASS: dokładne env i stdio, odczyt zmienionego env_file bez update, błąd bez sekretów, niezależność binarnego runtime od pakietu Python.
+**Końcowa walidacja:** `core/rust/tests/mcp_runtime.rs`, wyłącznie Rust. Oracle stanowią kontrakty i odczytane asercje `test_mcp_runtime.py`, `test_contract_runtime.py`; nie uruchamiać tych źródeł. Żadnego prawdziwego MCP. PASS: dokładne env i stdio, odczyt zmienionego env_file bez update, błąd bez sekretów, niezależność binarnego runtime od pakietu Python.
 
 ### K-05 — payload, lifecycle i legacy
 
 **Powiązania:** BR-01/02/07; T-10…T-14.
 
-`profile_management/{payload,installation,uninstall,status,validation,migration}.rs` odwzorowują wskazane moduły Python. Payload jest `ścieżka względna → bajty`: common/profile skills i ich assets, oryginalny adapter Python, wybrane launchery, scripts i README profilu. Pomija `.gitkeep` jako asset, `__pycache__`/`.pyc` w launcherach i workflow repozytorium `.opencode/skills/`. Nie wykonuje kopiowanych narzędzi.
+`profile_management/{payload,installation,uninstall,status,validation,migration}.rs` odwzorowują wskazane moduły Python. Payload przechowuje ścieżkę, bajty i rodzaj (dane/binarium): common/profile skills i assets, adapter Rust, wybrane launchery, scripts i README profilu. MariaDB dostaje `.opencode/mcp/mariadb/mariadb-launcher`, WordPress `.opencode/ai-profile/scripts/restore-updraft`. Wszystkie binaria pochodzą z `core/rust/target/release/` i są instalowane z 0755; brak binarium blokuje przygotowanie przed zapisem. Nie dostarczać Python. Zachować filtry cache i wyłączenie workflow repozytorium. Nie wykonywać kopiowanych narzędzi.
 
 Apply: odczyt → sprawdzenie downgrade → przygotowanie plików/MCP → kontrola hashy, konfiguracji i wszystkich ścieżek docelowych → usunięcie wycofanych plików i zapis nowych → konfiguracja i cleanup → stan. Update i switch używają tej samej funkcji; CLI odpowiada za rozróżnienie dozwolonych stanów początkowych. Uninstall usuwa tylko własne, niezmodyfikowane zasoby i zachowuje lokalną konfigurację.
 
 Wycofany `workflow-rules.md`, dawny skill i approval gate podlegają istniejącym hashom/ownership. Własny wpis instrukcji usuwa się tylko przy `instructions_added`; własny wpis `.gitignore` tylko przy `gitignore_added`. Legacy MVP wymaga `--accept-existing` i zapisuje istniejące pliki jako baseline, bez odtwarzania nieznanych hashy. Zachować etykiety statusu i scoped/full validate.
 
-**Końcowa walidacja:** `core/rust/tests/lifecycle.rs`; oracle: dokumentacja profili, `test_operations.py`, `test_legacy.py`, `test_status.py`, `test_payload.py`, `test_validation.py`, `test_wordpress_profile.py`. Dwa osobne tymczasowe checkouty/projekty dla obu języków. PASS: zgodne mapy bajtów payloadu i hashy, idempotencja, brak częściowych zmian przy konflikcie, zachowanie obcych plików/MCP/sekretów, zgodne upgrade/switch/uninstall/migrate i etykiety statusu.
+**Końcowa walidacja:** `core/rust/tests/lifecycle.rs`; oracle: dokumentacja profili i odczytane asercje `test_operations.py`, `test_legacy.py`, `test_status.py`, `test_payload.py`, `test_validation.py`, `test_wordpress_profile.py`, bez uruchamiania Python. Tymczasowe checkouty/projekty i syntetyczne payloady. PASS: natywne binaria z 0755, hashe, wycofanie zarządzanych `.py`, idempotencja, brak częściowych zmian przy konflikcie, zachowanie obcych plików/MCP/sekretów, zgodne upgrade/switch/uninstall/migrate i etykiety statusu.
 
 ### K-06 — CLI i współistnienie implementacji
 
@@ -202,7 +204,7 @@ Wycofany `workflow-rules.md`, dawny skill i approval gate podlegają istniejący
 
 `profile_management/cli.rs` i `bin/ai-profile.rs` obsługują wszystkie akcje/argumenty z obecnego `cli.main`, łącznie z ograniczeniami `--project`, `--part`, `--description`, `--accept-existing`. Brak akcji = help; parser error = 2; błąd operacji = 1; sukces = 0. Zachować pomoc i komunikaty domenowe; nie wymagać zgodności tekstu surowych błędów bibliotek, które obecny CLI podaje w `ERROR`.
 
-Nie dodawać nowych flag do istniejącego interfejsu. `make rust-build` buduje cztery binaria release; obecne cele Make nadal używają Pythona. Binarny manager nie uruchamia Pythona do obliczania wyników. Czytanie istniejącego payloadu `.py` jako danych jest dozwolone i wymagane dla zgodności instalacji.
+Nie dodawać nowych flag do istniejącego interfejsu. `make rust-build` buduje wszystkie binaria release w stałym `core/rust/target/`. Cele managera Make budują je przed operacją i używają Rust; instalacja to `make install`. Nie instalować payloadu Python ani skryptów osadzających hostowy Python. Stare pliki odczytywać wyłącznie w celu sprawdzenia ownership/hashy przed ich wycofaniem.
 
 **Końcowa walidacja:** `core/rust/tests/cli.rs`; oracle: lista argumentów i warunków w `cli.py`, `test_cli.py` i `test_contract_cli.py`. PASS: wszystkie akcje połączone, zgodne exit codes i cwd, checkout ze spacjami, brak efektów przy błędzie parsera, brak zależności od katalogu użytego przy kompilacji.
 
@@ -334,7 +336,7 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 **Zależności:** T-06. **Kontrakt:** K-03.
 
 1. Uzupełnić `mcp/config.rs` o `load_local`, `merge`, `split_access_mode`, `apply_access_mode`, `resolve`, `render`, `changed_override_paths` oraz odpowiedniki `configured_mcp/check_mcp`.
-2. Zachować ścieżkę instalowanego adaptera Python w render i bezpieczne ostrzeżenia; nie odczytywać sekretów env_file przy synchronizacji menedżera.
+2. Zachować bezpieczne ostrzeżenia i nie odczytywać sekretów env_file przy synchronizacji. Historyczna ścieżka adaptera Python została zastąpiona binarium Rust w T-24a.
 
 **Weryfikacja:** przegląd całej ścieżki base→overrides→effective→rendered i kompilacja. **Gotowe, gdy:** brak domyślnych zmian access_mode, zdalne MCP pozostają natywne, lokalne prywatne pola nie są renderowane.
 
@@ -369,7 +371,7 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 1. Dodać `src/profile_management/payload.rs`; odwzorować wszystkie gałęzie `desired_files`.
 2. Zachować bajty i ścieżki oryginalnych `.py`, selekcję launcherów, assets i odrzucanie symlinków/kolizji.
 
-**Weryfikacja:** przegląd każdej gałęzi `infrastructure/payload.py` i kompilacja. **Gotowe, gdy:** natywne binaria nie są automatycznie dodawane do payloadu ani wykonywane.
+**Weryfikacja:** przegląd każdej gałęzi `infrastructure/payload.py` i kompilacja. **Aktualizacja T-24a:** payload dostarcza binaria Rust, bez ich wykonywania; pierwotny zakaz ich instalowania jest SUPERSEDED.
 
 ### T-11 — wspólna synchronizacja install/update/switch
 
@@ -531,9 +533,49 @@ Procedura wspólna: sprawdź poprzedniki → przeczytaj wyłącznie wskazane źr
 
 **Weryfikacja:** wyłącznie przegląd kodu runnera, scenariuszy i poleceń. **Gotowe, gdy:** walidator i testy Rust są przygotowane po implementacji, nie zostały jeszcze uruchomione i nie wymagają Python ani prawdziwego Docker/DDEV/DB/HTTP. Nie tworzyć golden files przez bezkrytyczne zapisanie aktualnego wyniku.
 
+### T-24a — korekta spięcia i dystrybucji Rust-only
+
+**Stan: IMPLEMENTED.** Osobne zlecenie użytkownika po T-24. `make install` buduje i uruchamia Rust; usunięto alias `install2`. Make buduje wszystkie runtime w stałym `core/rust/target/release/`. Payload kopiuje adapter MCP, wybrany launcher MariaDB oraz restore WordPress jako binaria z 0755; historyczne `.py` pozostają w repozytorium. Rejestr i przykład MariaDB wskazują natywny launcher. Update wycofuje zarządzane `.py` po kontroli hashy i zastępuje zarządzaną konfigurację MCP. Dokumentacja i AGENTS.md wskazują Rust. Przygotowano asercje dystrybucji i migracji do T-25. Testy, binaria i walidator: **NOT RUN — PROHIBITED AT THIS STAGE**.
+
+**Zależności:** T-24. **Kontrakt:** BR-02/08, K-03/05/06. Ta korekta zastępuje historyczny kontrakt dystrybucji Python. Nie obejmuje uruchomienia T-25 ani migracji prawdziwych projektów.
+
+Przegląd wykrył także Python osadzony w `common/skills/test-gap-discovery/scripts/inventory-tests.sh`. Dodano piąte binarium `test-inventory`, instalowane jako `scripts/inventory-tests` tego skilla; historyczny skrypt pozostaje w repozytorium. Aktualizacja usuwa starą zarządzaną kopię `.sh` zgodnie z hashami. Przygotowane testy obejmują dystrybucję, 0755, brak binarium przed zapisem, migrację starego adaptera, idempotencję i odmowę przy lokalnych zmianach. `cargo fmt` oraz `cargo check --locked --offline --lib --bins`: **PASSED**. Testów ani binariów nie uruchamiano.
+
 ### T-25 — jedno pełne uruchomienie walidacji
 
-**Zależności:** T-24; wszystkie wcześniejsze zadania muszą być `IMPLEMENTED`. **Kontrakt:** wszystkie K-01…K-10.
+**Stan: PASSED — ponowienie 2026-10-21 po osobnym zleceniu użytkownika „To napraw”.** Usunięto podwójny import, uproszczono nazwy wariantów `CodecError`, zastąpiono krotki wyniku MCP strukturą `McpConfiguration`, zebrano dane budowania stanu w `InstallationState` oraz poprawiono `ok_or`, filtrowanie i stabilne sortowanie. Zachowano komunikaty błędów, strukturę JSON i kolejność mapowań. Nie wyciszano reguł Clippy ani nie usuwano testów.
+
+Wykonano jedno ponowienie `make validate-rust-migration`: format, release build, Clippy, walidacja źródeł i testy **PASSED**. Pełny log: [core/rust/validation-t25-retry1.log](core/rust/validation-t25-retry1.log). Łącznie 22 testy, 0 niepowodzeń, 0 pominiętych. Wszystkie 11 wymaganych grup zawiera testy. Pokrycie przygotowanego zestawu:
+
+| Grupa | Kontrakt | Testy PASSED |
+| --- | --- | --- |
+| foundation_tests | K-01 | 3 |
+| profiles_tests | K-02 | 1 |
+| mcp_config_tests | K-03 | 3 |
+| mcp_runtime_tests | K-04 | 1 |
+| lifecycle_tests | K-05, T-24a | 4 |
+| cli_tests | K-06 | 1 |
+| mariadb_tests | K-07 | 2 |
+| wordpress_dump_tests | K-08 | 2 |
+| wordpress_preflight_tests | K-09 | 1 |
+| wordpress_localize_tests | K-09 | 2 |
+| restore_tests | K-10 | 2 |
+
+Wynik dotyczy przygotowanych scenariuszy Rust; nie jest dowodem pełnej zgodności 1:1 każdego zachowania historycznej implementacji. Nie uruchamiano Python, prawdziwych Docker/DDEV/DB/HTTP ani operacji na rzeczywistych projektach.
+
+**Historia: FAILED — pierwszy przebieg 2026-10-21.** Na jawne zlecenie użytkownika uruchomiono jeden raz `make validate-rust-migration`. Doinstalowano wymagany komponent Clippy. Pełny log: [core/rust/validation-t25.log](core/rust/validation-t25.log).
+
+| Etap | Wynik |
+| --- | --- |
+| Formatowanie | PASSED |
+| Release build wszystkich binariów | PASSED |
+| Clippy `--all-targets -- -D warnings` | FAILED, exit 101 |
+| `make validate` | NOT RUN — zatrzymanie po Clippy |
+| `make test` | NOT RUN — zatrzymanie po Clippy; nie uruchomiono żadnego testu |
+
+Przyczyny: podwójny import `std::ffi::OsString` w `core/rust/tests/cli.rs:1,3` (E0252 i unused import) oraz osiem naruszeń Clippy: wspólny sufiks wariantów `CodecError`, dwa złożone typy zwracane w `mcp/config.rs`, dziewięć argumentów `build_updated_state`, zbędne `ok_or_else` w `profiles.rs`, `filter_map` z `bool::then` w `status.rs`, porównanie z pustym stringiem i `sort_by` zamiast `sort_by_key` w `wordpress/mapping.rs`. Nie zmieniano kodu po wyniku, nie uruchamiano pojedynczych testów ani kolejnego przebiegu. Zgodność zachowania pozostaje niepotwierdzona.
+
+**Zależności:** T-24 i T-24a; wszystkie wcześniejsze zadania muszą być `IMPLEMENTED`. **Kontrakt:** wszystkie K-01…K-10.
 
 Uruchomić z root repozytorium **jedno polecenie**:
 
@@ -543,11 +585,11 @@ make validate-rust-migration
 
 Jest to jeden zbiorczy przebieg, a nie jeden smoke test. Cel `validate-rust-migration` wykonuje sekwencję Rust-only opisaną w T-24: format, release build, Clippy, `make validate` i `make test`. Żaden etap nie uruchamia interpretera Python. Błędy kompilacji/przygotowania blokują dalsze wykonywanie. Raport musi odróżniać `FAILED` od grup `NOT RUN` po wcześniejszym przerwaniu.
 
-**Gotowe, gdy:** wszystkie grupy `PASSED`, każda ma niezerową liczbę testów, kompletna tabela pokrycia, brak nieuzasadnionych skipów i zachowane oryginalne payloady/Python. Przy dowolnym FAIL: oznaczyć T-25 `FAILED`, zachować zmiany i raport, zatrzymać się. Nie deklarować sukcesu ani automatycznie uruchamiać kolejnych prób; poprawki i ponowienie tego samego finału wymagają kolejnego zlecenia.
+**Gotowe, gdy:** wszystkie grupy `PASSED`, każda ma niezerową liczbę testów, kompletna tabela pokrycia, brak nieuzasadnionych skipów, źródła Python zachowane w repozytorium i natywny payload zgodny z T-24a. Przy dowolnym FAIL: oznaczyć T-25 `FAILED`, zachować zmiany i raport, zatrzymać się. Nie deklarować sukcesu ani automatycznie uruchamiać kolejnych prób; poprawki i ponowienie tego samego finału wymagają kolejnego zlecenia.
 
 ## Informacje brakujące i blokady
 
-**BLOCKED — BR-08 a istniejący kontrakt payloadu MCP.** Dowód: `core/rust/src/mcp/config.rs` renderuje lokalny serwer jako `python3 .opencode/ai-profile-mcp.py`, a `profile_management/payload.rs` nadal instaluje adapter `.py`, zgodnie z wcześniejszym K-03/T-10. Make, test runner i walidacja są już Rust-only, ale aplikacje instalowane przez manager nadal mogą uruchomić Python. T-24 nie zmienia tego, ponieważ wymagałoby to nowego kontraktu dystrybucji (gdzie instalować/skąd brać binarium `ai-profile-mcp`) i zmian poza T-24. **Nie uruchamiać T-25 ani nie deklarować BR-08 w pełni spełnionego, dopóki użytkownik nie zleci osobnego etapu rozwiązującego dystrybucję natywnego adaptera i usunięcie runtime Python z payloadu.** Pythonowy kod źródłowy pozostaje zachowany.
+**Dawna blokada BR-08 — rozwiązana implementacyjnie w T-24a na osobne zlecenie użytkownika.** Binaria Rust zastępują adapter i narzędzia Python w payloadzie i konfiguracji. Potwierdzenie zachowania pozostaje odroczone do T-25; nie deklarować zweryfikowanej zgodności przed walidacją.
 
 **Na moment zapisania planu nie stwierdzono materialnego braku decyzji blokującego T-01.** Dalsze uruchomienie kompilatora/resolvera nie zostało sprawdzone; brak narzędzi lub niezgodny lock jest blokadą środowiskową, nie zgodą na zmianę architektury.
 
@@ -563,8 +605,8 @@ Jeżeli pojawi się nieopisana różnica między dokumentacją, Pythonem i oczek
 | Wykonanie restore/buildu na prawdziwym środowisku. | Utrata danych, ujawnienie sekretów, niezamierzone pobrania. | Brak uruchomień programów w etapach implementacji; w finale wyłącznie temp/mock/fake i brak prawdziwego DB/Docker/DDEV/HTTP. |
 | Nowy Rust target skopiowany do każdego fixture'a. | Niepotrzebny wzrost czasu i dysku. | Rust testy używają tymczasowych fixture'ów danych, bez kopiowania targetu. |
 
-Poza zakresem: usuwanie zachowanych źródeł Python, zmiana profili/wersji, automatyczna instalacja natywnych runtime w projektach, nowe usługi, async/FFI, cache wyników testów, równoległość testów, migracja upstreamowego serwera MariaDB/PHP helpers, tworzenie nowego pipeline wdrożeniowego oraz obietnica przyspieszenia bez pomiarów release.
+Poza zakresem: usuwanie zachowanych źródeł Python, zmiana wersji profili, nowe usługi, async/FFI, cache wyników testów, równoległość testów, migracja upstreamowego serwera MariaDB/PHP helpers, tworzenie nowego pipeline wdrożeniowego oraz obietnica przyspieszenia bez pomiarów release. Dystrybucja natywnych runtime jest objęta T-24a.
 
 ## Następne działanie
 
-**Nie uruchamiać T-25:** najpierw osobne zlecenie ma rozwiązać blocker BR-08 dla natywnego adaptera/payloadu MCP. T-24 jest przygotowane i nieuruchomione.
+**T-25 PASSED po osobno zleconych poprawkach i jednym ponowieniu.** Wszystkie etapy walidatora i 22 przygotowane testy przeszły. Brak kolejnego zadania w planie. Nie wykonywano instalacji ani operacji na rzeczywistych projektach.

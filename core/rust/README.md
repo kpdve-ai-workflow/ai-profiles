@@ -6,7 +6,7 @@ not required to build, run Make commands, or run the Rust test suite.
 
 ## Build and binaries
 
-Build all four native executables from the repository root:
+Build the native executables from the repository root:
 
 ```sh
 make rust-build
@@ -27,16 +27,18 @@ This builds, but does not run, the executables in
 | `ai-profile-mcp` | Standalone MCP adapter | Configured as the project's MCP executable |
 | `mariadb-launcher` | MariaDB MCP container launcher | Configured as the MariaDB MCP executable |
 | `restore-updraft` | WordPress database restore | `core/rust/target/release/restore-updraft --help` |
+| `test-inventory` | Shared test-discovery skill inventory | Installed as the skill's `scripts/inventory-tests` |
 
 These are examples of how to invoke the programs, not build or validation
-steps. The binaries should be invoked explicitly; no Make install/update target
-selects Rust automatically.
+steps. `make install PROFILE=<profile> PROJECT=<project>` builds all
+executables and invokes the Rust manager. Other manager Make targets also
+build before invoking the manager. There is no `install2` target.
 
 ### Locating the source checkout
 
 The native profile manager discovers its source checkout by walking ancestors
 of its own executable location and looking for the repository layout
-(`core/python/profile_management/`, `profiles/`, `common/skills/`, and
+(`core/rust/src/`, `profiles/`, `common/skills/`, and
 `mcp/servers/`). For a build inside the checkout, the executable is located at
 `core/rust/target/release/ai-profile`. If it is copied elsewhere, preserve a
 layout where its ancestor contains those source directories. The manager does
@@ -48,21 +50,29 @@ The MCP adapter is standalone after it has been copied to a project's
 override at each startup. The MariaDB launcher likewise starts only when
 explicitly configured and invoked.
 
-## Python coexistence
+## Native project payload
 
 Existing profile-management Make targets (`install`, `update`, `switch`,
 `status`, `validate`, `test`, and the other manager operations) use the Rust
 manager through Cargo. `make rust-build` only builds the native executables.
-The Rust payload still preserves existing Python files and commands where
-profile compatibility requires them; those payload files do not make Python a
-dependency of the manager build or its Rust test harness. Rust dependencies
-are managed by Cargo in this directory.
+Make fixes the build directory to `core/rust/target/`, including when
+`CARGO_TARGET_DIR` is set. The manager reads native payloads from its checkout's
+`core/rust/target/release/`. Missing binaries stop payload preparation before
+project writes; direct Cargo users must build all release binaries there first.
 
-**Current migration gap:** `mcp/config.rs` still renders local MCP entries with
-`python3` and the preserved `.py` adapter, as required by the original K-03
-compatibility contract. Thus Make/build/tests are Rust-only, but the stricter
-goal of having no Python-based runtime in installed projects is not yet met;
-the payload/adapter contract must be revised before that can be claimed.
+| Release binary | Installed executable (mode 0755) |
+| --- | --- |
+| `ai-profile-mcp` | `.opencode/ai-profile-mcp` |
+| `mariadb-launcher` | `.opencode/mcp/mariadb/mariadb-launcher` (selected MariaDB) |
+| `restore-updraft` | `.opencode/ai-profile/scripts/restore-updraft` (WordPress) |
+| `test-inventory` | `.opencode/skills/test-gap-discovery/scripts/inventory-tests` |
+
+Installed files are copied, hashed and managed through the existing ownership
+checks. Update removes previously managed Python payloads only after verifying
+their stored hashes. Unmanaged files and local overrides remain protected.
+PHP helpers and profile documentation are still delivered. Python sources stay
+in this repository as reference; Python files are not distributed. Installed
+executables need neither Cargo nor the source checkout.
 
 ## Production Python-to-Rust coverage map
 
@@ -97,11 +107,10 @@ implementation. Rust module filenames are relative to `core/rust/src/`.
 | `profiles/wordpress/scripts/restore-updraft.py`: `preflight` | `wordpress/preflight.rs` |
 | `profiles/wordpress/scripts/restore-updraft.py`: `localize` | `wordpress/localize.rs` |
 | `profiles/wordpress/scripts/restore-updraft.py`: `restore`, `main` | `wordpress/restore.rs`, `bin/restore-updraft.rs` |
+| Python embedded in `common/skills/test-gap-discovery/scripts/inventory-tests.sh` | `bin/test-inventory.rs` |
 
 The Rust manager does not invoke a host Python interpreter to implement any
 operation. The MariaDB launcher retains the upstream container's documented
 entrypoint (`python src/server.py`) inside the pinned Docker image; that
-upstream server is outside this migration's scope. Existing project payloads
-and local MCP renderings intentionally retain their original Python filenames
-and commands for compatibility. PHP helpers are also outside the Python
-migration scope.
+upstream server is outside this migration's scope. Third-party MCP runtimes
+(Docker/Node) and PHP helpers keep their own dependencies.

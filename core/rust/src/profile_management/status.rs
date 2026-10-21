@@ -66,7 +66,7 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
     let content_changed = !object_maps_equal(old_files, &expected_hashes)
         || !object_matches_map(installed_base, &base);
 
-    let (_, overrides) = configured_mcp(project, &base)?;
+    let overrides = configured_mcp(project, &base)?.overrides;
     let (config, _) = config_for(project)?;
     let config_object = config.as_object().ok_or(StatusError::InvalidState)?;
     let empty_mcp = Map::new();
@@ -80,9 +80,8 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
         .ok_or(StatusError::InvalidState)?;
     let modified_mcp = owned_mcp
         .iter()
-        .filter_map(|(name, expected)| {
-            (current_mcp.get(name) != Some(expected)).then(|| name.clone())
-        })
+        .filter(|(name, expected)| current_mcp.get(*name) != Some(*expected))
+        .map(|(name, _)| name.clone())
         .collect::<Vec<_>>();
 
     let label = match installed {

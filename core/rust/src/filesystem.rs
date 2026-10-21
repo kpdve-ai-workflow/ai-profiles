@@ -1,5 +1,7 @@
 use std::{
     fs,
+    io::Write,
+    os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
 };
 
@@ -80,6 +82,27 @@ pub(crate) fn write_bytes(path: &Path, contents: &[u8]) -> Result<(), Filesystem
         })?;
     }
     fs::write(path, contents).map_err(|source| FilesystemError::Io {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+/// Replace the executable by rename so an already running runtime can finish.
+pub(crate) fn write_executable(path: &Path, contents: &[u8]) -> Result<(), FilesystemError> {
+    let write = || -> Result<(), std::io::Error> {
+        let parent = path.parent().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "missing parent")
+        })?;
+        fs::create_dir_all(parent)?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        temporary.write_all(contents)?;
+        temporary
+            .as_file()
+            .set_permissions(fs::Permissions::from_mode(0o755))?;
+        temporary.persist(path).map_err(|error| error.error)?;
+        Ok(())
+    };
+    write().map_err(|source| FilesystemError::Io {
         path: path.to_owned(),
         source,
     })

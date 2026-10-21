@@ -31,7 +31,7 @@ pub(crate) fn create_profile(
     }
     let parent = destination
         .parent()
-        .ok_or_else(|| ProfileManagementError::InvalidProfileName)?;
+        .ok_or(ProfileManagementError::InvalidProfileName)?;
     let temporary = Builder::new()
         .prefix(".create-")
         .tempdir_in(parent)

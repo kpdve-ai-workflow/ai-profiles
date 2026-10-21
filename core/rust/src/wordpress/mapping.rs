@@ -29,7 +29,7 @@ pub(crate) fn origin(value: &str) -> Result<Origin, WordPressError> {
 
     if authority.is_empty()
         || !valid_authority(authority)
-        || (path != "" && path != "/")
+        || (!path.is_empty() && path != "/")
         || query_fragment_values_nonempty
     {
         return Err(WordPressError::InvalidOrigin);
@@ -105,7 +105,7 @@ pub(crate) fn mappings(values: &[String]) -> Result<UrlMappings, WordPressError>
     }
 
     // Stable ordering preserves input order among equal-length origins.
-    result.sort_by(|left, right| right.source.as_str().len().cmp(&left.source.as_str().len()));
+    result.sort_by_key(|rule| std::cmp::Reverse(rule.source.as_str().len()));
     Ok(UrlMappings(result))
 }
 

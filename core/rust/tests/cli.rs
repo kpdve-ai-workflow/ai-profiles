@@ -1,7 +1,5 @@
 use std::ffi::OsString;
 
-use std::ffi::OsString;
-
 use super::parse_args;
 
 #[test]

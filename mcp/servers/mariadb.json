@@ -1,6 +1,6 @@
 {
   "type": "local",
-  "command": ["python3", ".opencode/mcp/mariadb/launch.py"],
+  "command": [".opencode/mcp/mariadb/mariadb-launcher"],
   "disabled": true,
   "timeout": {"startup": 3600000},
   "environment": {

@@ -44,6 +44,13 @@ wykonuje commitów ani nie tworzy tagów.
 
 ## Instalacja i aktualizacja
 
+Instaluj przez `make install PROFILE=<profil> PROJECT=<projekt>`. Make buduje
+manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
+launcher MariaDB i restore WordPress trafiają do projektu jako samodzielne
+pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
+referencyjny. Aktualizacja usuwa dawne zarządzane `.py` po sprawdzeniu hashy;
+obce i lokalnie zmienione pliki zachowują dotychczasową ochronę.
+
 Make wymaga `PROFILE` przy `create`, `install`, `switch` i `bump`, oraz `PROJECT`
 przy komendach projektowych. CLI domyślnie działa na bieżącym katalogu.
 `status` i `update` korzystają z lokalnego checkoutu i nie pobierają zmian;
@@ -87,7 +94,7 @@ konfiguracji. Instalacje MVP bez hashy wymagają przeglądu i backupu przed
 świadomym przejęciem:
 
 ```bash
-python3 core/python/profile_management/ai-profile.py migrate-legacy --accept-existing --project ~/projects/my-api
+make migrate-legacy PROJECT=~/projects/my-api
 make update PROJECT=~/projects/my-api
 ```
 

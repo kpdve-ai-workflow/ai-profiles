@@ -1,6 +1,7 @@
 use std::{
     ffi::OsStr,
     fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 
@@ -11,12 +12,17 @@ use crate::{
     error::PayloadError, filesystem::file_path, mcp::config::desired_mcp, model::RepositoryContext,
 };
 
-const PYTHON_ADAPTER: &str = ".opencode/ai-profile-mcp.py";
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PayloadKind {
+    Data,
+    Executable,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PayloadFile {
     pub(crate) relative_path: String,
     pub(crate) contents: Vec<u8>,
+    pub(crate) kind: PayloadKind,
 }
 
 pub(crate) fn desired_files(
@@ -32,16 +38,26 @@ pub(crate) fn desired_files(
             .join(profile)
             .join("skills"),
     ] {
-        collect_skills(&folder, &mut files)?;
+        collect_skills(context, &folder, &mut files)?;
     }
 
-    let adapter = context
-        .sources
-        .join("core/python/profile_management/mcp_runtime.py");
-    insert_file(&mut files, PYTHON_ADAPTER, &adapter, false)?;
+    insert_native(
+        context,
+        &mut files,
+        "ai-profile-mcp",
+        ".opencode/ai-profile-mcp",
+    )?;
 
     for definition in desired_mcp(context, profile)? {
         let name = definition.name.as_str();
+        if name == "mariadb" {
+            insert_native(
+                context,
+                &mut files,
+                "mariadb-launcher",
+                ".opencode/mcp/mariadb/mariadb-launcher",
+            )?;
+        }
         let launcher = file_path(&context.sources, &format!("mcp/launchers/{name}"))?;
         if launcher.exists() {
             if !launcher.is_dir() {
@@ -56,6 +72,9 @@ pub(crate) fn desired_files(
                     .map_err(|_| PayloadError::InvalidPayloadPath(source.clone()))?;
                 if contains_component(relative, "__pycache__") || has_extension(&source, "pyc") {
                     continue;
+                }
+                if name == "mariadb" && relative == Path::new("launch.py") {
+                    continue; // Preserved reference; distributed as mariadb-launcher.
                 }
                 if source.is_file() {
                     let relative_path =
@@ -76,6 +95,14 @@ pub(crate) fn desired_files(
 
     let readme = file_path(&context.sources, &format!("profiles/{profile}/README.md"))?;
     let scripts = file_path(&context.sources, &format!("profiles/{profile}/scripts"))?;
+    if profile == "wordpress" {
+        insert_native(
+            context,
+            &mut files,
+            "restore-updraft",
+            ".opencode/ai-profile/scripts/restore-updraft",
+        )?;
+    }
     if scripts.exists() {
         if !scripts.is_dir() {
             return Err(PayloadError::InvalidScriptsDirectory(profile.to_owned()));
@@ -90,6 +117,9 @@ pub(crate) fn desired_files(
             if contains_component(relative, "__pycache__") || has_extension(&source, "pyc") {
                 continue;
             }
+            if profile == "wordpress" && relative == Path::new("restore-updraft.py") {
+                continue; // Preserved reference; distributed as restore-updraft.
+            }
             if source.is_file() {
                 let relative_path =
                     payload_path(&[".opencode/ai-profile/scripts", &path_to_posix(relative)?]);
@@ -103,7 +133,11 @@ pub(crate) fn desired_files(
     Ok(files)
 }
 
-fn collect_skills(folder: &Path, files: &mut Vec<PayloadFile>) -> Result<(), PayloadError> {
+fn collect_skills(
+    context: &RepositoryContext,
+    folder: &Path,
+    files: &mut Vec<PayloadFile>,
+) -> Result<(), PayloadError> {
     if !folder.is_dir() {
         return Err(PayloadError::MissingSkills(folder.to_owned()));
     }
@@ -166,6 +200,17 @@ fn collect_skills(folder: &Path, files: &mut Vec<PayloadFile>) -> Result<(), Pay
                 let relative = source
                     .strip_prefix(&skill)
                     .map_err(|_| PayloadError::InvalidPayloadPath(source.clone()))?;
+                if skill_name == "test-gap-discovery"
+                    && relative == Path::new("scripts/inventory-tests.sh")
+                {
+                    insert_native(
+                        context,
+                        files,
+                        "test-inventory",
+                        ".opencode/skills/test-gap-discovery/scripts/inventory-tests",
+                    )?;
+                    continue;
+                }
                 let relative_path =
                     payload_path(&[".opencode/skills", skill_name, &path_to_posix(relative)?]);
                 insert_file(files, &relative_path, &source, true)?;
@@ -280,11 +325,17 @@ fn insert_file(
     source: &Path,
     reject_duplicate: bool,
 ) -> Result<(), PayloadError> {
+    if ["py", "pyc", "pyo"]
+        .iter()
+        .any(|extension| has_extension(source, extension))
+    {
+        return Err(PayloadError::PythonPayload(source.to_owned()));
+    }
     if let Some(existing) = files
         .iter_mut()
         .find(|file| file.relative_path == relative_path)
     {
-        if reject_duplicate {
+        if reject_duplicate || existing.kind == PayloadKind::Executable {
             return Err(PayloadError::DuplicateSkillFile(relative_path.to_owned()));
         }
         existing.contents = fs::read(source).map_err(|source_error| PayloadError::Io {
@@ -300,6 +351,37 @@ fn insert_file(
     files.push(PayloadFile {
         relative_path: relative_path.to_owned(),
         contents,
+        kind: PayloadKind::Data,
+    });
+    Ok(())
+}
+
+fn insert_native(
+    context: &RepositoryContext,
+    files: &mut Vec<PayloadFile>,
+    binary: &str,
+    relative_path: &str,
+) -> Result<(), PayloadError> {
+    let source = file_path(
+        context.sources.as_path(),
+        &format!("core/rust/target/release/{binary}"),
+    )?;
+    let metadata =
+        fs::metadata(&source).map_err(|_| PayloadError::MissingNativeBinary(source.clone()))?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(PayloadError::MissingNativeBinary(source));
+    }
+    if files.iter().any(|file| file.relative_path == relative_path) {
+        return Err(PayloadError::DuplicateSkillFile(relative_path.to_owned()));
+    }
+    let contents = fs::read(&source).map_err(|source_error| PayloadError::Io {
+        path: source,
+        source: source_error,
+    })?;
+    files.push(PayloadFile {
+        relative_path: relative_path.to_owned(),
+        contents,
+        kind: PayloadKind::Executable,
     });
     Ok(())
 }

@@ -77,13 +77,15 @@ operacje destrukcyjne ani migracje.
 
 ## Adapter
 
-Instalator dostarcza zarządzany `.opencode/ai-profile-mcp.py`. Adapter odczytuje
+Instalator dostarcza natywne binarium Rust `.opencode/ai-profile-mcp` i nadaje
+mu prawa wykonania. OpenCode uruchamia je bezpośrednio. Adapter odczytuje
 `mcp_base` ze stanu, nakłada lokalne nadpisania, uruchamia komendy bez powłoki,
 przekazuje stdio i rozwiązuje środowisko wyłącznie dla procesu MCP. Nie zmienia
 środowiska OpenCode. Zdalne MCP uruchamia natywnie OpenCode i nie używają
 `env_file`. Osobny `ai-profile-mcp.json` nie jest wymagany; update usuwa jego
-wcześniej zarządzaną kopię. Adapter wymaga Python 3.10+, a zależności serwera
-muszą być dostępne osobno. Po zmianie pliku env lub mapowania zrestartuj MCP;
+wcześniej zarządzaną kopię. Adapter działa bez Python, Cargo i checkoutu;
+zależności wybranego serwera muszą być dostępne osobno.
+Po zmianie pliku env lub mapowania zrestartuj MCP;
 po zmianie ustawień OpenCode wykonaj update i zrestartuj sesję.
 
 ## Launchery
@@ -94,7 +96,9 @@ serwer i podlegają kontroli hashy, konfliktów oraz usuwaniu jak inne zarządza
 pliki. Nie przechowuj w nich sekretów, cache ani artefaktów budowy. Szczegóły
 konkretnej integracji znajdują się w dokumentacji właściwego profilu.
 
-Launcher MariaDB buduje przypięte źródła upstream dopiero przy pierwszym
+Launcher Rust `.opencode/mcp/mariadb/mariadb-launcher` jest kopiowany z
+lokalnego release builda. Historyczny `launch.py` pozostaje w repozytorium;
+nie jest instalowany. Launcher buduje przypięte źródła upstream dopiero przy pierwszym
 włączonym uruchomieniu MCP, nie podczas instalacji profilu. Weryfikuje SHA-256
 archiwum i buduje obraz Docker; szczegółowe wymagania, konfiguracja i ostrzeżenia
 dotyczące SQL znajdują się w [instrukcji WordPress](../profiles/wordpress/README.md).

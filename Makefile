@@ -1,12 +1,13 @@
 RUST_MANIFEST := core/rust/Cargo.toml
-PROFILE_CLI := cargo run --quiet --manifest-path $(RUST_MANIFEST) --locked --bin ai-profile --
+RUST_TARGET := $(abspath core/rust/target)
+PROFILE_CLI := "$(RUST_TARGET)/release/ai-profile"
 PROJECT ?=
 PROFILE ?=
 DESCRIPTION ?=
 PART ?= patch
 .DEFAULT_GOAL := help
 
-.PHONY: help create check-profile check-project install install2 update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration
+.PHONY: help create check-profile check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy
 
 help:
 	@$(PROFILE_CLI) help
@@ -22,8 +23,6 @@ check-project:
 
 install: check-project check-profile
 	$(PROFILE_CLI) install "$(PROFILE)" --project "$(PROJECT)"
-
-install2: install
 
 update: check-project
 	$(PROFILE_CLI) update --project "$(PROJECT)"
@@ -47,7 +46,13 @@ test:
 	cargo test --manifest-path $(RUST_MANIFEST) --locked --all-targets
 
 rust-build:
-	cargo build --manifest-path $(RUST_MANIFEST) --locked --release --bins
+	cargo build --manifest-path $(RUST_MANIFEST) --target-dir "$(RUST_TARGET)" --locked --release --bins
+
+# Build the manager and every native payload from the same sources before use.
+help create install update uninstall switch status validate bump migrate-legacy: rust-build
+
+migrate-legacy: check-project
+	$(PROFILE_CLI) migrate-legacy --accept-existing --project "$(PROJECT)"
 
 validate-rust-migration:
 	@set -eu; \
@@ -79,7 +84,7 @@ validate-rust-migration:
 	  fi; \
 	}; \
 	run_group format cargo fmt --manifest-path $(RUST_MANIFEST) -- --check; \
-	run_group release-build cargo build --manifest-path $(RUST_MANIFEST) --locked --release --bins; \
+	run_group release-build cargo build --manifest-path $(RUST_MANIFEST) --target-dir "$(RUST_TARGET)" --locked --release --bins; \
 	run_group clippy cargo clippy --manifest-path $(RUST_MANIFEST) --locked --all-targets -- -D warnings; \
 	remaining='make-validate make-test'; active=make-validate; \
 	run_group make-validate make validate; \
@@ -87,7 +92,7 @@ validate-rust-migration:
 
 pull-update: check-project
 	git pull --ff-only
-	$(PROFILE_CLI) update --project "$(PROJECT)"
+	$(MAKE) update PROJECT="$(PROJECT)"
 
 # Compatibility aliases: the approval gate no longer exists.
 approve lock gate-status: check-project
