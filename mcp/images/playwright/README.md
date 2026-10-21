@@ -22,10 +22,29 @@ standardowe `docker compose run` przez stdio, bez osobnego launchera Playwright.
 Nie wykonuj `compose up -d`: każdy klient otrzymuje własny kontener i sesję.
 Konfiguracja nie buduje ani nie pobiera brakującego obrazu automatycznie.
 
-Projekt jest montowany tylko do odczytu w `/workspace`, a `reports/wcag`
-zapisywalnie. Katalog raportów utwórz jako swój użytkownik, nie przez `sudo`:
+Projekt jest montowany pod tą samą bezwzględną ścieżką co na hoście, tylko do
+odczytu; jedynie `reports/wcag` jest zapisywalne. Wspólny adapter ustawia
+`AI_PROFILE_PROJECT_DIR` na kanoniczną ścieżkę zainstalowanego projektu przy
+każdym uruchomieniu. Użytkownik nie konfiguruje tej zastrzeżonej zmiennej;
+środowisko, dotenv ani lokalne mapowanie nie mogą jej zastąpić.
+Katalog raportów utwórz jako swój użytkownik, nie przez `sudo`:
 kontener dopasowuje UID/GID do jego właściciela. W razie potrzeby ustaw `HOST_UID`
 i `HOST_GID` przez lokalne `environment` lub `env_file` adaptera.
+
+### Ścieżki artefaktów
+
+- Dla jawnych nazw używaj `reports/wcag/<run>/...`, np.
+  `reports/wcag/2026-10-21/screenshot.png`. Względna nazwa jest rozwiązywana
+  względem katalogu projektu z MCP roots, **nie** katalogu wyjściowego.
+- Odpowiadająca bezwzględna ścieżka hosta
+  `<projekt>/reports/wcag/<run>/...` działa identycznie w kontenerze.
+- Pominięcie `filename` korzysta ze skonfigurowanego katalogu `reports/wcag`.
+- Sama nazwa `file.png` wskazuje główny katalog projektu, który jest tylko do
+  odczytu: taki zapis nie jest obsługiwany. Nie używaj `/workspace/...` ani nie
+  zakładaj, że hostowe `/tmp/opencode` jest dostępne dla Playwright.
+
+Nie zmieniamy reguł nazw upstream ani granic dostępu MCP. Kontener nie otrzymuje
+dostępu do dowolnych katalogów hosta.
 
 ## Lokalne ustawienia
 
@@ -85,3 +104,11 @@ nie przebudowuje i nie usuwa obrazów; uninstall zachowuje raporty i prywatne pl
 - Błąd zapisu: sprawdź właściciela i uprawnienia katalogu raportów.
 
 Sama konfiguracja ani pozytywny status profilu nie potwierdzają połączenia MCP.
+
+Wyłącznie do samodzielnej diagnostyki Compose, poza adapterem, jawnie podaj ścieżkę
+(z katalogu docelowego projektu):
+
+```sh
+AI_PROFILE_PROJECT_DIR="$(pwd -P)" docker compose --project-directory . \
+  -f .opencode/mcp/playwright/compose.yaml config
+```

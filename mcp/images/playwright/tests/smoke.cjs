@@ -1,18 +1,26 @@
-// No host Node, npm install, or browser-selection overrides: exercise the image as shipped.
+// Direct image smoke and installed-adapter integration share the same roots-aware client.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const { spawn } = require('node:child_process');
 const { createInterface } = require('node:readline');
+const { pathToFileURL } = require('node:url');
 
-const project = process.env.SMOKE_PROJECT_DIR || '/project';
-const report = `${project}/reports/wcag`;
+const project = process.env.SMOKE_PROJECT_DIR;
+assert.ok(project?.startsWith('/'), 'SMOKE_PROJECT_DIR must be absolute');
+const adapter = process.env.SMOKE_ADAPTER;
+const uid = adapter ? process.getuid() : 1000;
+const gid = adapter ? process.getgid() : 1000;
+// Optional legacy layout is solely for demonstrating the old roots regression.
+const mountedProject = process.env.SMOKE_MOUNT_PROJECT || project;
+const report = `${mountedProject}/reports/wcag`;
 const pending = new Map();
 let nextId = 0;
 let child;
 let server;
 let tlsServer;
+let rootsRequests = 0;
 const deadline = setTimeout(() => {
   console.error('FAIL: smoke test exceeded 120 seconds');
   process.exit(1); // Docker tears down all remaining container processes.
@@ -50,19 +58,39 @@ function evaluated(result) {
   return JSON.parse(match[1]);
 }
 
-async function main() {
-  assert.equal(process.env.HOST_UID, '');
-  assert.equal(process.env.HOST_GID, '');
-  // An image-level diagnostic override must not silently mask the regression.
-  assert.equal(process.env.PLAYWRIGHT_MCP_BROWSER, undefined);
-  assert.equal(process.env.PLAYWRIGHT_MCP_EXECUTABLE_PATH, undefined);
-  const mounts = fs.readFileSync('/proc/self/mountinfo', 'utf8').split('\n');
-  assert.ok(mounts.some(line => line.split(' ')[4] === project && line.split(' ')[5].split(',').includes('ro')));
-  assert.ok(mounts.some(line => line.split(' ')[4] === report && line.split(' ')[5].split(',').includes('rw')));
+function verifyArtifacts(directory, expectedUid, expectedGid) {
+  const pngs = fs.readdirSync(directory).filter(name => name.endsWith('.png'));
+  assert.equal(pngs.length, 3, 'expected relative, absolute and automatic screenshots');
+  for (const name of ['relative.png', 'absolute.png', ...pngs]) {
+    assert.equal(fs.readFileSync(`${directory}/${name}`).subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  }
+  assert.equal(JSON.parse(fs.readFileSync(`${directory}/axe-raw.json`, 'utf8')).testEngine.version, '4.14.0');
+  for (const name of ['axe-raw.json', ...pngs]) {
+    assert.equal(fs.statSync(`${directory}/${name}`).uid, expectedUid);
+    assert.equal(fs.statSync(`${directory}/${name}`).gid, expectedGid);
+  }
+}
 
-  // This is a fresh test-only report mount. Exercise UID/GID inference, not an override.
-  fs.chownSync(report, 1000, 1000);
-  child = spawn('/usr/local/bin/playwright-entrypoint', [], { stdio: ['pipe', 'pipe', 'inherit'] });
+async function main() {
+  // Recheck the direct run's artifacts from the host, not only inside its bind.
+  if (adapter) verifyArtifacts(`${report}/direct`, 1000, 1000);
+  if (!adapter) {
+    assert.equal(process.env.HOST_UID, '');
+    assert.equal(process.env.HOST_GID, '');
+    // An image-level diagnostic override must not silently mask the regression.
+    assert.equal(process.env.PLAYWRIGHT_MCP_BROWSER, undefined);
+    assert.equal(process.env.PLAYWRIGHT_MCP_EXECUTABLE_PATH, undefined);
+    const mounts = fs.readFileSync('/proc/self/mountinfo', 'utf8').replaceAll('\\040', ' ').replaceAll('\\054', ',').split('\n');
+    assert.ok(mounts.some(line => line.includes(` ${mountedProject} ro,`)));
+    assert.ok(mounts.some(line => line.includes(` ${report} rw,`)));
+
+    // This is a fresh test-only report mount. Exercise UID/GID inference, not an override.
+    fs.chownSync(report, 1000, 1000);
+  }
+  child = spawn(adapter || '/usr/local/bin/playwright-entrypoint', adapter ? ['playwright'] : [], {
+    stdio: ['pipe', 'pipe', 'inherit'], cwd: adapter ? '/' : mountedProject,
+    env: { ...process.env, ...(adapter ? { PWD: '/', AI_PROFILE_PROJECT_DIR: '/wrong/inherited' } : {}) },
+  });
   const exited = new Promise(resolve => child.once('exit', resolve));
   const failPending = error => {
     for (const waiter of pending.values()) waiter.reject(error);
@@ -74,6 +102,16 @@ async function main() {
   createInterface({ input: child.stdout }).on('line', line => {
     try {
       const message = JSON.parse(line);
+      // Requests have their own ID namespace: never consume a pending client response.
+      if (message.method) {
+        if (message.method === 'roots/list' && message.id !== undefined) {
+          rootsRequests++;
+          send({ id: message.id, result: { roots: [{ uri: pathToFileURL(project).href, name: 'smoke project' }] } });
+        } else if (message.id !== undefined) {
+          send({ id: message.id, error: { code: -32601, message: 'Method not found' } });
+        }
+        return;
+      }
       const waiter = pending.get(message.id);
       if (!waiter) return;
       pending.delete(message.id);
@@ -86,32 +124,35 @@ async function main() {
 
   // The entrypoint starts as root to prepare its home, then drops privileges.
   // Also run the fixture server and artifact writer as the same non-root identity.
-  process.setgroups([]);
-  process.setgid(1000);
-  process.setuid(1000);
-  assert.equal(process.getuid(), 1000);
-  assert.equal(process.getgid(), 1000);
+  if (!adapter) {
+    process.setgroups([]);
+    process.setgid(1000);
+    process.setuid(1000);
+  }
+  assert.notEqual(process.getuid(), 0);
 
   const initialized = await request('initialize', {
-    protocolVersion: '2024-11-05', capabilities: {},
+    protocolVersion: '2024-11-05', capabilities: { roots: { listChanged: true } },
     clientInfo: { name: 'playwright-container-smoke', version: '1.0.0' },
   });
   send({ method: 'notifications/initialized' });
   const discovery = await request('tools/list', {});
   fs.writeFileSync(`${report}/mcp-discovery.json`, JSON.stringify({ initialized, ...discovery }, null, 2));
   for (const [name, fields] of Object.entries({
-    browser_navigate: ['url'], browser_evaluate: ['function'], browser_take_screenshot: ['filename'],
+    browser_navigate: ['url'], browser_evaluate: ['function', 'filename'], browser_take_screenshot: ['filename'],
   })) {
     const schema = discovery.tools.find(item => item.name === name)?.inputSchema;
     assert.ok(schema, `Missing tool schema: ${name}`);
     for (const field of fields) assert.ok(schema.properties[field], `${name} lacks ${field}`);
   }
-  const status = fs.readFileSync(`/proc/${child.pid}/status`, 'utf8');
-  for (const field of ['Uid', 'Gid']) {
-    assert.deepEqual(status.match(new RegExp(`^${field}:\\s+(.+)$`, 'm'))[1].trim().split(/\s+/), ['1000', '1000', '1000', '1000']);
+  if (!adapter) {
+    const status = fs.readFileSync(`/proc/${child.pid}/status`, 'utf8');
+    for (const field of ['Uid', 'Gid']) {
+      assert.deepEqual(status.match(new RegExp(`^${field}:\\s+(.+)$`, 'm'))[1].trim().split(/\s+/), ['1000', '1000', '1000', '1000']);
+    }
   }
 
-  const fixture = fs.readFileSync(`${project}/fixture.html`);
+  const fixture = fs.readFileSync(`${mountedProject}/fixture.html`);
   const respond = (req, res) => {
     if (req.url === '/pixel.svg') {
       res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
@@ -128,19 +169,31 @@ async function main() {
   });
   const url = `http://127.0.0.1:${server.address().port}/`;
   await tool('browser_navigate', { url });
+  assert.ok(rootsRequests > 0, 'server never requested MCP roots');
   assert.equal(evaluated(await tool('browser_evaluate', { function: '() => window.axe.version' })), '4.14.0');
-  const raw = await tool('browser_evaluate', { function: 'async () => await window.axe.run(document)' });
-  fs.writeFileSync(`${report}/axe-raw.json`, JSON.stringify(raw, null, 2));
-  const scan = evaluated(raw);
-  fs.writeFileSync(`${report}/axe-scan.json`, JSON.stringify(scan, null, 2));
+  await tool('browser_take_screenshot', { filename: 'reports/wcag/relative.png', type: 'png' });
+  assert.ok(fs.existsSync(`${report}/relative.png`),
+    `MCP relative screenshot did not reach the host report bind (advertised root: ${project})`);
+  await tool('browser_evaluate', { function: 'async () => await window.axe.run(document)', filename: 'reports/wcag/axe-raw.json' });
+  const scan = JSON.parse(fs.readFileSync(`${report}/axe-raw.json`, 'utf8'));
   assert.equal(scan.testEngine.version, '4.14.0');
   const violations = new Set(scan.violations.map(item => item.id));
   assert.ok(violations.has('button-name'), 'axe missed the unlabeled button');
   assert.ok(violations.has('image-alt'), 'axe missed the image without alt text');
-  await tool('browser_take_screenshot', { filename: `${report}/screenshot.png`, type: 'png', scale: 'css' });
-  const screenshot = fs.readFileSync(`${report}/screenshot.png`);
-  assert.equal(screenshot.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-  assert.equal(fs.statSync(`${report}/screenshot.png`).uid, 1000);
+  await tool('browser_take_screenshot', { filename: `${project}/reports/wcag/absolute.png`, type: 'png' });
+  const before = new Set(fs.readdirSync(report));
+  await tool('browser_take_screenshot', { type: 'png' });
+  const automatic = fs.readdirSync(report).filter(name => !before.has(name) && name.endsWith('.png'));
+  assert.equal(automatic.length, 1, 'omitted filename must save in the configured report directory');
+  verifyArtifacts(report, uid, gid);
+  for (const filename of ['/tmp/opencode/outside.png', 'root-write.png']) {
+    const rejected = await request('tools/call', { name: 'browser_take_screenshot', arguments: { filename, type: 'png' } });
+    assert.equal(rejected.isError, true, `unsafe write succeeded: ${filename}`);
+    const text = JSON.stringify(rejected);
+    assert.match(text, filename.startsWith('/') ? /outside|allowed|access denied/i : /read-only|EROFS|EACCES|permission denied/i);
+  }
+  assert.ok(!fs.existsSync(`${project}/root-write.png`));
+  assert.ok(rootsRequests > 0, 'server never requested MCP roots');
   await tool('browser_navigate', { url: `${url}?second-navigation` });
   assert.equal(evaluated(await tool('browser_evaluate', { function: '() => window.axe.version' })), '4.14.0');
   tlsServer = https.createServer({
@@ -155,7 +208,7 @@ async function main() {
   assert.deepEqual(evaluated(await tool('browser_evaluate', {
     function: "() => ({axe:window.axe.version,authenticated:document.cookie.includes('smoke-session=synthetic-test-only')})",
   })), { axe: '4.14.0', authenticated: true });
-  console.log(`PASS: non-root MCP, axe 4.14.0, screenshot, repeat navigation, trusted HTTPS, and storage state (${process.platform}/${process.arch})`);
+  console.log(`PASS: ${adapter ? 'installed shared adapter from /' : 'container entrypoint'}, MCP roots (${rootsRequests} requests), artifact paths and ownership, read-only root, axe, HTTPS, storage state (${process.platform}/${process.arch})`);
   child.stdin.end();
   child.kill('SIGTERM');
   await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2000))]);

@@ -97,6 +97,12 @@ bezwzględnej ścieżki adaptera i argumentu nazwy serwera; sekrety nie są
 rozwijane przy instalacji. Po zmianie pliku env lub mapowania zrestartuj MCP;
 po zmianie ustawień klienta zrestartuj jego sesję.
 
+Każda lokalna komenda otrzymuje zastrzeżone `AI_PROFILE_PROJECT_DIR`: kanoniczną
+ścieżkę projektu odnalezioną z położenia zainstalowanego adaptera w runtime,
+nie z `PWD` ani katalogu klienta. Adapter ustawia ją wyłącznie dla podprocesu,
+po rozwiązaniu środowiska; odziedziczone wartości, dotenv i lokalne mapowania
+nie zastępują jej końcowej wartości. Użytkownik nie musi jej konfigurować.
+
 ## Launchery
 
 Opcjonalne zarządzane pliki runtime umieszczaj w `mcp/launchers/<nazwa>/`.
@@ -135,8 +141,10 @@ standardowe `docker compose run` bez TTY. Nie ma dedykowanego launchera Playwrig
 publikacji GHCR, tokenów ani automatycznego buildu/pull obrazu. Nie uruchamiaj
 `compose up -d`: każdy klient ma własny kontener i sesję przeglądarki.
 
-Compose montuje projekt tylko do odczytu w `/workspace`, a `reports/wcag`
-zapisywalnie. Katalog raportów musi wcześniej utworzyć użytkownik projektu;
+Compose montuje projekt pod jego rzeczywistą bezwzględną ścieżką hosta, tylko
+do odczytu, a `reports/wcag` pod tą samą ścieżką zapisywalnie. Ścieżkę dostarcza
+wspólny adapter przez `AI_PROFILE_PROJECT_DIR`, bez konfiguracji użytkownika.
+Katalog raportów musi wcześniej utworzyć użytkownik projektu;
 kontener dopasowuje do niego UID/GID. Nie montuje Docker socketu. Opcjonalne
 `HOST_UID` i `HOST_GID` pozwalają jawnie wybrać użytkownika.
 
@@ -184,9 +192,25 @@ Raport, findings JSON, raw scans i screenshoty skill zapisuje w
 `reports/wcag/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
 zadeklarowane zmienne, nie całe środowisko hosta.
 
+Dla jawnego `filename` preferuj `reports/wcag/<run>/...` albo odpowiadającą
+bezwzględną ścieżkę hosta `<projekt>/reports/wcag/<run>/...`. Nazwy względne
+rozwiązują się względem projektu z MCP roots, nie automatycznie względem katalogu
+wyjściowego. Pominięcie `filename` używa skonfigurowanego `reports/wcag`.
+Sama nazwa `file.png` próbuje zapisać w projekcie tylko do odczytu i nie jest
+obsługiwana. Nie używaj `/workspace/...` ani hostowego `/tmp/opencode`: nie są
+aliasami projektu ani dodatkowymi mountami. Nie udostępniamy dowolnych katalogów
+hosta. Osobne polecenie diagnostyczne Compose z jawną zmienną jest w
+[instrukcji instalowanej](images/playwright/README.md#diagnostyka).
+
 Obraz obsługuje `linux/amd64` i `linux/arm64`; pozostałe architektury są
 odrzucane. Zakres rzeczywistych testów należy podawać oddzielnie dla każdej
 architektury; testy obrazu są w `mcp/images/playwright/tests/`.
+
+Runner `tests/run.sh` wymaga dodatkowo hostowego Node wyłącznie jako klienta
+testowego MCP. Sprawdza entrypoint, a następnie instalację przez `make install`
+i wspólny adapter uruchomiony z `/`, z prawdziwymi MCP roots. Przeglądarka i axe
+pozostają w kontenerze. Test używa ścieżki projektu ze spacjami i przecinkiem,
+weryfikuje artefakty także na hoście oraz próby nadpisania metadanych adaptera.
 
 Timeouty: Codex dostaje startup/tool timeouty w sekundach. Claude dostaje
 `env.MCP_TIMEOUT` w milisekundach (wpisany automatycznie, jeśli brak jawnej
