@@ -1,7 +1,8 @@
 # ai-profiles
 
-Repozytorium lokalnych profili OpenCode. Umożliwia instalowanie, aktualizowanie,
-przełączanie i walidowanie zestawów umiejętności oraz konfiguracji dla projektów.
+Repozytorium profili dla narzędzi programistycznych i agentów AI. Umożliwia
+instalowanie, aktualizowanie, przełączanie i walidowanie zestawów umiejętności
+oraz konfiguracji dla projektów.
 Wymagania: Rust/Cargo 1.85+, Git i Make na Linux/Unix. Instalator buduje
 natywne narzędzia Rust; Python nie jest wymagany. Zainstalowane runtime nie
 potrzebują Cargo ani dostępu do repozytorium.
@@ -21,7 +22,8 @@ make test
 
 Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
 `core/rust/target/release/ai-profile help`.
-Po instalacji, aktualizacji lub zmianie profilu zrestartuj OpenCode.
+Po instalacji, aktualizacji lub zmianie profilu uruchom ponownie narzędzie,
+w którym korzystasz z profilu.
 
 ## Dokumentacja
 
@@ -29,6 +31,5 @@ Po instalacji, aktualizacji lub zmianie profilu zrestartuj OpenCode.
 - [MCP: rejestr, konfiguracja lokalna, adapter i launchery](mcp/README.md)
 - [Instrukcja profilu WordPress](profiles/wordpress/README.md)
 
-Każdy profil może dostarczać własny `.opencode/ai-profile/README.md` z instrukcjami
-projektowymi. README profilu WordPress jest samodzielną instrukcją instalowaną
-wraz z profilem.
+Każdy profil może dostarczać własny plik README z instrukcjami projektowymi.
+README profilu WordPress jest samodzielną instrukcją instalowaną wraz z profilem.

@@ -6,4 +6,3 @@
 - dodac blokade na bump wersji lub jakos bardziej pokierowac agenta ( obecny problem, trakuje mala zmianke jako major wersje )
 - nie uruchamianie wszystkich testow na raz oraz cache testow jesli nie ma obecnie
 - agent przy blednym pluginie sie zacinal w momencie aktualizacji pliku .md ( nie widac bylo w TUI po prostu ciagle pracowal jakis podlgad by sie przydal )
-- podobnie jak mcp zrobic reuzywalne skille ktore beda zalaczane pod konkretny profil
