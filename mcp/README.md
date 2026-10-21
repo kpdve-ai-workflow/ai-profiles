@@ -115,54 +115,41 @@ dotyczące SQL znajdują się w [instrukcji WordPress](../profiles/wordpress/REA
 ## Playwright i audyty WCAG
 
 Profile WordPress i React wybierają serwer `playwright` oraz skill
-`wcag-audit`. Pozostałe profile nie otrzymują przeglądarki. Launcher uruchamia
-pojedynczy prebuilt image przez Docker `-i` bez TTY, projekt montuje tylko do
-odczytu, a `reports/wcag` zapisywalnie pod tą samą ścieżką hosta. Każda sesja
-klienta ma własny kontener i sesję przeglądarki. Brak obrazu wywołuje pull,
-nigdy lokalny build.
+`wcag-audit`. Pozostałe profile nie otrzymują konfiguracji przeglądarki.
+`make install PROFILE=<profil> PROJECT=<projekt>` dostarcza do projektu kompletny
+kontekst budowy i konfigurację Compose w `.opencode/mcp/playwright/`. Instalacja
+nie wymaga Dockera i nie buduje ani nie pobiera obrazu.
 
-Użytkownicy instalują profil zwykłym `make install PROFILE=<profil>
-PROJECT=<projekt>`. Docker jest wymagany podczas korzystania z MCP; przy pierwszym
-starcie launcher automatycznie pobiera brakujący obraz. Nie trzeba uruchamiać
-npm, tworzyć `node_modules`, instalować Node/Chromium na hoście, budować obrazu
-ani ręcznie uruchamiać kontenera. Node, npm dependencies, Chromium i jego
-systemowe biblioteki znajdują się w obrazie. Docker-managed image storage oraz
-żądane raporty w `reports/wcag/` są oczekiwanymi danymi hosta; hostowe instalacje
-npm/przeglądarki nie są wymagane.
+### Przygotowanie w repozytorium docelowym
 
-Deskryptor `mcp/launchers/playwright/image.json` wskazuje
-`ghcr.io/kpdve-ai-workflow/playwright:0.1.0`. Pierwszy release nie został
-opublikowany, więc Playwright nie jest jeszcze dostępny w projektach.
-
-### Ręczne wydanie obrazu
-
-Źródła są w `mcp/images/playwright/`. Dokładne wersje `@playwright/mcp` i
-`axe-core` deklaruje bezpośrednio Dockerfile; nie utrzymujemy tutaj npm manifestu
-ani lockfile. Maintainerzy budują, testują i publikują nowy tag obrazu. Przypięte
-wersje bezpośrednich zależności nie gwarantują identycznego rozstrzygnięcia
-zależności przechodnich przy przyszłych rebuildach; dystrybucja jednego już
-zbudowanego obrazu zapewnia wszystkim użytkownikom ten sam zestaw. Nie nadpisuj
-istniejących wersji. Pierwsze wydanie:
+Z katalogu głównego projektu, mając działający Docker Engine i plugin Compose:
 
 ```sh
-docker login ghcr.io
-docker buildx build --platform linux/amd64,linux/arm64 \
-  --tag ghcr.io/kpdve-ai-workflow/playwright:0.1.0 \
-  --push mcp/images/playwright
-docker buildx imagetools inspect ghcr.io/kpdve-ai-workflow/playwright:0.1.0
+mkdir -p reports/wcag
+docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
 ```
 
-Przed publikacją sprawdź dostępność Chromium na obu architekturach i test MCP.
-Zapisz digest z manifestu w notatkach release. Po potwierdzeniu publikacji
-deskryptor `image.json` jest źródłem runtime tagu. Kolejne wydanie publikuje
-nowy niezmienny tag, a następnie zmienia deskryptor i wymaga `make update` w
-projektach. Obecnie descriptor nie zawiera digestu, bo nie ma opublikowanego
-digestu do wpisania. Nie ma workflow publikującego; publikacja jest ręczna.
+Następnie zrestartuj klienta AI. Jak dla pozostałych lokalnych MCP, wspólny
+adapter `ai-profile-mcp` odczytuje konfigurację i uruchamia jej komendę — tutaj
+standardowe `docker compose run` bez TTY. Nie ma dedykowanego launchera Playwright,
+publikacji GHCR, tokenów ani automatycznego buildu/pull obrazu. Nie uruchamiaj
+`compose up -d`: każdy klient ma własny kontener i sesję przeglądarki.
 
-Obraz bazuje na Node `22.16.0-bookworm-slim`; npm dependencies, Chromium i
-systemowe biblioteki są instalowane wewnątrz obrazu w czasie budowy. Skrypt axe jest
-przekazywany przez opcję MCP `--init-script`, więc ładuje się po nawigacji i w
-nowych stronach, nie wymaga CDN ani instalacji w aplikacji.
+Compose montuje projekt tylko do odczytu w `/workspace`, a `reports/wcag`
+zapisywalnie. Katalog raportów musi wcześniej utworzyć użytkownik projektu;
+kontener dopasowuje do niego UID/GID. Nie montuje Docker socketu. Opcjonalne
+`HOST_UID` i `HOST_GID` pozwalają jawnie wybrać użytkownika.
+
+Dockerfile deklaruje dokładne wersje `@playwright/mcp` i `axe-core`, bez npm
+manifestu i lockfile w repozytorium. Node, npm dependencies, Chromium i biblioteki
+systemowe są instalowane wyłącznie wewnątrz obrazu. Skrypt axe jest ładowany przez
+`--init-script` również po kolejnych nawigacjach. Nie potrzeba hostowego Node/npm,
+cache przeglądarki ani CDN. Przypięte wersje bezpośrednie nie gwarantują identycznych
+zależności przechodnich w przyszłych rebuildach.
+
+Po aktualizacji dostarczonej receptury użytkownik jawnie ponawia build w projekcie.
+Aktualizacja i uninstall nie zarządzają lokalnymi obrazami ani raportami.
+Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwright/README.md).
 
 ### Sieć, certyfikaty i artefakty
 
@@ -184,19 +171,22 @@ Przykład konfiguracji lokalnej DDEV (sprawdź nazwę sieci u siebie):
 
 Używaj URL dostępnego w tej sieci, np. `https://<projekt>.ddev.site`, nie
 `localhost` hosta. Dla lokalnego HTTPS
-`AI_PROFILE_PLAYWRIGHT_CA_CERT` wskazuje plik CA. Launcher montuje ten plik
-oddzielnie, a kontener dodaje go do systemowego magazynu CA przed startem
-Chromium; weryfikacja TLS pozostaje włączona.
+`AI_PROFILE_PLAYWRIGHT_CA_CERT` wskazuje plik CA. Włącz dodatkowo `compose.ca.yaml`
+przez lokalne `environment.COMPOSE_FILE`, zgodnie z dostarczoną instrukcją.
+Compose montuje plik oddzielnie, a kontener dodaje go do magazynów CA systemu i Chromium
+przed startem Chromium; weryfikacja TLS pozostaje włączona.
 
 Uwierzytelniony audyt może użyć `AI_PROFILE_PLAYWRIGHT_STORAGE_STATE` wskazującego
-prywatny plik storage state o prawach `0600`. Plik jest montowany tylko do
-odczytu pod oddzielną ścieżką, nie należy do raportów ani stanu instalacji.
+prywatny plik storage state o prawach `0600`. Włącz `compose.auth.yaml` przez
+`COMPOSE_FILE`. Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
+nie należy do raportów ani stanu instalacji.
 Raport, findings JSON, raw scans i screenshoty skill zapisuje w
-`reports/wcag/<timestamp>/`. Launcher nie przekazuje całego host env i nie
-montuje Docker socketu.
+`reports/wcag/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
+zadeklarowane zmienne, nie całe środowisko hosta.
 
-Obraz deklaruje `linux/amd64` i `linux/arm64`; pozostałe architektury są
-odrzucane. Potwierdź Chromium uruchomieniowo na obu przed release.
+Obraz obsługuje `linux/amd64` i `linux/arm64`; pozostałe architektury są
+odrzucane. Zakres rzeczywistych testów należy podawać oddzielnie dla każdej
+architektury; testy obrazu są w `mcp/images/playwright/tests/`.
 
 Timeouty: Codex dostaje startup/tool timeouty w sekundach. Claude dostaje
 `env.MCP_TIMEOUT` w milisekundach (wpisany automatycznie, jeśli brak jawnej

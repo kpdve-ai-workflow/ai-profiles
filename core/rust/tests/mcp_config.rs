@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::{
     error::McpConfigError,
-    mcp::config::{merge, native_client_mcp, render, validate_servers},
+    mcp::config::{configured_mcp, merge, native_client_mcp, render, resolve, validate_servers},
 };
 
 #[test]
@@ -67,4 +67,51 @@ fn native_clients_render_local_remote_disabled_and_timeout_entries() {
         claude["figma"]["headers"]["Authorization"],
         "Bearer ${FIGMA_TOKEN}"
     );
+}
+
+#[test]
+fn playwright_uses_the_shared_adapter_and_keeps_runtime_overrides() {
+    let project = tempfile::Builder::new()
+        .prefix("project with spaces, ")
+        .tempdir()
+        .unwrap();
+    std::fs::create_dir(project.path().join(".opencode")).unwrap();
+    std::fs::write(
+        project.path().join(".opencode/ai-profile.local.json"),
+        serde_json::to_vec(&json!({"mcp":{"playwright":{
+            "env_file":".env.playwright",
+            "environment":{"AI_PROFILE_PLAYWRIGHT_NETWORK":"{env:DEV_NETWORK}"}
+        }}}))
+        .unwrap(),
+    )
+    .unwrap();
+    let definition: serde_json::Value =
+        serde_json::from_str(include_str!("../../../mcp/servers/playwright.json")).unwrap();
+    let base = json!({"playwright":definition});
+    let base = base.as_object().unwrap();
+    let resolved = resolve(project.path(), base).unwrap();
+    assert_eq!(resolved.servers["playwright"]["command"][0], "docker");
+    assert_eq!(resolved.servers["playwright"]["command"][1], "compose");
+    assert_eq!(
+        resolved.servers["playwright"]["env_file"],
+        ".env.playwright"
+    );
+    assert_eq!(
+        resolved.servers["playwright"]["environment"]["AI_PROFILE_PLAYWRIGHT_NETWORK"],
+        "{env:DEV_NETWORK}"
+    );
+
+    let rendered = configured_mcp(project.path(), base).unwrap().servers;
+    let adapter = project.path().join(".opencode/ai-profile-mcp");
+    assert_eq!(
+        rendered["playwright"]["command"],
+        json!([adapter.to_str().unwrap(), "playwright"])
+    );
+    assert!(rendered["playwright"].get("environment").is_none());
+    assert!(rendered["playwright"].get("env_file").is_none());
+    for client in ["codex", "claude"] {
+        let native = native_client_mcp(&rendered, client).unwrap();
+        assert_eq!(native["playwright"]["command"], adapter.to_str().unwrap());
+        assert_eq!(native["playwright"]["args"], json!(["playwright"]));
+    }
 }

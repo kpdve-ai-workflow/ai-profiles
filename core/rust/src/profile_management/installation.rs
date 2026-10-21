@@ -291,6 +291,10 @@ pub(crate) fn apply_profile(
         "OK: profil {profile} w {}. Zrestartuj OpenCode.",
         project.display()
     );
+    if base_mcp.contains_key("playwright") {
+        println!("Playwright setup (from the target project): mkdir -p reports/wcag && docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright");
+        println!("Playwright setup guide: .opencode/mcp/playwright/README.md (requires Docker Engine and Compose; no automatic build or pull).");
+    }
     println!(
         "Claude plugin activation: {}",
         claude_state

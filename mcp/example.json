@@ -29,9 +29,14 @@
     },
     "playwright": {
       "type": "local",
-      "command": [".opencode/mcp/playwright/playwright-launcher"],
+      "command": [
+        "docker", "compose", "--project-directory", ".",
+        "run", "--rm", "--no-deps", "--pull", "never", "-T", "playwright"
+      ],
       "enabled": true,
-      "environment": {}
+      "environment": {
+        "COMPOSE_FILE": ".opencode/mcp/playwright/compose.yaml"
+      }
     },
     "novamira": {
       "type": "local",

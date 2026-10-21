@@ -15,6 +15,9 @@ that require human judgment. See the [W3C evaluation guidance](https://www.w3.or
 
 1. Discover the available Playwright tool names and inspect their input schemas
    before calling them. Use that current browser session throughout the audit.
+   If the local Docker image or report directory is missing, report a setup
+   blocker and refer to `.opencode/mcp/playwright/README.md`. Do not build the
+   image or install dependencies as part of the audit.
 2. Default to WCAG 2.2 AA. If the requester names another target, use it and
    record it in the report.
 3. Confirm `window.axe` is available after navigation and record

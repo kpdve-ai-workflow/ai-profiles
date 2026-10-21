@@ -126,6 +126,185 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     (source, context)
 }
 
+const PLAYWRIGHT_FILES: [&str; 8] = [
+    "Dockerfile",
+    "entrypoint.sh",
+    "LICENSES.md",
+    "README.md",
+    ".dockerignore",
+    "compose.yaml",
+    "compose.ca.yaml",
+    "compose.auth.yaml",
+];
+
+fn playwright_source() -> (tempfile::TempDir, RepositoryContext) {
+    let (source, context) = native_source();
+    put(
+        source.path(),
+        "profiles/wordpress/mcp.json",
+        br#"{"servers":["playwright"]}"#,
+    );
+    put(
+        source.path(),
+        "mcp/servers/playwright.json",
+        include_bytes!("../../../mcp/servers/playwright.json"),
+    );
+    let images = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mcp/images/playwright");
+    for filename in PLAYWRIGHT_FILES {
+        put(
+            source.path(),
+            &format!("mcp/images/playwright/{filename}"),
+            &fs::read(images.join(filename)).unwrap(),
+        );
+    }
+    (source, context)
+}
+
+fn disable_native_activation(project: &Path) {
+    let canonical = project.canonicalize().unwrap();
+    let marketplace = format!(
+        "ai-profiles-{}",
+        &sha(canonical.to_string_lossy().as_bytes())[..12]
+    );
+    put(
+        project,
+        ".claude/settings.json",
+        &json_bytes(&json!({"enabledPlugins":{format!("ai-profile@{marketplace}"):false}}))
+            .unwrap(),
+    );
+    put(
+        project,
+        ".codex/config.toml",
+        format!("[plugins.\"ai-profile@{marketplace}\"]\nenabled = false\n").as_bytes(),
+    );
+}
+
+#[test]
+fn playwright_distributes_build_config_only_to_selected_profiles() {
+    let (_source, context) = native_source();
+    assert!(desired_files(&context, "wordpress")
+        .unwrap()
+        .iter()
+        .all(|file| !file.relative_path.starts_with(".opencode/mcp/playwright/")));
+
+    let (_source, context) = playwright_source();
+    let project = tempfile::tempdir().unwrap();
+    disable_native_activation(project.path());
+    apply_profile(&context, project.path(), "wordpress").unwrap();
+    let state = read_json(&project.path().join(".opencode/ai-profile-state.json")).unwrap();
+    for filename in PLAYWRIGHT_FILES {
+        let relative = format!(".opencode/mcp/playwright/{filename}");
+        let contents = fs::read(project.path().join(&relative)).unwrap();
+        assert_eq!(state["files"][&relative], sha(&contents));
+    }
+    assert_eq!(
+        fs::read_dir(project.path().join(".opencode/mcp/playwright"))
+            .unwrap()
+            .count(),
+        PLAYWRIGHT_FILES.len()
+    );
+    assert!(!project.path().join("reports").exists());
+    assert!(!project.path().join("node_modules").exists());
+    assert!(!project
+        .path()
+        .join(".opencode/mcp/playwright/tests")
+        .exists());
+    let opencode = read_json(&project.path().join("opencode.json")).unwrap();
+    assert_eq!(opencode["mcp"]["playwright"]["command"][1], "playwright");
+    assert_eq!(
+        read_json(&project.path().join(".mcp.json")).unwrap()["mcpServers"]["playwright"]["args"],
+        json!(["playwright"])
+    );
+    let before = state.clone();
+    apply_profile(&context, project.path(), "wordpress").unwrap();
+    assert_eq!(
+        read_json(&project.path().join(".opencode/ai-profile-state.json")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn missing_playwright_build_sources_fail_before_project_writes() {
+    for filename in PLAYWRIGHT_FILES {
+        let (source, context) = playwright_source();
+        fs::remove_file(
+            source
+                .path()
+                .join(format!("mcp/images/playwright/{filename}")),
+        )
+        .unwrap();
+        let project = tempfile::tempdir().unwrap();
+        assert!(apply_profile(&context, project.path(), "wordpress").is_err());
+        assert_eq!(fs::read_dir(project.path()).unwrap().count(), 0);
+    }
+}
+
+#[test]
+fn playwright_update_retires_owned_launcher_and_preserves_project_data() {
+    let (_source, context) = playwright_source();
+    let project = tempfile::tempdir().unwrap();
+    disable_native_activation(project.path());
+    apply_profile(&context, project.path(), "wordpress").unwrap();
+    let state_path = project.path().join(".opencode/ai-profile-state.json");
+    let mut state = read_json(&state_path).unwrap();
+    for filename in ["playwright-launcher", "image.json"] {
+        let relative = format!(".opencode/mcp/playwright/{filename}");
+        put(project.path(), &relative, b"old managed runtime");
+        state["files"][&relative] = json!(sha(b"old managed runtime"));
+    }
+    state["mcp_base"]["playwright"]["command"] =
+        json!([".opencode/mcp/playwright/playwright-launcher"]);
+    put(
+        project.path(),
+        ".opencode/ai-profile-state.json",
+        &json_bytes(&state).unwrap(),
+    );
+    put(project.path(), "reports/wcag/report.md", b"keep report");
+    put(project.path(), ".private/auth.json", b"keep authentication");
+
+    apply_profile(&context, project.path(), "wordpress").unwrap();
+    for filename in ["playwright-launcher", "image.json"] {
+        assert!(!project
+            .path()
+            .join(format!(".opencode/mcp/playwright/{filename}"))
+            .exists());
+    }
+    crate::profile_management::uninstall::uninstall(&context, project.path()).unwrap();
+    assert!(!project
+        .path()
+        .join(".opencode/mcp/playwright/Dockerfile")
+        .exists());
+    assert_eq!(
+        fs::read(project.path().join("reports/wcag/report.md")).unwrap(),
+        b"keep report"
+    );
+    assert_eq!(
+        fs::read(project.path().join(".private/auth.json")).unwrap(),
+        b"keep authentication"
+    );
+}
+
+#[test]
+fn modified_playwright_build_file_blocks_update_without_overwriting_it() {
+    let (_source, context) = playwright_source();
+    let project = tempfile::tempdir().unwrap();
+    disable_native_activation(project.path());
+    apply_profile(&context, project.path(), "wordpress").unwrap();
+    let state_path = project.path().join(".opencode/ai-profile-state.json");
+    let before = fs::read(&state_path).unwrap();
+    put(
+        project.path(),
+        ".opencode/mcp/playwright/Dockerfile",
+        b"user change",
+    );
+    assert!(apply_profile(&context, project.path(), "wordpress").is_err());
+    assert_eq!(fs::read(&state_path).unwrap(), before);
+    assert_eq!(
+        fs::read(project.path().join(".opencode/mcp/playwright/Dockerfile")).unwrap(),
+        b"user change"
+    );
+}
+
 #[test]
 fn renamed_wordpress_profile_keeps_its_native_payload() {
     let (_source, context) = native_source();

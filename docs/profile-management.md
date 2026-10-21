@@ -193,9 +193,18 @@ uruchom przez `make validate`; szczegóły walidacji MCP są w dokumentacji MCP.
 
 Starsze instalacje zyskają konfigurację Codex i Claude Code przez
 `make update PROJECT=<projekt>`. Przygotowanie konfiguracji nie wymaga obecności
-CLI tych klientów. Playwright WCAG wymaga działającego Dockera; przy starcie MCP
-launcher automatycznie pobiera brakujący obraz
-`ghcr.io/kpdve-ai-workflow/playwright:0.1.0`. Instalator nie uruchamia npm,
-nie instaluje hostowych przeglądarek i nigdy nie buduje obrazu. Pierwsze wydanie
-obrazu pozostaje nieopublikowane, więc do czasu publikacji pull zakończy się
-czytelnym błędem. Procedura maintainerów znajduje się w `mcp/README.md`.
+CLI tych klientów. Dla Playwright WCAG instalator dostarcza Dockerfile i Compose
+do `.opencode/mcp/playwright/`, bez uruchamiania Dockera lub npm. Przygotowanie
+wykonuje użytkownik w katalogu głównym docelowego repozytorium:
+
+```sh
+mkdir -p reports/wcag
+docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+```
+
+Do korzystania potrzebny jest Docker Engine i plugin Compose. Wspólny adapter MCP
+uruchamia standardową komendę z konfiguracji. Nie ma osobnego launchera Playwright,
+automatycznego buildu/pull ani zależności od publikacji GHCR. Wszystkie zależności
+Playwright są instalowane w obrazie, nie na hoście. Po zmianie receptury wykonaj
+ponownie build. Instrukcja dostarczana do projektu jest w
+`.opencode/mcp/playwright/README.md`; szczegóły wspólne są w `mcp/README.md`.

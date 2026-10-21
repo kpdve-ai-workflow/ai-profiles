@@ -100,12 +100,28 @@ pub(crate) fn desired_files(
             )?;
         }
         if name == "playwright" {
-            insert_native(
-                context,
-                &mut files,
-                "playwright-launcher",
-                ".opencode/mcp/playwright/playwright-launcher",
-            )?;
+            // Distribute a self-contained build context and standard Docker config.
+            for filename in [
+                "Dockerfile",
+                "entrypoint.sh",
+                "LICENSES.md",
+                "README.md",
+                ".dockerignore",
+                "compose.yaml",
+                "compose.ca.yaml",
+                "compose.auth.yaml",
+            ] {
+                let source = file_path(
+                    &context.sources,
+                    &format!("mcp/images/playwright/{filename}"),
+                )?;
+                insert_file(
+                    &mut files,
+                    &format!(".opencode/mcp/playwright/{filename}"),
+                    &source,
+                    true,
+                )?;
+            }
         }
         let launcher = file_path(&context.sources, &format!("mcp/launchers/{name}"))?;
         if launcher.exists() {

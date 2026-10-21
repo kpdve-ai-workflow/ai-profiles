@@ -1,0 +1,25 @@
+services:
+  playwright:
+    image: ai-profiles-playwright:0.1.0
+    pull_policy: never
+    init: true
+    stdin_open: true
+    tty: false
+    working_dir: /workspace
+    network_mode: "${AI_PROFILE_PLAYWRIGHT_NETWORK:-bridge}"
+    environment:
+      HOST_UID: "${HOST_UID:-}"
+      HOST_GID: "${HOST_GID:-}"
+      PLAYWRIGHT_MCP_OUTPUT_DIR: /workspace/reports/wcag
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./reports/wcag
+        target: /workspace/reports/wcag
+        bind:
+          create_host_path: false
