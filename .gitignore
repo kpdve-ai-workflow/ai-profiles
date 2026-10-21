@@ -4,3 +4,4 @@ __pycache__/
 .opencode/node_modules/
 core/rust/target/
 skills-main
+.test-vm/

@@ -120,6 +120,13 @@ dotyczące SQL znajdują się w [instrukcji WordPress](../profiles/wordpress/REA
 
 ## Playwright i audyty WCAG
 
+Pełny test repozytorium uruchamia `make test-playwright` w trwałej VM Debian 13
+amd64 zarządzanej przez Incus (Docker i Node.js 24 LTS wewnątrz gościa).
+Etap zainstalowanego adaptera wymaga Node na maszynie wykonującej skrypt, czyli
+w VM; produkcyjne użycie MCP opisane poniżej go nie wymaga na hoście.
+`network_mode: host` w integracji oznacza sieć VM, nie fizycznego hosta.
+Wymagania, cache i eksport raportów: [testowanie](../docs/testing.md).
+
 Profile WordPress i React wybierają serwer `playwright` oraz skill
 `wcag-audit`. Pozostałe profile nie otrzymują konfiguracji przeglądarki.
 `make install PROFILE=<profil> PROJECT=<projekt>` dostarcza do projektu kompletny

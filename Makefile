@@ -8,7 +8,7 @@ DESCRIPTION ?=
 PART ?= patch
 .DEFAULT_GOAL := help
 
-.PHONY: help create rename check-profile check-new-name check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy
+.PHONY: help create rename check-profile check-new-name check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy test-playwright test-all test-vm-up test-vm-stop test-vm-sync test-vm-reprovision _test-guest _validate-rust-migration-guest _check-test-guest
 
 help:
 	@cat core/rust/help.txt
@@ -49,7 +49,33 @@ validate:
 bump: check-profile
 	$(PROFILE_CLI) bump "$(PROFILE)" --part "$(PART)"
 
-test:
+test validate-rust-migration test-playwright test-all:
+	@if test -f /var/lib/ai-profiles-vm/ready; then \
+	  case "$@" in \
+	    test) $(MAKE) _test-guest ;; \
+	    validate-rust-migration) $(MAKE) _validate-rust-migration-guest ;; \
+	    *) bash tests/vm/guest.sh "$@" "$$(cat /proc/sys/kernel/random/uuid)" ;; \
+	  esac; \
+	else bash tests/vm/host.sh "$@"; fi
+
+.PHONY: test-vm-logs
+test-vm-logs:
+	@bash tests/vm/logs.sh
+
+test-vm-up:
+	@bash tests/vm/host.sh up
+test-vm-stop:
+	@bash tests/vm/host.sh stop
+test-vm-sync:
+	@bash tests/vm/host.sh sync
+test-vm-reprovision:
+	@bash tests/vm/host.sh reprovision
+
+_check-test-guest:
+	@test -f /var/lib/ai-profiles-vm/ready && test "$$(id -u):$$(id -g)" = 1000:1000 || \
+	  (echo 'Wymagana przygotowana VM i tester 1000:1000' >&2; exit 1)
+
+_test-guest: _check-test-guest
 	cargo test --manifest-path $(RUST_MANIFEST) --locked --all-targets
 
 rust-build:
@@ -61,7 +87,7 @@ create rename install update uninstall switch status validate bump migrate-legac
 migrate-legacy: check-project
 	$(PROFILE_CLI) migrate-legacy --accept-existing --project "$(PROJECT)"
 
-validate-rust-migration:
+_validate-rust-migration-guest: _check-test-guest
 	@set -eu; \
 	log=$$(mktemp); active=initializing; \
 	trap 'rm -f "$$log"' EXIT; \

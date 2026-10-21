@@ -1,37 +1,44 @@
-# Container smoke test
+# Test integracyjny Playwright
 
-From the repository root:
+Z katalogu głównego repozytorium:
+
+```sh
+make test-playwright
+```
+
+Test działa jako UID/GID 1000:1000 w trwałej VM Debian 13 amd64 Incus/QEMU/KVM.
+Host wymaga przygotowanego Incus, rsync i narzędzi opisanych w
+[instrukcji testowania](../../../../docs/testing.md), ale nie Cargo, Node ani
+Dockera. VM wymaga Docker Engine, Compose, GNU timeout, Rust i **Node.js 24 LTS**:
+Node poza kontenerem jest niezbędny jako klient MCP w etapie zainstalowanego
+adaptera. Provisioning dostarcza te zależności wewnątrz VM.
+
+Runner w gościu zawsze wykonuje istniejące polecenia:
 
 ```sh
 docker build --tag ai-profiles-playwright:dependency-smoke mcp/images/playwright
 sh mcp/images/playwright/tests/run.sh ai-profiles-playwright:dependency-smoke
 ```
 
-Requires Docker Engine, the Compose plugin, and host `timeout` (GNU coreutils), not host Node/npm. No manual
-container startup, network service, browser override, or package installation is
-needed. The runner exercises the distributed Compose configuration with a
-test-only image/entrypoint override. The image's Node starts the production
-entrypoint over MCP stdio; the entrypoint infers UID/GID 1000:1000 from the
-disposable report directory's owner. The harness also drops to that identity.
-The fixture HTTP server is internal to the container, not an MCP HTTP transport.
+Nie trzeba ręcznie uruchamiać usług ani przeglądarki. Test używa produkcyjnego
+Compose z testowym nadpisaniem obrazu/entrypointu. Sprawdza MCP stdio, schematy
+i roots, Chromium, axe 4.14.0, naruszenia button-name/image-alt, screenshoty
+względne/bezwzględne/automatyczne, trwałość init script po nawigacji,
+HTTPS i cookie uwierzytelnienia. Następnie rzeczywiste `make install PROFILE=react`
+i zainstalowany adapter wykonują pełny drugi etap. Nie ma mockowania adaptera.
 
-Disposable CA/server certificates and synthetic authentication state are generated
-using the image's OpenSSL, never host packages or real credentials. The CA and auth
-Compose overlays are exercised too; TLS verification remains enabled.
+Kontener wnioskuje UID/GID 1000:1000 z właściciela świeżego katalogu raportów.
+Mount projektu jest read-only, zagnieżdżony mount raportów zapisywalny; tylko
+tymczasowy katalog raportów otrzymuje testowe uprawnienia. Socket Docker nigdy
+nie jest montowany. `network_mode: host` oznacza przestrzeń sieciową VM.
 
-The test discovers MCP schemas, navigates to a controlled fixture, checks axe
-4.14.0 and the `button-name`/`image-alt` violations, captures a PNG, and navigates
-again to check the init script survives navigation, and then checks trusted HTTPS
-and an authentication cookie loaded from private storage state. It checks that the project
-mount is read-only and the nested report mount writable. Raw MCP scan output,
-parsed axe results, tool discovery, and the screenshot are retained in the fresh
-temporary directory printed by the runner (set `TMPDIR` to choose its parent).
-Only that test-created directory is made writable for UID 1000; no existing
-project or report permissions are changed. Remove the printed test directory
-when its artifacts are no longer needed.
+Świeże CA/certyfikaty i syntetyczny auth state powstają przez OpenSSL obrazu;
+TLS pozostaje weryfikowany. Każdy przebieg ma osobny TMPDIR. JSON MCP/axe oraz
+PNG trafiają do `.test-vm/artifacts/<run>/export/` także po błędzie; klucze,
+auth state i cały tymczasowy projekt nie są eksportowane. Scratch pozostaje
+w gościu do świadomego usunięcia. Cargo target/registry i warstwy Docker
+przetrwają kolejne wywołania oraz `make test-vm-stop`; testy nie są pomijane.
 
-MCP requests have 30-second deadlines, the harness a 120-second deadline, and
-Docker a 180-second outer deadline. The runner removes only its uniquely named
-container on exit, including failures and interrupts. It never publishes an
-image. Output reports the local image architecture and the runtime architecture;
-testing one architecture does not verify the other supported architecture.
+Dotychczasowe deadline pozostają: MCP 30 s, harness 120 s, zewnętrzny Docker
+180 s. Runner usuwa tylko własne unikalnie nazwane kontenery także po błędzie
+i przerwaniu. Obraz nie jest publikowany. Test amd64 nie weryfikuje arm64.

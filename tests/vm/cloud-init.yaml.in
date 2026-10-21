@@ -1,0 +1,15 @@
+#cloud-config
+# Renderowane przez host.sh przed pierwszym startem; bez sekretów hosta.
+users: []
+write_files:
+  - path: /var/lib/ai-profiles-vm/minimum-bytes
+    owner: root:root
+    permissions: '0644'
+    content: '@MINIMUM_BYTES@'
+  - path: /usr/local/sbin/ai-profiles-provision
+    owner: root:root
+    permissions: '0700'
+    encoding: b64
+    content: @PROVISION_BASE64@
+runcmd:
+  - [bash, /usr/local/sbin/ai-profiles-provision]
