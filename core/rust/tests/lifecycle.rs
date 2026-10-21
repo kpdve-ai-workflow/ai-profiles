@@ -117,6 +117,21 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
         "opencode.json",
         &json_bytes(&json!({"mcp":old_mcp,"theme":"keep"})).unwrap(),
     );
+    let canonical_project = project.path().canonicalize().unwrap();
+    let marketplace = format!(
+        "ai-profiles-{}",
+        &sha(canonical_project.to_string_lossy().as_bytes())[..12]
+    );
+    put(
+        project.path(),
+        ".claude/settings.json",
+        &json_bytes(&json!({"enabledPlugins":{format!("ai-profile@{marketplace}"):false}})).unwrap(),
+    );
+    put(
+        project.path(),
+        ".codex/config.toml",
+        format!("[plugins.\"ai-profile@{marketplace}\"]\nenabled = false\n").as_bytes(),
+    );
 
     apply_profile(&context, project.path(), "wordpress").unwrap();
     assert!(!project.path().join(legacy).exists());
@@ -126,7 +141,7 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
     );
     for (relative, expected) in [
         (
-            ".opencode/skills/test-gap-discovery/scripts/inventory-tests",
+            ".opencode/ai-profile/plugin/skills/test-gap-discovery/scripts/inventory-tests",
             "test-inventory",
         ),
         (".opencode/ai-profile-mcp", "ai-profile-mcp"),
@@ -145,6 +160,8 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
     }
     let state_path = project.path().join(".opencode/ai-profile-state.json");
     let state = read_json(&state_path).unwrap();
+    assert_eq!(state.pointer("/native/claude/activation").and_then(serde_json::Value::as_str), Some("disabled"));
+    assert_eq!(state.pointer("/native/codex/activation").and_then(serde_json::Value::as_str), Some("disabled"));
     assert!(state["files"]
         .as_object()
         .unwrap()

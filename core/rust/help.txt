@@ -45,7 +45,3 @@ ARGUMENTY
   PART         Opcjonalny rodzaj zmiany wersji dla bump.
   NEW_NAME     Wymagana nowa nazwa dla rename: małe litery/cyfry i myślniki.
 
-Dystrybuowane skille są przechowywane raz w skills/<nazwa>/, a profile wybierają
-je w profiles/<profil>/skills.json. Edycje wyboru trafiają do projektu przez
-make update PROJECT=<projekt>.
-

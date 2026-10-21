@@ -226,6 +226,10 @@ pub(crate) enum PayloadError {
     #[error(transparent)]
     Filesystem(#[from] FilesystemError),
     #[error(transparent)]
+    Codec(#[from] CodecError),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+    #[error(transparent)]
     Mcp(#[from] McpConfigError),
 }
 
@@ -241,6 +245,8 @@ pub(crate) enum InstallationError {
     GitignoreRead,
     #[error("Nieprawidłowy stan profilu instalacji")]
     InvalidState,
+    #[error("Natywna konfiguracja pluginów: {0}")]
+    Native(String),
     #[error("Błąd systemu plików dla {path}: {source}")]
     Io {
         path: PathBuf,
@@ -269,6 +275,8 @@ pub(crate) enum UninstallError {
     NoInstalledProfile,
     #[error("Nieprawidłowy stan profilu instalacji")]
     InvalidState,
+    #[error("Natywna konfiguracja pluginów: {0}")]
+    Native(String),
     #[error("Błąd systemu plików dla {path}: {source}")]
     Io {
         path: PathBuf,
@@ -289,6 +297,8 @@ pub(crate) enum UninstallError {
 pub(crate) enum StatusError {
     #[error("Nieprawidłowy stan profilu")]
     InvalidState,
+    #[error("Natywna konfiguracja pluginów: {0}")]
+    Native(String),
     #[error("Błąd systemu plików dla {path}: {source}")]
     Io {
         path: PathBuf,

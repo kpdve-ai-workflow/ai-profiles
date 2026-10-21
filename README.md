@@ -25,6 +25,13 @@ Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
 Po instalacji, aktualizacji lub zmianie profilu uruchom ponownie narzędzie,
 w którym korzystasz z profilu.
 
+Wybrane skille są dystrybuowane raz do
+`.opencode/ai-profile/plugin/skills/`. OpenCode otrzymuje jawne źródło skills;
+repozytorium nie instaluje kopii pod `.agents/skills/` ani `.claude/skills/`.
+Wtyczki Claude Code i Codex wymagają natywnej rejestracji i zaufania projektu.
+Skill może się załadować bez serwera MCP wymaganego przez jego instrukcje;
+eksport MCP do Claude/Codex nie jest wykonywany.
+
 ## Dokumentacja
 
 - [Zarządzanie profilami, wersjami i instalacjami](docs/profile-management.md)

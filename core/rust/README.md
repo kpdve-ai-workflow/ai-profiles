@@ -65,7 +65,7 @@ project writes; direct Cargo users must build all release binaries there first.
 | `ai-profile-mcp` | `.opencode/ai-profile-mcp` |
 | `mariadb-launcher` | `.opencode/mcp/mariadb/mariadb-launcher` (selected MariaDB) |
 | `restore-updraft` | `.opencode/ai-profile/scripts/restore-updraft` (WordPress) |
-| `test-inventory` | `.opencode/skills/test-gap-discovery/scripts/inventory-tests` |
+| `test-inventory` | `.opencode/ai-profile/plugin/skills/test-gap-discovery/scripts/inventory-tests` |
 
 Installed files are copied, hashed and managed through the existing ownership
 checks. Update removes previously managed Python payloads only after verifying

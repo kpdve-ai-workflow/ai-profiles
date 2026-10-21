@@ -52,7 +52,21 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
         .to_owned();
     let installed = old.get("version").and_then(Value::as_str);
 
-    let files = desired_files(context, profile)?;
+    let profile_metadata = profile_metadata(context, profile)?;
+    let files = crate::profile_management::native::project_files(
+        project,
+        profile_metadata
+            .get("description")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+        profile_metadata
+            .get("version")
+            .and_then(Value::as_str)
+            .unwrap_or("1.0.0"),
+        Some(&old),
+        desired_files(context, profile)?,
+    )
+    .map_err(StatusError::Native)?;
     let mut expected_hashes = Map::new();
     for file in files {
         expected_hashes.insert(file.relative_path, Value::String(sha(&file.contents)));
@@ -99,6 +113,60 @@ pub(crate) fn status(context: &RepositoryContext, project: &Path) -> Result<(), 
     println!("Installed: {}", installed.unwrap_or("UNKNOWN"));
     println!("Available: {available}");
     println!("Status: {label}");
+    if old.get("native").is_some() {
+        let (open_configured, claude_configured, claude_disabled, codex_configured, codex_disabled) =
+            crate::profile_management::native::current_status(project, &old)
+                .map_err(StatusError::Native)?;
+        println!(
+            "Project payload/configuration: {}",
+            if open_configured && claude_configured && codex_configured {
+                "prepared"
+            } else {
+                "incomplete"
+            }
+        );
+        let claude_state = old
+            .pointer("/native/claude/activation")
+            .and_then(Value::as_str)
+            .unwrap_or("pending");
+        let codex_state = old
+            .pointer("/native/codex/activation")
+            .and_then(Value::as_str)
+            .unwrap_or("pending");
+        println!(
+            "Claude plugin: {}",
+            if claude_disabled {
+                "explicitly disabled"
+            } else {
+                claude_state
+            }
+        );
+        println!("Codex last recorded native installation result: {}", if codex_disabled { "disabled (explicitly disabled by user)" } else if codex_state == "synchronized" { "synchronized (legacy result; native inventory not checked by status)" } else { codex_state });
+        println!("Codex session skill loading: not assessed; restart Codex and verify in a new session");
+        if let Some(reason) = old
+            .pointer("/native/claude/activation_reason")
+            .and_then(Value::as_str)
+        {
+            println!("Claude activation detail: {reason}");
+        }
+        if let Some(reason) = old
+            .pointer("/native/codex/activation_reason")
+            .and_then(Value::as_str)
+        {
+            println!("Codex activation detail: {reason}");
+        }
+        if let Some(stage) = old.pointer("/native/codex/activation_stage").and_then(Value::as_str) {
+            println!("Codex activation stage: {stage}");
+        }
+        if !open_configured || !claude_configured || !codex_configured {
+            println!("Native project configuration is incomplete; run update to reconcile it.");
+        }
+    } else {
+        println!("Project payload/configuration: legacy state; native activation pending");
+        println!("Claude plugin: pending");
+        println!("Codex plugin: pending");
+        println!("Codex session skill loading: not assessed; restart Codex and verify in a new session");
+    }
     println!(
         "Source commit: {}",
         old.get("source_commit")

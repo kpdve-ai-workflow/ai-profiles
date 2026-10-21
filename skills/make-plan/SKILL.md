@@ -7,7 +7,7 @@ description: Create or refactor evidence-grounded technical implementation plans
 
 ## Mission
 
-Turn approved requirements and project evidence into a **readable, executable test-first implementation handoff**, not a plan that appends tests after implementation. A human must understand the current situation within the first screen; an implementation agent must find the governing decisions, exact work, and verification without rereading repeated narratives. For behavior-changing plans, load `.agents/skills/test-gap-discovery/SKILL.md` before deriving scenarios and expected outcomes; use its methods without copying its full methodology here.
+Turn approved requirements and project evidence into a **readable, executable test-first implementation handoff**, not a plan that appends tests after implementation. A human must understand the current situation within the first screen; an implementation agent must find the governing decisions, exact work, and verification without rereading repeated narratives. For behavior-changing plans, use the `test-gap-discovery` skill before deriving scenarios and expected outcomes when it is available; use its methods without copying its full methodology here.
 
 This skill writes **plans and handoffs**, not permanent feature documentation. For as-built component documentation, use the project's documentation skill (for example `make-docs`) instead. Planning does not authorize code changes or test execution; the planner specifies an executable test-first contract but need not write or run tests unless separately assigned.
 

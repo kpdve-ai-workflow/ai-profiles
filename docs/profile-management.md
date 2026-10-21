@@ -30,12 +30,64 @@ Nazwy są bezpośrednimi nazwami katalogów pod `skills/`; wpisy muszą być
 unikalne. Dwa profile mogą wskazać ten sam katalog źródłowy, a instalator
 kopiuje każdy skill do własnego projektu. Na przykład
 `skills/make-plan/SKILL.md` trafia do
-`<projekt>/.opencode/skills/make-plan/SKILL.md`, a
-`skills/make-plan/references/plan-layout.md` do
-`<projekt>/.opencode/skills/make-plan/references/plan-layout.md`.
+`<projekt>/.opencode/ai-profile/plugin/skills/make-plan/SKILL.md`, a
+`skills/make-plan/references/plan-layout.md` do tego samego katalogu
+`references/`. To jedyna kopia dystrybucyjna skilla w projekcie.
 Nowy profil zaczyna z `{"skills":[]}`. Zmiany manifestu docierają do projektu
 przez `make update PROJECT=<projekt>`; usunięte pliki są zdejmowane zgodnie z
 kontrolą własności i hashy. Nie używaj symlinków ani kolidujących nazw.
+
+Instalacja przygotowuje wspólny plugin `ai-profile`. OpenCode otrzymuje jawny
+source skills w `opencode.json`, a Claude Code i Codex dostają natywne katalogi
+projektowe oraz włączenie pluginu. Katalog Claude znajduje się w
+`.claude-plugin/marketplace.json`, katalog Codex w
+`.agents/plugins/marketplace.json`. Identyfikator marketplace zawiera skrót
+kanonicznej ścieżki projektu, dzięki czemu projekty nie dzielą tożsamości.
+
+Przed użyciem pluginu Claude Code może wymagać zaufania repozytorium; Codex
+ładuje `.codex/config.toml` tylko w zaufanym projekcie. Instalator nie zmienia
+zaufania ani uprawnień. Gdy CLI hosta nie ma, pliki projektu są przygotowane,
+a aktywacja pozostaje oczekująca. Przy błędzie aktywacji `status` pokazuje
+oddzielnie pliki projektu i ostatni zapisany wynik instalacji natywnej; ponowne
+`make update` ponawia aktywację Codex po błędzie lub stanie oczekującym.
+Claude Code instaluje plugin przez `claude plugin install ai-profile@<marketplace>
+--scope project`; przy kolejnej aktualizacji menedżer używa `claude plugin
+update`.
+
+Codex rejestruje lokalny marketplace i instaluje plugin osobnymi poleceniami,
+uruchamianymi z katalogu projektu:
+
+```bash
+codex plugin marketplace add <bezwzględna-ścieżka-projektu> --json
+codex plugin add ai-profile@<marketplace-z-.agents/plugins/marketplace.json> --json
+```
+
+Instalator bierze nazwy z katalogu Codex i weryfikuje rejestrację oraz wynik
+przez `codex plugin list --marketplace <marketplace> --json`. Istniejąca
+rejestracja jest używana tylko wtedy, gdy jej nazwa i lokalne źródło pasują do
+projektu. Rejestracja i instalacja Codex zapisują ustawienia oraz cache w
+konfiguracji użytkownika Codex; CLI nie udostępnia tu opcji zakresu projektu.
+Stan śledzi, które zasoby natywne dodał instalator, a `uninstall` usuwa tylko te
+zasoby. Istniejące pluginy, rejestracje i jawne wyłączenie pozostają zachowane.
+
+Powtórne `make update` sprawdza inwentarz i nie powtarza `plugin add`, jeśli
+plugin jest już zainstalowany. Zmiana plików projektu bez zmiany wersji nie
+dowodzi odświeżenia zawartości cache Codex; nie potwierdzono obsługiwanego
+polecenia odświeżającego lokalny plugin, więc aktualność cache pozostaje
+niezweryfikowana. Wynik `installed` oznacza wyłącznie potwierdzenie przez
+natywny inwentarz. Nie dowodzi, że uruchomiona sesja Codex załadowała skille.
+Uruchom ponownie Codex, aby ocenić je w nowej sesji. Wpisy `Dir` lub `File` w
+selektorze wzmianek nie potwierdzają wykrycia skilla.
+
+Skill może się załadować, gdy jego wymagany serwer MCP nie jest dostępny w tym
+hoście. Instalator konfiguruje MCP wyłącznie dla OpenCode; eksport MCP do Claude
+Code ani Codex nie jest wykonywany. Skille mogą też zachowywać metadane
+`opencode/slash`, ale składnia wywołania i automatyczna aktywacja zależą od hosta.
+
+Przy aktualizacji instalacji ze starszego układu pliki z
+`.opencode/skills/<nazwa>/` są usuwane dopiero po zgodności z zapisanymi hashami.
+Lokalnie zmieniony zarządzany plik blokuje migrację; niezależne skille projektu
+pozostają nietknięte.
 Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
 w skillach. Są instalowane bez automatycznego wykonywania.
 

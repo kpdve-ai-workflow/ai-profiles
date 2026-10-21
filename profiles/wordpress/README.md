@@ -20,13 +20,13 @@ użyj `make update PROJECT=...` dla zainstalowanego WordPress albo
 
 Instalacja dostarcza:
 
-- wspólne i wordpressowe skille do `.opencode/skills/`;
+- wspólne i wordpressowe skille raz do `.opencode/ai-profile/plugin/skills/`, dostępne przez konfigurację OpenCode oraz pluginy Claude Code i Codex;
 - definicje MCP `novamira`, `figma` i `mariadb` w zarządzanej konfiguracji OpenCode;
 - adapter Rust `.opencode/ai-profile-mcp`, który uruchamia most Novamira;
 - launcher Rust `.opencode/mcp/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
 - tę instrukcję wraz z przykładami konfiguracji w `.opencode/ai-profile/README.md`;
-- skill SQL w `.opencode/skills/mcp-mariadb/`;
+- skill SQL w `.opencode/ai-profile/plugin/skills/mcp-mariadb/`;
 - skrypt importu UpdraftPlus i jego pliki pomocnicze w `.opencode/ai-profile/scripts/`.
 
 **Novamira i MariaDB są początkowo wyłączone**, aby instalacja działała bez sekretów
@@ -105,7 +105,7 @@ W katalogu **projektu WordPressa**, przed wpisaniem sekretów, dodaj do `.gitign
 
 Jeśli plik z sekretami był już śledzony przez Git, samo `.gitignore` nie wystarczy.
 Usuń go z indeksu i unieważnij ujawnione hasło. Nie zapisuj sekretów w przykładach
-wewnątrz `.opencode/skills/`: są to zarządzane, wersjonowane pliki profilu.
+wewnątrz `.opencode/ai-profile/plugin/skills/`: są to zarządzane pliki profilu.
 
 Utwórz `.env.novamira` w katalogu głównym projektu i ustaw prawa **przed** wpisaniem hasła:
 

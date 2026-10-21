@@ -22,6 +22,14 @@ pub(crate) fn uninstall(context: &RepositoryContext, project: &Path) -> Result<(
     check_files(project, Some(&old), std::iter::empty())?;
     let config_object = config.as_object().ok_or(UninstallError::InvalidState)?;
     check_mcp(config_object, Some(&old), &Map::new())?;
+    crate::profile_management::native::preflight_cleanup(project)
+        .map_err(UninstallError::Native)?;
+    let native_cleanup_warning = crate::profile_management::native::cleanup_claude(project, &old);
+    let codex_cleanup_warning = crate::profile_management::native::cleanup_codex(project, &old);
+    crate::profile_management::native::remove_claude(project, &old)
+        .map_err(UninstallError::Native)?;
+    crate::profile_management::native::remove_codex(project, &old)
+        .map_err(UninstallError::Native)?;
 
     let old_files = old
         .get("files")
@@ -34,6 +42,7 @@ pub(crate) fn uninstall(context: &RepositoryContext, project: &Path) -> Result<(
 
     remove_managed_mcp(&mut config, &old)?;
     remove_managed_instruction(&mut config, &old)?;
+    remove_managed_skill_source(&mut config, project, &old)?;
 
     let config_path = file_path(project, "opencode.json")?;
     if !is_truthy(old.get("had_config").unwrap_or(&Value::Null)) && is_schema_only(&config) {
@@ -66,6 +75,61 @@ pub(crate) fn uninstall(context: &RepositoryContext, project: &Path) -> Result<(
         "OK: profil usunięty z {}. Pozostałe pliki projektu zachowane.",
         project.display()
     );
+    if let Some(warning) = native_cleanup_warning {
+        println!("WARNING: {warning}.");
+    }
+    if let Some(warning) = codex_cleanup_warning {
+        println!("WARNING: {warning}.");
+    }
+    Ok(())
+}
+
+fn remove_managed_skill_source(
+    config: &mut Value,
+    project: &Path,
+    old: &Value,
+) -> Result<(), UninstallError> {
+    if old
+        .pointer("/native/opencode_skill_path_added")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        return Ok(());
+    }
+    let object = config.as_object_mut().ok_or(UninstallError::InvalidState)?;
+    let canonical_project = project
+        .canonicalize()
+        .map_err(|source| UninstallError::Io {
+            path: project.to_owned(),
+            source,
+        })?;
+    let source = canonical_project
+        .join(".opencode/ai-profile/plugin/skills")
+        .to_string_lossy()
+        .into_owned();
+    let remove_skills = {
+        let Some(skills) = object.get_mut("skills") else {
+            return Ok(());
+        };
+        if let Some(paths) = skills.as_array_mut() {
+            paths.retain(|entry| entry.as_str() != Some(&source));
+            paths.is_empty()
+        } else {
+            let skills = skills.as_object_mut().ok_or(UninstallError::InvalidState)?;
+            let paths = skills
+                .get_mut("paths")
+                .and_then(Value::as_array_mut)
+                .ok_or(UninstallError::InvalidState)?;
+            paths.retain(|entry| entry.as_str() != Some(&source));
+            if paths.is_empty() {
+                skills.remove("paths");
+            }
+            skills.is_empty()
+        }
+    };
+    if remove_skills {
+        object.remove("skills");
+    }
     Ok(())
 }
 

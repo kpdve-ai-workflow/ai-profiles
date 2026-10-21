@@ -58,6 +58,30 @@ pub(crate) fn desired_files(
         collect_skill(context, &name, &folder, &mut files)?;
     }
 
+    // Both native compatibility manifests expose the same project-local skill tree.
+    let metadata = crate::repository::profile_metadata(context, profile)?;
+    let description = metadata
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let version = metadata
+        .get("version")
+        .and_then(Value::as_str)
+        .unwrap_or("1.0.0");
+    let manifest = serde_json::json!({"name":"ai-profile","version":version,"description":description,"skills":["./skills/"]});
+    let manifest_bytes = crate::codec::json_bytes(&manifest)?;
+    files.push(PayloadFile {
+        relative_path: ".opencode/ai-profile/plugin/.claude-plugin/plugin.json".into(),
+        contents: manifest_bytes.clone(),
+        kind: PayloadKind::Data,
+    });
+    files.push(PayloadFile {
+        relative_path: ".opencode/ai-profile/plugin/.codex-plugin/plugin.json".into(),
+        contents: manifest_bytes,
+        kind: PayloadKind::Data,
+    });
+    // A real empty directory is ensured by installation when selection is empty.
+
     insert_native(
         context,
         &mut files,
@@ -313,12 +337,15 @@ fn collect_skill(
                     context,
                     files,
                     "test-inventory",
-                    ".opencode/skills/test-gap-discovery/scripts/inventory-tests",
+                    ".opencode/ai-profile/plugin/skills/test-gap-discovery/scripts/inventory-tests",
                 )?;
                 continue;
             }
-            let relative_path =
-                payload_path(&[".opencode/skills", skill_name, &path_to_posix(relative)?]);
+            let relative_path = payload_path(&[
+                ".opencode/ai-profile/plugin/skills",
+                skill_name,
+                &path_to_posix(relative)?,
+            ]);
             insert_file(files, &relative_path, &source, true)?;
         }
     }
