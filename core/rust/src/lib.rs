@@ -6,6 +6,7 @@
 mod codec;
 mod error;
 mod filesystem;
+mod layout;
 pub mod mariadb;
 pub mod mcp;
 mod model;

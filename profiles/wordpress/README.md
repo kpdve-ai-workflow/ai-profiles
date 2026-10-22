@@ -11,23 +11,28 @@ ale każdy projekt zachowuje własne lokalne ustawienia i połączenie.
 Z katalogu repozytorium `ai-profiles`:
 
 ```bash
-make install PROFILE=wordpress PROJECT=/sciezka/do/projektu
+make install CLIENT=opencode PROFILE=wordpress PROJECT=/sciezka/do/projektu
 ```
 
 Podaj istniejący katalog repozytorium WordPressa. Jeśli projekt ma już profil,
-użyj `make update PROJECT=...` dla zainstalowanego WordPress albo
-`make switch PROFILE=wordpress PROJECT=...` dla innego profilu.
+użyj `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=...` dla zainstalowanego WordPress albo
+`make switch CLIENT={{AI_PROFILE_CLIENT}} PROFILE=wordpress PROJECT=...` dla innego profilu.
 
 Instalacja dostarcza:
 
-- wspólne i wordpressowe skille raz do `.opencode/ai-profile/plugin/skills/`, dostępne przez konfigurację OpenCode oraz pluginy Claude Code i Codex;
-- definicje MCP `novamira`, `figma` i `mariadb` w zarządzanej konfiguracji OpenCode;
-- adapter Rust `.opencode/ai-profile-mcp`, który uruchamia most Novamira;
-- launcher Rust `.opencode/mcp/mariadb/mariadb-launcher`, który buduje i uruchamia
+- wspólne i wordpressowe skille do `{{AI_PROFILE_ROOT}}/plugin/skills/`, niezależnie dla wskazanego klienta;
+- definicje MCP `novamira`, `figma` i `mariadb` w zarządzanej konfiguracji wskazanego klienta;
+- adapter Rust `{{AI_PROFILE_ROOT}}/ai-profile-mcp`, który uruchamia most Novamira;
+- launcher Rust `{{AI_PROFILE_MCP}}/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
-- tę instrukcję wraz z przykładami konfiguracji w `.opencode/ai-profile/README.md`;
-- skill SQL w `.opencode/ai-profile/plugin/skills/mcp-mariadb/`;
-- skrypt importu UpdraftPlus i jego pliki pomocnicze w `.opencode/ai-profile/scripts/`.
+- tę instrukcję wraz z przykładami konfiguracji w `{{AI_PROFILE_ROOT}}/README.md`;
+- skill SQL w `{{AI_PROFILE_ROOT}}/plugin/skills/mcp-mariadb/`;
+- skrypt importu UpdraftPlus i jego pliki pomocnicze w `{{AI_PROFILE_ROOT}}/scripts/`.
+
+W źródłowej instrukcji `{{AI_PROFILE_ROOT}}`, `{{AI_PROFILE_MCP}}`,
+`{{AI_PROFILE_LOCAL}}` i `{{AI_PROFILE_CLIENT}}` są znacznikami renderowanymi
+podczas instalacji dla wybranego klienta. Dla nowych instalacji root to
+`.ai-profiles/<klient>`. Możesz wybrać CLIENT=claude lub CLIENT=codex bez OpenCode.
 
 **Novamira i MariaDB są początkowo wyłączone**, aby instalacja działała bez sekretów
 i uruchomionego WordPressa. Figma jest skonfigurowana, ale wymaga autoryzacji.
@@ -39,7 +44,7 @@ zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfigurac
 
 - Rust/Cargo 1.85+, Make i Git w checkoutcie instalatora. Zainstalowany adapter
   Rust nie wymaga Python ani Cargo.
-- OpenCode dostępny na hoście, na którym pracujesz.
+- Wybrany klient (OpenCode, Claude Code albo Codex) dostępny na hoście, na którym pracujesz.
 - Node.js **24.21.0 lub nowszy z linii 24** i npm z dostępnym `npx` na tym samym
   hoście. Profil używa `NODE_OPTIONS=--use-system-ca`, więc potrzebna jest wersja
   Node obsługująca tę opcję. Sprawdź `node --version` i `npx --version`.
@@ -105,7 +110,7 @@ W katalogu **projektu WordPressa**, przed wpisaniem sekretów, dodaj do `.gitign
 
 Jeśli plik z sekretami był już śledzony przez Git, samo `.gitignore` nie wystarczy.
 Usuń go z indeksu i unieważnij ujawnione hasło. Nie zapisuj sekretów w przykładach
-wewnątrz `.opencode/ai-profile/plugin/skills/`: są to zarządzane pliki profilu.
+wewnątrz `{{AI_PROFILE_ROOT}}/plugin/skills/`: są to zarządzane pliki profilu.
 
 Utwórz `.env.novamira` w katalogu głównym projektu i ustaw prawa **przed** wpisaniem hasła:
 
@@ -126,7 +131,7 @@ Podaj pełny adres z `/wp-json/mcp/novamira`, **nie `/novamira-oauth`**,
 oraz login konta, na którym wygenerowano hasło. Cudzysłowy pozwalają zachować spacje.
 Plik nie jest skryptem powłoki — nie wpisuj do niego komend ani interpolacji `$VAR`.
 
-Następnie utwórz `.opencode/ai-profile.local.json`:
+Następnie utwórz `{{AI_PROFILE_LOCAL}}`:
 
 ```json
 {
@@ -146,18 +151,18 @@ Plik jest własnością projektu, a nie generowaną konfiguracją OpenCode.
 
 Nazwę pliku env możesz zmienić: zmień jednocześnie `env_file` i wpis `.gitignore`.
 Nie potrzebujesz ręcznego eksportowania zmiennych do sesji OpenCode.
-Upewnij się, że serwer WWW blokuje dostęp HTTP do plików `.env*` i `.opencode/`.
+Upewnij się, że serwer WWW blokuje dostęp HTTP do plików `.env*`, `.ai-profiles/` i `.opencode/`.
 Uprawnienia `600` i `.gitignore` nie zastępują konfiguracji serwera WWW.
 
-## 6. Włącz połączenie w OpenCode
+## 6. Włącz połączenie w wybranym kliencie
 
 Z katalogu `ai-profiles` zsynchronizuj ustawienie `disabled`:
 
 ```bash
-make update PROJECT=/sciezka/do/projektu
+make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu
 ```
 
-Zrestartuj OpenCode i w projekcie sprawdź `opencode mcp list` lub panel `/mcps`.
+Zrestartuj wybranego klienta i sprawdź jego listę MCP (dla OpenCode: `opencode mcp list` lub `/mcps`).
 Novamira powinna się połączyć bez przeglądarki i bez autoryzacji OAuth:
 
 ```text
@@ -274,7 +279,7 @@ Domyślnie launcher stosuje `--network=host`, więc `127.0.0.1` oznacza host Lin
 Nie używaj tu nazwy `db`, która zwykle jest dostępna tylko w sieci kontenerów DDEV.
 Nie przekierowuj połączenia na inną bazę przez zgadywanie portów.
 
-Do istniejącego `.opencode/ai-profile.local.json` dodaj wpis `mariadb` wewnątrz `mcp`:
+Do istniejącego `{{AI_PROFILE_LOCAL}}` dodaj wpis `mariadb` wewnątrz `mcp`:
 
 ```json
 {
@@ -301,7 +306,7 @@ wymagają osobnego dostosowania komendy — ten domyślny wariant dotyczy lokaln
 Z katalogu `ai-profiles` wykonaj standardowe:
 
 ```bash
-make update PROJECT=/sciezka/do/projektu
+make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu
 ```
 
 Zrestartuj OpenCode, sprawdź `/mcps` lub `opencode mcp list`, poczekaj na pierwszą
@@ -327,7 +332,7 @@ Docker otrzymuje tylko jawnie wybrane zmienne bazy i flagi MCP, bez sekretów
 Novamiry czy kluczy embeddingów. Administratorzy demona Docker mogą odczytać
 środowisko kontenera — korzystaj z zaufanego lokalnego demona. Upstream loguje
 SQL i parametry: nie umieszczaj sekretów w zapytaniach ani nie publikuj pełnych logów.
-Serwer WWW musi blokować dostęp HTTP do `.env*` i `.opencode/`.
+Serwer WWW musi blokować dostęp HTTP do `.env*`, `.ai-profiles/` i `.opencode/`.
 
 ## 9. Import bazy UpdraftPlus do lokalnego DDEV
 
@@ -365,7 +370,7 @@ sandboxem ani pełnym audytem bezpieczeństwa dumpa. Nie importuj nieznanych pli
 W katalogu projektu, po aktualizacji profilu:
 
 ```bash
-.opencode/ai-profile/scripts/restore-updraft \
+{{AI_PROFILE_ROOT}}/scripts/restore-updraft \
   ~/Downloads/backup-twoja-strona-db.gz \
   --project "$PWD" \
   --map https://twoja-strona.pl=https://moj-wordpress.ddev.site
@@ -374,7 +379,7 @@ W katalogu projektu, po aktualizacji profilu:
 Dla multisite podaj **każdą witrynę**, np. dodatkowo:
 
 ```bash
-.opencode/ai-profile/scripts/restore-updraft \
+{{AI_PROFILE_ROOT}}/scripts/restore-updraft \
   ~/Downloads/backup-twoja-strona-db.gz \
   --project "$PWD" \
   --map https://twoja-strona.pl=https://moj-wordpress.ddev.site \
@@ -478,8 +483,8 @@ Backupów nie commituj ani nie publikuj — zawierają dane i sekrety witryny.
 
 ```bash
 make status PROJECT=/sciezka/do/projektu
-make update PROJECT=/sciezka/do/projektu
-make uninstall PROJECT=/sciezka/do/projektu
+make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu
+make uninstall CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu
 ```
 
 Te komendy zarządzają wyłącznie profilem i jego plikami. **Nie instalują,
@@ -518,12 +523,12 @@ z backupami i zapisami ograniczonymi do zleconego zadania.
 ## Audyt WCAG przez Playwright
 
 Profil udostępnia serwer MCP `playwright` i skill `wcag-audit`. Instalator tylko
-dostarcza Dockerfile i konfigurację Compose do `.opencode/mcp/playwright/`.
+dostarcza Dockerfile i konfigurację Compose do `{{AI_PROFILE_MCP}}/playwright/`.
 Z katalogu głównego docelowego projektu wykonaj:
 
 ```sh
 mkdir -p reports/wcag
-docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+docker build --tag ai-profiles-playwright:0.1.0 {{AI_PROFILE_MCP}}/playwright
 ```
 
 Do użycia potrzebny jest Docker Engine i plugin Compose, bez hostowego

@@ -66,8 +66,8 @@ AI_PROFILE_PROJECT_DIR="$project" AI_PROFILE_SMOKE_IMAGE="$image" AI_PROFILE_SMO
 # Real installed adapter integration, not merely the image entrypoint. Host Node
 # is used only as the test MCP client; browser/runtime dependencies stay in Docker.
 repo=$(CDPATH= cd -- "$tests/../../../.." && pwd)
-make -C "$repo" install PROFILE=react PROJECT="$project"
-cat > "$project/.opencode/mcp/playwright/smoke-image.yaml" <<'YAML'
+make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$project"
+cat > "$project/.ai-profiles/opencode/mcp/playwright/smoke-image.yaml" <<'YAML'
 services:
   playwright:
     image: "${AI_PROFILE_SMOKE_IMAGE:?}"
@@ -75,18 +75,18 @@ YAML
 cat > "$project/.env.smoke" <<'ENV'
 AI_PROFILE_PROJECT_DIR=/wrong/dotenv
 ENV
-cat > "$project/.opencode/ai-profile.local.json" <<'JSON'
+cat > "$project/.ai-profiles/opencode/local.json" <<'JSON'
 {"mcp":{"playwright":{"env_file":".env.smoke","environment":{
   "AI_PROFILE_PROJECT_DIR":"/wrong/local-mapping",
   "AI_PROFILE_PLAYWRIGHT_NETWORK":"host",
   "AI_PROFILE_PLAYWRIGHT_CA_CERT":".private/ca.crt",
   "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE":".private/auth.json",
-  "COMPOSE_FILE":".opencode/mcp/playwright/compose.yaml:.opencode/mcp/playwright/compose.ca.yaml:.opencode/mcp/playwright/compose.auth.yaml:.opencode/mcp/playwright/smoke-image.yaml"
+  "COMPOSE_FILE":".ai-profiles/opencode/mcp/playwright/compose.yaml:.ai-profiles/opencode/mcp/playwright/compose.ca.yaml:.ai-profiles/opencode/mcp/playwright/compose.auth.yaml:.ai-profiles/opencode/mcp/playwright/smoke-image.yaml"
 }}}}
 JSON
 # Preserve the first run's evidence, including automatic filename checks.
 mkdir "$project/reports/wcag/direct"
 find "$project/reports/wcag" -maxdepth 1 -type f -exec mv {} "$project/reports/wcag/direct/" \;
-SMOKE_PROJECT_DIR="$project" SMOKE_ADAPTER="$project/.opencode/ai-profile-mcp" \
+SMOKE_PROJECT_DIR="$project" SMOKE_ADAPTER="$project/.ai-profiles/opencode/ai-profile-mcp" \
   AI_PROFILE_SMOKE_IMAGE="$image" \
   timeout --signal=TERM --kill-after=10s 180s node "$tests/smoke.cjs"

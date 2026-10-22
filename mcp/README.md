@@ -26,7 +26,7 @@ więc adapter nie potrzebuje dostępu do źródeł ai-profiles. Zmiana definicji
 wymaga bumpu wyłącznie profili, które ją wybierają.
 
 `install`, `update` i `switch` renderują jeden efektywny zestaw (rejestr plus
-`.opencode/ai-profile.local.json`) do OpenCode (`opencode.json`), Codex
+`.ai-profiles/<klient>/local.json`) do wybranego OpenCode (`opencode.json`), Codex
 (`.codex/config.toml`, zachowywany przez `toml_edit`) i Claude Code (`.mcp.json`).
 CLI klientów nie są wymagane do przygotowania konfiguracji. Wpisy są śledzone
 oddzielnie w stanie instalacji; kolizje i ręczne zmiany zarządzanych wpisów
@@ -35,7 +35,7 @@ MCP i OAuth. Status potwierdza przygotowaną konfigurację, nie runtime connecti
 
 ## Lokalne ustawienia projektu
 
-`.opencode/ai-profile.local.json` jest plikiem użytkownika/projektu. Menedżer go
+`.ai-profiles/<klient>/local.json` jest plikiem użytkownika/projektu. Menedżer go
 nie tworzy, nie zastępuje ani nie usuwa; `uninstall` również go zachowuje.
 Przykład do ręcznego skopiowania znajduje się w `mcp/local.example.json`.
 Plik nie jest odczytywany bezpośrednio przez OpenCode, tylko przez menedżer
@@ -85,7 +85,7 @@ operacje destrukcyjne ani migracje.
 
 ## Adapter
 
-Instalator dostarcza natywne binarium Rust `.opencode/ai-profile-mcp` i nadaje
+Instalator dostarcza natywne binarium Rust `.ai-profiles/<klient>/ai-profile-mcp` i nadaje
 mu prawa wykonania. OpenCode uruchamia je bezpośrednio. Adapter odczytuje
 `mcp_base` ze stanu, nakłada lokalne nadpisania, uruchamia komendy bez powłoki,
 przekazuje stdio i rozwiązuje środowisko wyłącznie dla procesu MCP. Nie zmienia
@@ -106,12 +106,12 @@ nie zastępują jej końcowej wartości. Użytkownik nie musi jej konfigurować.
 ## Launchery
 
 Opcjonalne zarządzane pliki runtime umieszczaj w `mcp/launchers/<nazwa>/`.
-Instalowane są do `.opencode/mcp/<nazwa>/` wyłącznie projektom profili wybierających
+Instalowane są do `.ai-profiles/<klient>/mcp/<nazwa>/` wyłącznie projektom profili wybierających
 serwer i podlegają kontroli hashy, konfliktów oraz usuwaniu jak inne zarządzane
 pliki. Nie przechowuj w nich sekretów, cache ani artefaktów budowy. Szczegóły
 konkretnej integracji znajdują się w dokumentacji właściwego profilu.
 
-Launcher Rust `.opencode/mcp/mariadb/mariadb-launcher` jest kopiowany z
+Launcher Rust `.ai-profiles/<klient>/mcp/mariadb/mariadb-launcher` jest kopiowany z
 lokalnego release builda. Historyczny `launch.py` pozostaje w repozytorium;
 nie jest instalowany. Launcher buduje przypięte źródła upstream dopiero przy pierwszym
 włączonym uruchomieniu MCP, nie podczas instalacji profilu. Weryfikuje SHA-256
@@ -129,8 +129,8 @@ Wymagania, cache i eksport raportów: [testowanie](../docs/testing.md).
 
 Profile WordPress i React wybierają serwer `playwright` oraz skill
 `wcag-audit`. Pozostałe profile nie otrzymują konfiguracji przeglądarki.
-`make install PROFILE=<profil> PROJECT=<projekt>` dostarcza do projektu kompletny
-kontekst budowy i konfigurację Compose w `.opencode/mcp/playwright/`. Instalacja
+`make install CLIENT=<klient> PROFILE=<profil> PROJECT=<projekt>` dostarcza do projektu kompletny
+kontekst budowy i konfigurację Compose w `.ai-profiles/<klient>/mcp/playwright/`. Instalacja
 nie wymaga Dockera i nie buduje ani nie pobiera obrazu.
 
 ### Przygotowanie w repozytorium docelowym
@@ -139,7 +139,7 @@ Z katalogu głównego projektu, mając działający Docker Engine i plugin Compo
 
 ```sh
 mkdir -p reports/wcag
-docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+docker build --tag ai-profiles-playwright:0.1.0 .ai-profiles/opencode/mcp/playwright
 ```
 
 Następnie zrestartuj klienta AI. Jak dla pozostałych lokalnych MCP, wspólny
@@ -168,7 +168,7 @@ Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwri
 
 ### Sieć, certyfikaty i artefakty
 
-W `.opencode/ai-profile.local.json` ustawiaj `environment` dla `playwright`.
+W `.ai-profiles/<klient>/local.json` ustawiaj `environment` dla `playwright`.
 Przykład konfiguracji lokalnej DDEV (sprawdź nazwę sieci u siebie):
 
 ```json

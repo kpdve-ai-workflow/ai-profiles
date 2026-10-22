@@ -7,3 +7,20 @@
 - config dostarczany juz do repo jako profil jest za duzy, zbyt wiele plikow laduje po instalacji pomyslec jak mozna to uproscic
 - zapomnialem o docker build po wdrozeniu mcp playwright, przydaloby sie moze stworzyc jakies lepsze instrukcje + automatyczne tworzenie folderu reports/wcag ( wywalic wcag i dodac bardziej generyczny folder ) w trakcie buildu docker
 - rozdzielic instalacje na 3 ( osobno opencode codex claude code + opcja wszystko )
+
+# Bugi
+To pozostałości po testach instalatora, nie błąd ścieżki WFOSiGW. Potwierdziłem je w ~/.codex/config.toml.
+Co się stało:
+1. Test mcp/images/playwright/tests/run.sh:69 uruchamia prawdziwe make install w tymczasowym projekcie, bez izolacji konfiguracji Codexa.
+2. Zostawił globalnie trzy marketplace’y wskazujące na /tmp/opencode/playwright-smoke....
+3. Codex próbuje je teraz wczytać, ale nie znajduje poprawnych manifestów. Instalator zatrzymuje aktywację już przy codex plugin marketplace list --json, zanim zarejestruje WFOSiGW.
+Pliki profilu w WFOSiGW zostały przygotowane, ale aktywacja w Codexie nie została ukończona. Komunikat o Claude jest niezależny — nie masz zainstalowanego claude CLI.
+Jak odblokować instalację
+W ~/.codex/config.toml usuń wyłącznie sekcje [marketplaces.…] oraz odpowiadające im [plugins."ai-profile@…"] dla:
+- ai-profiles-6b64be70771c
+- ai-profiles-4150094c9470
+- ai-profiles-dfcca2d5b049
+Zachowaj wpis ai-profiles-b84ecae0ddbe — wskazuje na rzeczywisty projekt react.
+Następnie uruchom z repozytorium ai-profiles:
+make update PROJECT=/var/home/kpdve/it/personal/wfosigw-ssh/WFOSiGW
+Docelowo trzeba też odizolować konfigurację Codexa w teście Playwright, żeby sytuacja nie wracała. Nic jeszcze nie zmieniałem.

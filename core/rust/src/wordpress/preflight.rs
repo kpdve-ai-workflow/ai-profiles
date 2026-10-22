@@ -34,7 +34,12 @@ pub(crate) fn preflight(
         return Err(WordPressError::DdevProjectRequired);
     }
     for name in ["local-guard.php", "local-safety.php"] {
-        if !inside(project, &format!(".opencode/ai-profile/scripts/{name}"))?.is_file() {
+        if !inside(
+            project,
+            &format!("{}/{name}", super::ddev::scripts_for(project)?),
+        )?
+        .is_file()
+        {
             return Err(WordPressError::MissingWordPressHelpers);
         }
     }
@@ -148,12 +153,12 @@ pub(crate) fn preflight(
 
     let safety_path = Path::new(docroot).join("wp-content/mu-plugins/ai-profile-local-safety.php");
     let guard = inside(project, &safety_path.to_string_lossy())?;
-    let safety = fs::read(inside(
+    let safety_source = inside(
         project,
-        ".opencode/ai-profile/scripts/local-safety.php",
-    )?)
-    .map_err(|source| WordPressError::Io {
-        path: project.join(".opencode/ai-profile/scripts/local-safety.php"),
+        &format!("{}/local-safety.php", super::ddev::scripts_for(project)?),
+    )?;
+    let safety = fs::read(&safety_source).map_err(|source| WordPressError::Io {
+        path: safety_source,
         source,
     })?;
     if guard.exists()

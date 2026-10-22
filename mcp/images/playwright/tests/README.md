@@ -24,7 +24,7 @@ Nie trzeba ręcznie uruchamiać usług ani przeglądarki. Test używa produkcyjn
 Compose z testowym nadpisaniem obrazu/entrypointu. Sprawdza MCP stdio, schematy
 i roots, Chromium, axe 4.14.0, naruszenia button-name/image-alt, screenshoty
 względne/bezwzględne/automatyczne, trwałość init script po nawigacji,
-HTTPS i cookie uwierzytelnienia. Następnie rzeczywiste `make install PROFILE=react`
+HTTPS i cookie uwierzytelnienia. Następnie rzeczywiste `make install CLIENT=opencode PROFILE=react`
 i zainstalowany adapter wykonują pełny drugi etap. Nie ma mockowania adaptera.
 
 Kontener wnioskuje UID/GID 1000:1000 z właściciela świeżego katalogu raportów.

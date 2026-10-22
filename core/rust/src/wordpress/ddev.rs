@@ -12,6 +12,38 @@ use crate::{
 const CONTAINER_ROOT: &str = "/var/www/html";
 const SCRIPTS: &str = ".opencode/ai-profile/scripts";
 
+/// The invoked helper selects its own payload; never scan installed clients.
+pub(crate) fn scripts_for(project: &Path) -> Result<String, WordPressError> {
+    let executable =
+        std::env::current_exe().map_err(|_| WordPressError::MissingWordPressHelpers)?;
+    if let Some(scripts) = scripts_from_executable(project, &executable) {
+        return Ok(scripts);
+    }
+    if executable.ancestors().any(|p| {
+        p.file_name()
+            .is_some_and(|s| s == ".ai-profiles" || s == ".opencode")
+    }) {
+        return Err(WordPressError::MissingWordPressHelpers);
+    }
+    // Source-tree/standalone tools retain the historical explicitly OpenCode layout.
+    Ok(SCRIPTS.into())
+}
+
+pub(crate) fn scripts_from_executable(project: &Path, executable: &Path) -> Option<String> {
+    use crate::{layout::Layout, model::Client};
+    let scripts = executable.parent()?;
+    for client in Client::ALL {
+        let relative = Layout::Isolated(client).scripts();
+        if scripts == project.join(&relative) {
+            return Some(relative);
+        }
+    }
+    if scripts == project.join(SCRIPTS) {
+        return Some(SCRIPTS.into());
+    }
+    None
+}
+
 pub(crate) struct Ddev<'a> {
     project: &'a Path,
     docroot: String,
@@ -113,7 +145,10 @@ impl<'a> Ddev<'a> {
             "--raw".to_owned(),
             "--".to_owned(),
             "wp".to_owned(),
-            format!("--require={CONTAINER_ROOT}/{SCRIPTS}/local-guard.php"),
+            format!(
+                "--require={CONTAINER_ROOT}/{}/local-guard.php",
+                scripts_for(self.project)?
+            ),
             "--skip-plugins".to_owned(),
             "--skip-themes".to_owned(),
         ];

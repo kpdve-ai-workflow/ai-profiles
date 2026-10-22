@@ -16,7 +16,7 @@ that require human judgment. See the [W3C evaluation guidance](https://www.w3.or
 1. Discover the available Playwright tool names and inspect their input schemas
    before calling them. Use that current browser session throughout the audit.
    If the local Docker image or report directory is missing, report a setup
-   blocker and refer to `.opencode/mcp/playwright/README.md`. Do not build the
+   blocker and refer to `{{AI_PROFILE_MCP}}/playwright/README.md`. Do not build the
    image or install dependencies as part of the audit.
 2. Default to WCAG 2.2 AA. If the requester names another target, use it and
    record it in the report.
@@ -35,7 +35,7 @@ that require human judgment. See the [W3C evaluation guidance](https://www.w3.or
 
 On HTTP 401, an HTTP authentication prompt, or `ERR_INVALID_AUTH_CREDENTIALS`,
 check whether Basic Auth is configured through local
-`.opencode/ai-profile.local.json`: `compose.basic-auth.yaml` and
+`{{AI_PROFILE_LOCAL}}`: `compose.basic-auth.yaml` and
 `AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE`. Refer to the installed Playwright README
 for the private file format, permissions and exact origin. Inspect only setup
 and file metadata; do not read or print credentials through browser tools,

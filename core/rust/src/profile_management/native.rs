@@ -6,9 +6,7 @@ use toml_edit::{value, DocumentMut, Item, Table};
 use crate::{
     codec::{json_bytes, sha},
     filesystem::{file_path, write_bytes},
-    process::{
-        CancellationToken, CommandSpec, ProcessRunner, StdinMode, StreamMode, SystemProcessRunner,
-    },
+    process::{CancellationToken, CommandSpec, ProcessRunner, StdinMode, StreamMode},
     profile_management::payload::{PayloadFile, PayloadKind},
 };
 
@@ -18,13 +16,52 @@ const CLAUDE_SETTINGS: &str = ".claude/settings.json";
 const CODEX_CONFIG: &str = ".codex/config.toml";
 const PLUGIN_ROOT: &str = ".opencode/ai-profile/plugin";
 
+#[cfg(test)]
+use self::UnavailableRunner as SystemProcessRunner;
+#[cfg(not(test))]
+use crate::process::SystemProcessRunner;
+
+pub(crate) fn default_runner() -> impl ProcessRunner {
+    SystemProcessRunner
+}
+
+#[cfg(test)]
+struct UnavailableRunner;
+
+#[cfg(test)]
+impl ProcessRunner for UnavailableRunner {
+    fn run(
+        &self,
+        _spec: CommandSpec,
+    ) -> Result<crate::process::CommandOutput, crate::error::ProcessError> {
+        Err(crate::error::ProcessError::Spawn {
+            source: std::io::Error::from(std::io::ErrorKind::NotFound),
+        })
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn project_files(
     project: &Path,
     description: &str,
     version: &str,
     old: Option<&Value>,
-    mut files: Vec<PayloadFile>,
+    files: Vec<PayloadFile>,
 ) -> Result<Vec<PayloadFile>, String> {
+    project_files_for(project, description, version, old, files, None)
+}
+
+pub(crate) fn project_files_for(
+    project: &Path,
+    description: &str,
+    version: &str,
+    old: Option<&Value>,
+    mut files: Vec<PayloadFile>,
+    client: Option<crate::model::Client>,
+) -> Result<Vec<PayloadFile>, String> {
+    use crate::{layout::Layout, model::Client};
+    let plugin_root =
+        client.map_or_else(|| PLUGIN_ROOT.to_owned(), |c| Layout::Isolated(c).plugin());
     let canonical = fs::canonicalize(project).map_err(|error| error.to_string())?;
     let marketplace = format!(
         "ai-profiles-{}",
@@ -34,18 +71,25 @@ pub(crate) fn project_files(
         "name": marketplace,
         "owner": {"name": "ai-profiles"},
         "description": description,
-        "plugins": [{"name":"ai-profile", "source":format!("./{PLUGIN_ROOT}"), "description":description, "version":version}]
+        "plugins": [{"name":"ai-profile", "source":format!("./{plugin_root}"), "description":description, "version":version}]
     });
     let codex = json!({
         "name": marketplace,
         "plugins": [{
             "name":"ai-profile",
-            "source":{"source":"local", "path":format!("./{PLUGIN_ROOT}")},
+            "source":{"source":"local", "path":format!("./{plugin_root}")},
             "policy":{"installation":"AVAILABLE", "authentication":"ON_INSTALL"},
             "category":"Developer Tools"
         }]
     });
     for (relative, value) in [(CLAUDE_CATALOG, claude), (CODEX_CATALOG, codex)] {
+        if client.is_some_and(|c| match c {
+            Client::OpenCode => true,
+            Client::Claude => relative != CLAUDE_CATALOG,
+            Client::Codex => relative != CODEX_CATALOG,
+        }) {
+            continue;
+        }
         let path = file_path(project, relative).map_err(|error| error.to_string())?;
         if path.exists() {
             let current = fs::read(&path).map_err(|error| error.to_string())?;
@@ -78,7 +122,10 @@ pub(crate) fn configure_claude(
     } else {
         json!({})
     };
-    let settings_had_file = path.exists();
+    let settings_had_file = old
+        .and_then(|s| s.pointer("/native/claude/settings_had_file"))
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| path.exists());
     let object = settings
         .as_object_mut()
         .ok_or_else(|| "Claude settings must be an object".to_owned())?;
@@ -302,7 +349,7 @@ pub(crate) fn configure_codex_mcp(
     let text = std::str::from_utf8(config).map_err(|e| e.to_string())?;
     let mut document = text
         .parse::<DocumentMut>()
-        .map_err(|e| format!("invalid Codex TOML: {e}"))?;
+        .map_err(|_| "Nieprawidłowy TOML Codex (treść konfiguracji ukryta)".to_owned())?;
     let prior = old
         .and_then(|v| v.pointer("/native/mcp_codex/entries"))
         .and_then(Value::as_object)
@@ -447,11 +494,17 @@ pub(crate) fn configure_codex(
     } else {
         String::new()
     };
-    let config_had_file = path.exists();
+    let config_had_file = old
+        .and_then(|s| s.pointer("/native/codex/config_had_file"))
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| path.exists());
     let mut document = text
         .parse::<DocumentMut>()
-        .map_err(|error| format!("invalid Codex TOML: {error}"))?;
-    let plugins_had_table = document.as_table().contains_key("plugins");
+        .map_err(|_| "Nieprawidłowy TOML Codex (treść konfiguracji ukryta)".to_owned())?;
+    let plugins_had_table = old
+        .and_then(|s| s.pointer("/native/codex/plugins_had_table"))
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| document.as_table().contains_key("plugins"));
     let (marketplace, plugin_name, source_path) = codex_identity(project, catalog_bytes)?;
     let key = format!("{plugin_name}@{marketplace}");
     let plugins = table_mut(document.as_table_mut(), "plugins")?;
@@ -466,7 +519,7 @@ pub(crate) fn configure_codex(
         if item.get("enabled").and_then(Item::as_bool) == Some(false) {
             return Ok((
                 document.to_string().into_bytes(),
-                json!({"plugin_key":key,"marketplace_name":marketplace,"plugin_name":plugin_name,"source_path":source_path,"config_had_file":config_had_file,"plugins_had_table":plugins_had_table,"enabled_added":false,"enabled_previous":false,"marketplace_added":old.and_then(|state| state.pointer("/native/codex/marketplace_added")).and_then(Value::as_bool).unwrap_or(false),"plugin_added":old.and_then(|state| state.pointer("/native/codex/plugin_added")).and_then(Value::as_bool).unwrap_or(false),"activation":"disabled"}),
+                json!({"plugin_key":key,"marketplace_name":marketplace,"plugin_name":plugin_name,"source_path":source_path,"config_had_file":config_had_file,"plugins_had_table":plugins_had_table,"enabled_current":false,"enabled_added":old.and_then(|state| state.pointer("/native/codex/enabled_added")).and_then(Value::as_bool).unwrap_or(false),"enabled_previous":old.and_then(|state| state.pointer("/native/codex/enabled_previous")).cloned().unwrap_or(json!(false)),"marketplace_added":old.and_then(|state| state.pointer("/native/codex/marketplace_added")).and_then(Value::as_bool).unwrap_or(false),"plugin_added":old.and_then(|state| state.pointer("/native/codex/plugin_added")).and_then(Value::as_bool).unwrap_or(false),"activation":"disabled"}),
             ));
         }
         if old.is_none() && item.get("enabled").and_then(Item::as_bool) != Some(true) {
@@ -526,8 +579,14 @@ fn codex_identity(
         .filter(|path| !path.is_empty())
         .ok_or_else(|| "Codex ai-profile catalog entry has no local source path".to_owned())?;
     let expected_source = format!("./{PLUGIN_ROOT}");
-    if source_path != expected_source {
-        return Err(format!("Codex ai-profile source must be {expected_source}"));
+    let isolated_source = format!(
+        "./{}",
+        crate::layout::Layout::Isolated(crate::model::Client::Codex).plugin()
+    );
+    if source_path != expected_source && source_path != isolated_source {
+        return Err(format!(
+            "Codex ai-profile source must be {expected_source} or {isolated_source}"
+        ));
     }
     let canonical = fs::canonicalize(project).map_err(|error| error.to_string())?;
     Ok((
@@ -552,6 +611,7 @@ pub(crate) fn write_config(project: &Path, relative: &str, bytes: &[u8]) -> Resu
     write_bytes(&path, bytes).map_err(|error| error.to_string())
 }
 
+#[cfg(test)]
 pub(crate) fn mcp_configuration_status(
     project: &Path,
     state: &Value,
@@ -885,12 +945,25 @@ pub(crate) fn cleanup_codex(project: &Path, old: &Value) -> Option<String> {
     None
 }
 
+#[cfg(test)]
 pub(crate) fn activate(
     project: &Path,
     claude: &Value,
     codex: &Value,
     claude_installed: bool,
 ) -> (Value, Value) {
+    (
+        activate_claude_with_runner(project, claude, claude_installed, &SystemProcessRunner),
+        activate_selected_codex(project, codex, &SystemProcessRunner),
+    )
+}
+
+pub(crate) fn activate_claude_with_runner(
+    project: &Path,
+    claude: &Value,
+    claude_installed: bool,
+    runner: &impl ProcessRunner,
+) -> Value {
     let marketplace = claude
         .get("marketplace_name")
         .and_then(Value::as_str)
@@ -900,12 +973,12 @@ pub(crate) fn activate(
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty());
     let claude_disabled = claude.get("enabled_current").and_then(Value::as_bool) == Some(false);
-    let claude_state = if claude_disabled {
+    if claude_disabled {
         json!({"activation":"disabled"})
     } else if let (Some(_marketplace), Some(plugin_key)) = (marketplace, plugin_key) {
         if claude_installed {
             run_cli_value(
-                &SystemProcessRunner,
+                runner,
                 "claude",
                 &[
                     "plugin", "update", plugin_key, "--scope", "project", "--yes",
@@ -914,7 +987,7 @@ pub(crate) fn activate(
             )
         } else {
             run_cli_value(
-                &SystemProcessRunner,
+                runner,
                 "claude",
                 &[
                     "plugin", "install", plugin_key, "--scope", "project", "--yes",
@@ -924,15 +997,22 @@ pub(crate) fn activate(
         }
     } else {
         json!({"activation":"failed","reason":"Claude plugin identity is missing"})
-    };
-    let codex_disabled = codex.get("enabled_previous").and_then(Value::as_bool) == Some(false)
-        && codex.get("enabled_added").and_then(Value::as_bool) == Some(false);
-    let codex_state = if codex_disabled {
+    }
+}
+
+pub(crate) fn activate_selected_codex(
+    project: &Path,
+    codex: &Value,
+    runner: &impl ProcessRunner,
+) -> Value {
+    let codex_disabled = codex.get("enabled_current").and_then(Value::as_bool) == Some(false)
+        || (codex.get("enabled_previous").and_then(Value::as_bool) == Some(false)
+            && codex.get("enabled_added").and_then(Value::as_bool) == Some(false));
+    if codex_disabled {
         json!({"activation":"disabled"})
     } else {
-        activate_codex_with_runner(project, codex, &SystemProcessRunner)
-    };
-    (claude_state, codex_state)
+        activate_codex_with_runner(project, codex, runner)
+    }
 }
 
 #[derive(Debug)]
@@ -1045,8 +1125,9 @@ pub(crate) fn activate_codex_with_runner(
     codex: &Value,
     runner: &impl ProcessRunner,
 ) -> Value {
-    if codex.get("enabled_previous").and_then(Value::as_bool) == Some(false)
-        && codex.get("enabled_added").and_then(Value::as_bool) == Some(false)
+    if codex.get("enabled_current").and_then(Value::as_bool) == Some(false)
+        || (codex.get("enabled_previous").and_then(Value::as_bool) == Some(false)
+            && codex.get("enabled_added").and_then(Value::as_bool) == Some(false))
     {
         return json!({"activation":"disabled"});
     }
@@ -1320,6 +1401,7 @@ fn codex_failure(stage: &str, reason: impl Into<String>) -> Value {
     json!({"activation":"failed","stage":stage,"reason":reason.into()})
 }
 
+#[cfg(test)]
 pub(crate) fn preflight_cleanup(project: &Path) -> Result<(), String> {
     let claude = file_path(project, CLAUDE_SETTINGS).map_err(|error| error.to_string())?;
     if claude.exists() {
@@ -1349,6 +1431,7 @@ pub(crate) fn preflight_cleanup(project: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn current_status(
     project: &Path,
     old: &Value,

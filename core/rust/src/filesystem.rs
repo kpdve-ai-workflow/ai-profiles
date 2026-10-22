@@ -87,6 +87,24 @@ pub(crate) fn write_bytes(path: &Path, contents: &[u8]) -> Result<(), Filesystem
     })
 }
 
+pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), FilesystemError> {
+    let write = || -> Result<(), std::io::Error> {
+        let parent = path
+            .parent()
+            .ok_or_else(|| std::io::Error::other("missing parent"))?;
+        fs::create_dir_all(parent)?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        temporary.write_all(contents)?;
+        temporary.as_file().sync_all()?;
+        temporary.persist(path).map_err(|error| error.error)?;
+        Ok(())
+    };
+    write().map_err(|source| FilesystemError::Io {
+        path: path.to_owned(),
+        source,
+    })
+}
+
 /// Replace the executable by rename so an already running runtime can finish.
 pub(crate) fn write_executable(path: &Path, contents: &[u8]) -> Result<(), FilesystemError> {
     let write = || -> Result<(), std::io::Error> {
@@ -125,7 +143,9 @@ pub(crate) fn cleanup_empty_directories(
             }
         }
     }
-    let opencode = project.join(".opencode");
-    let _ = fs::remove_dir(opencode);
+    if paths.iter().any(|path| path.starts_with(".opencode/")) {
+        let opencode = project.join(".opencode");
+        let _ = fs::remove_dir(opencode);
+    }
     Ok(())
 }

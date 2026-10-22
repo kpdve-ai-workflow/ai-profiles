@@ -30,15 +30,15 @@ Nazwy są bezpośrednimi nazwami katalogów pod `skills/`; wpisy muszą być
 unikalne. Dwa profile mogą wskazać ten sam katalog źródłowy, a instalator
 kopiuje każdy skill do własnego projektu. Na przykład
 `skills/make-plan/SKILL.md` trafia do
-`<projekt>/.opencode/ai-profile/plugin/skills/make-plan/SKILL.md`, a
+`<projekt>/.ai-profiles/<klient>/plugin/skills/make-plan/SKILL.md`, a
 `skills/make-plan/references/plan-layout.md` do tego samego katalogu
-`references/`. To jedyna kopia dystrybucyjna skilla w projekcie.
+`references/`. Każdy klient otrzymuje oddzielną kopię dystrybucyjną.
 Nowy profil zaczyna z `{"skills":[]}`. Zmiany manifestu docierają do projektu
-przez `make update PROJECT=<projekt>`; usunięte pliki są zdejmowane zgodnie z
+przez `make update CLIENT=<klient> PROJECT=<projekt>`; usunięte pliki są zdejmowane zgodnie z
 kontrolą własności i hashy. Nie używaj symlinków ani kolidujących nazw.
 
-Instalacja przygotowuje wspólny plugin `ai-profile`. OpenCode otrzymuje jawny
-source skills w `opencode.json`, a Claude Code i Codex dostają natywne katalogi
+Instalacja przygotowuje osobny payload wybranego klienta. OpenCode otrzymuje jawny
+source skills w `opencode.json`, a wybrane Claude Code lub Codex dostają natywne katalogi
 projektowe oraz włączenie pluginu. Katalog Claude znajduje się w
 `.claude-plugin/marketplace.json`, katalog Codex w
 `.agents/plugins/marketplace.json`. Identyfikator marketplace zawiera skrót
@@ -49,7 +49,7 @@ Przed użyciem pluginu Claude Code może wymagać zaufania repozytorium; Codex
 zaufania ani uprawnień. Gdy CLI hosta nie ma, pliki projektu są przygotowane,
 a aktywacja pozostaje oczekująca. Przy błędzie aktywacji `status` pokazuje
 oddzielnie pliki projektu i ostatni zapisany wynik instalacji natywnej; ponowne
-`make update` ponawia aktywację Codex po błędzie lub stanie oczekującym.
+`make update CLIENT=codex PROJECT=<projekt>` ponawia aktywację Codex po błędzie lub stanie oczekującym.
 Claude Code instaluje plugin przez `claude plugin install ai-profile@<marketplace>
 --scope project`; przy kolejnej aktualizacji menedżer używa `claude plugin
 update`.
@@ -70,7 +70,7 @@ konfiguracji użytkownika Codex; CLI nie udostępnia tu opcji zakresu projektu.
 Stan śledzi, które zasoby natywne dodał instalator, a `uninstall` usuwa tylko te
 zasoby. Istniejące pluginy, rejestracje i jawne wyłączenie pozostają zachowane.
 
-Powtórne `make update` sprawdza inwentarz i nie powtarza `plugin add`, jeśli
+Powtórne `make update CLIENT=codex PROJECT=<projekt>` sprawdza inwentarz i nie powtarza `plugin add`, jeśli
 plugin jest już zainstalowany. Zmiana plików projektu bez zmiany wersji nie
 dowodzi odświeżenia zawartości cache Codex; nie potwierdzono obsługiwanego
 polecenia odświeżającego lokalny plugin, więc aktualność cache pozostaje
@@ -80,18 +80,16 @@ Uruchom ponownie Codex, aby ocenić je w nowej sesji. Wpisy `Dir` lub `File` w
 selektorze wzmianek nie potwierdzają wykrycia skilla.
 
 Skill może się załadować, gdy jego wymagany serwer MCP nie jest dostępny w tym
-hoście. Instalator przygotowuje wybrane MCP w `opencode.json`,
-`.codex/config.toml` oraz `.mcp.json` na podstawie wspólnego rejestru i lokalnych
+hoście. Instalator przygotowuje MCP tylko w konfiguracji wybranego klienta:
+`opencode.json`, `.codex/config.toml` albo `.mcp.json`, na podstawie wspólnego rejestru i lokalnych
 nadpisań. Status opisuje konfigurację; nie sprawdza połączenia MCP. Po instalacji
 lub aktualizacji uruchom ponownie klienta, zatwierdź projekt i MCP zgodnie z
 jego natywnymi ustawieniami, a zdalne OAuth zaloguj osobno w każdym kliencie.
 Skille mogą też zachowywać metadane
 `opencode/slash`, ale składnia wywołania i automatyczna aktywacja zależą od hosta.
 
-Przy aktualizacji instalacji ze starszego układu pliki z
-`.opencode/skills/<nazwa>/` są usuwane dopiero po zgodności z zapisanymi hashami.
-Lokalnie zmieniony zarządzany plik blokuje migrację; niezależne skille projektu
-pozostają nietknięte.
+Starszy współdzielony payload `.opencode/` pozostaje zamrożony, również gdy
+wybrany klient przechodzi do izolowanego układu. Nie jest automatycznie usuwany.
 Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
 w skillach. Są instalowane bez automatycznego wykonywania.
 
@@ -134,11 +132,13 @@ wykonuje commitów ani nie tworzy tagów.
 
 ## Instalacja i aktualizacja
 
-Instaluj przez `make install PROFILE=<profil> PROJECT=<projekt>`. Make buduje
+Instaluj przez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> PROJECT=<projekt>`.
+Aliasy: `install-opencode`, `install-claude`, `install-codex` z tymi samymi PROFILE
+i PROJECT; sprzeczny CLIENT jest błędem. Make buduje
 manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
 launcher MariaDB i restore WordPress trafiają do projektu jako samodzielne
 pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
-referencyjny. Aktualizacja usuwa dawne zarządzane `.py` po sprawdzeniu hashy;
+referencyjny. Współdzielone zasoby legacy (również dawne `.py`) pozostają zamrożone;
 obce i lokalnie zmienione pliki zachowują dotychczasową ochronę.
 
 Make wymaga `PROFILE` przy `create`, `rename`, `install`, `switch` i `bump`, oraz `PROJECT`
@@ -152,15 +152,14 @@ zachowując pliki obce i lokalną konfigurację. Powtórzenie bez zmian daje tę
 zawartość. Downgrade tego samego profilu jest blokowany; `switch` wybiera inny
 profil. `uninstall` usuwa wyłącznie zarządzaną zawartość.
 
-Stan `.opencode/ai-profile-state.json` śledzi wersję, źródło, SHA-256 plików,
+Stan `.ai-profiles/state.json` formatu 2 śledzi osobno dla każdego klienta wersję, źródło, SHA-256 plików,
 zarządzane wpisy MCP i dane potrzebne do bezpiecznej synchronizacji. Status
 rozróżnia aktualność wersji od zmian treści oraz pokazuje lokalne modyfikacje.
 SHA commit nie opisuje niezacommitowanych zmian; do publikowania używaj czystego
 checkoutu.
 
-Wycofany `.opencode/workflow-rules.md` oraz dawniej wspólnie dostarczany
-`brain-to-implementer` są usuwane z istniejącej instalacji podczas update/switch
-lub uninstall tylko wtedy, gdy ich hashe zgadzają się ze stanem instalatora.
+Stary stan `.opencode/ai-profile-state.json` oraz współdzielone zasoby legacy
+pozostają zachowane, ponieważ inni klienci lub cache pluginów mogą ich używać.
 Wpis `workflow-rules.md` w `instructions` jest usuwany przy update/switch
 wyłącznie, gdy stan potwierdza, że dodał go instalator (`instructions_added`).
 Własny wpis użytkownika pozostaje; po usunięciu wpisu instalatora flaga
@@ -169,13 +168,21 @@ ownership jest zerowana.
 Przed zapisem menedżer sprawdza hashe plików, wpisy MCP i kolizje ścieżek.
 Konflikt przerywa operację bez częściowego zastosowania; nie ma opcji wymuszającej
 nadpisanie lokalnych zmian. Zrób kopię lub commit, przenieś zmiany wspólne do
-repozytorium, a projektowe ustawienia MCP do `.opencode/ai-profile.local.json`.
+repozytorium, a projektowe ustawienia MCP do `.ai-profiles/<klient>/local.json`.
 Przywróć zarządzany plik/wpis do zainstalowanej wartości i ponów aktualizację.
 Nie edytuj hashy stanu ani zarządzanych wpisów w `opencode.json`. Menedżer odmawia
-pracy z `opencode.jsonc`, by nie utracić komentarzy. Zapis nie jest transakcją
+pracy z `opencode.jsonc` tylko dla operacji OpenCode, by nie utracić komentarzy. Zapis nie jest transakcją
 odporną na awarię dysku lub przerwanie procesu.
 
 ## Migracja starszej instalacji
+
+Format 1 jest importowany leniwie; status niczego nie zapisuje. Pierwsza udana
+operacja zmieniająca stan zapisuje format 2. Dodanie klienta nie przenosi innych.
+Tylko update/switch wybranego klienta zmienia jego żywe odwołania na
+`.ai-profiles/<klient>/`. Odpowiednie stare nadpisania są kopiowane do local.json
+bez zmiany oryginału; konflikt z docelowym plikiem blokuje operację.
+Stary stan i współdzielone pliki nie są automatycznie sprzątane. Pusty manifest
+formatu 2 blokuje ponowny import starego stanu.
 
 Stan formatu 1 bez wersji/SHA commita jest obsługiwany: status pokaże
 `VERSION UNKNOWN`, a udany update uzupełni metadane po sprawdzeniu hashy.
@@ -185,26 +192,27 @@ konfiguracji. Instalacje MVP bez hashy wymagają przeglądu i backupu przed
 
 ```bash
 make migrate-legacy PROJECT=~/projects/my-api
-make update PROJECT=~/projects/my-api
+make update CLIENT=opencode PROJECT=~/projects/my-api
 ```
 
 Migracja uznaje istniejące pliki za punkt odniesienia. Walidację repozytorium
 uruchom przez `make validate`; szczegóły walidacji MCP są w dokumentacji MCP.
 
-Starsze instalacje zyskają konfigurację Codex i Claude Code przez
-`make update PROJECT=<projekt>`. Przygotowanie konfiguracji nie wymaga obecności
+Starsze instalacje aktualizuj osobno przez `make update CLIENT=<klient> PROJECT=<projekt>`.
+Brakującą integrację dodaj przez `make install CLIENT=<klient> PROFILE=<profil> PROJECT=<projekt>`.
+Przygotowanie konfiguracji nie wymaga obecności
 CLI tych klientów. Dla Playwright WCAG instalator dostarcza Dockerfile i Compose
-do `.opencode/mcp/playwright/`, bez uruchamiania Dockera lub npm. Przygotowanie
+do `.ai-profiles/<klient>/mcp/playwright/`, bez uruchamiania Dockera lub npm. Przygotowanie
 wykonuje użytkownik w katalogu głównym docelowego repozytorium:
 
 ```sh
 mkdir -p reports/wcag
-docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+docker build --tag ai-profiles-playwright:0.1.0 .ai-profiles/opencode/mcp/playwright
 ```
 
-Do korzystania potrzebny jest Docker Engine i plugin Compose. Wspólny adapter MCP
+Do korzystania potrzebny jest Docker Engine i plugin Compose. Adapter MCP wybranego klienta
 uruchamia standardową komendę z konfiguracji. Nie ma osobnego launchera Playwright,
 automatycznego buildu/pull ani zależności od publikacji GHCR. Wszystkie zależności
 Playwright są instalowane w obrazie, nie na hoście. Po zmianie receptury wykonaj
 ponownie build. Instrukcja dostarczana do projektu jest w
-`.opencode/mcp/playwright/README.md`; szczegóły wspólne są w `mcp/README.md`.
+`.ai-profiles/<klient>/mcp/playwright/README.md`; szczegóły wspólne są w `mcp/README.md`.

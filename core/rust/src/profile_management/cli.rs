@@ -6,16 +6,13 @@ use std::{
 };
 
 use crate::{
-    model::{ProfileAction, RepositoryContext, VersionBump},
+    model::{ClientSelection, ProfileAction, RepositoryContext, VersionBump},
     profile_management::{
-        installation::apply_profile,
         migration::migrate_legacy,
         profiles::{bump_profile, create_profile, rename_profile},
-        status::status,
-        uninstall::uninstall,
         validation::validate_sources,
     },
-    project::{selected_project, state_for},
+    project::selected_project,
     repository::profile_names,
 };
 
@@ -26,6 +23,7 @@ mod cli_tests;
 const COMMAND_HELP: &str = include_str!("../../help.txt");
 
 struct Options {
+    client: Option<ClientSelection>,
     action: Option<ProfileAction>,
     profile: Option<String>,
     project: Option<PathBuf>,
@@ -76,6 +74,7 @@ enum ParseResult {
 
 fn parse_args(args: Vec<OsString>) -> Result<ParseResult, String> {
     let mut action = None;
+    let mut client = None;
     let mut profile = None;
     let mut positional_count = 0;
     let mut project = None;
@@ -137,6 +136,15 @@ fn parse_args(args: Vec<OsString>) -> Result<ParseResult, String> {
             description = Some(option_value(&args, &mut index, "--description")?);
             continue;
         }
+        if !positional_only && (text == "--client" || text.starts_with("--client=")) {
+            if client.is_some() {
+                return Err("--client podano więcej niż raz".into());
+            }
+            client = Some(ClientSelection::parse(&option_value(
+                &args, &mut index, "--client",
+            )?)?);
+            continue;
+        }
         if !positional_only && (text == "--new-name" || text.starts_with("--new-name=")) {
             new_name = Some(option_value(&args, &mut index, "--new-name")?);
             continue;
@@ -154,6 +162,7 @@ fn parse_args(args: Vec<OsString>) -> Result<ParseResult, String> {
     }
 
     Ok(ParseResult::Options(Options {
+        client,
         action,
         profile,
         project,
@@ -216,6 +225,23 @@ fn parse_action(value: &str) -> Result<ProfileAction, String> {
 
 fn validate_option_combinations(options: &Options) -> Result<(), String> {
     let action = options.action;
+    let lifecycle = matches!(
+        action,
+        Some(
+            ProfileAction::Install
+                | ProfileAction::Update
+                | ProfileAction::Switch
+                | ProfileAction::Uninstall
+        )
+    );
+    if lifecycle && options.client.is_none() {
+        return Err("Wymagane --client opencode|claude|codex|all".into());
+    }
+    if options.client.is_some() && !lifecycle && action != Some(ProfileAction::Status) {
+        return Err(
+            "--client jest dostępne tylko dla install, update, switch, uninstall i status".into(),
+        );
+    }
     if options.new_name.is_some() && action != Some(ProfileAction::Rename) {
         return Err("--new-name jest dostępne tylko dla rename".to_owned());
     }
@@ -353,45 +379,28 @@ fn run(options: Options) -> Result<(), CliFailure> {
         ) => {
             let project =
                 selected_project(&context, options.project.as_deref()).map_err(operation_error)?;
+            if let Some(
+                action @ (ProfileAction::Install
+                | ProfileAction::Update
+                | ProfileAction::Switch
+                | ProfileAction::Uninstall
+                | ProfileAction::Status),
+            ) = options.action
+            {
+                return crate::profile_management::scoped::run(
+                    &context,
+                    &project,
+                    action,
+                    options.client.unwrap_or(ClientSelection::All),
+                    options.profile.as_deref(),
+                )
+                .map_err(operation_error);
+            }
             match options.action {
-                Some(ProfileAction::Install | ProfileAction::Switch) => {
-                    let old = state_for(&context, &project).map_err(operation_error)?;
-                    if options.action == Some(ProfileAction::Install) && old.is_some() {
-                        return Err(CliFailure::Operation(
-                            "Profil już zainstalowany; użyj update albo switch".to_owned(),
-                        ));
-                    }
-                    if options.action == Some(ProfileAction::Switch) && old.is_none() {
-                        return Err(CliFailure::Operation(
-                            "Brak profilu do zmiany; użyj install".to_owned(),
-                        ));
-                    }
-                    let profile = options.profile.as_deref().ok_or_else(|| {
-                        CliFailure::Parse("install/switch wymagają nazwy profilu".to_owned())
-                    })?;
-                    apply_profile(&context, &project, profile).map_err(operation_error)
-                }
-                Some(ProfileAction::Update) => {
-                    let old = state_for(&context, &project).map_err(operation_error)?;
-                    let profile = old
-                        .as_ref()
-                        .and_then(|state| state.get("profile"))
-                        .and_then(|profile| profile.as_str())
-                        .ok_or_else(|| {
-                            CliFailure::Operation(
-                                "Brak zainstalowanego profilu. Użyj install".to_owned(),
-                            )
-                        })?;
-                    apply_profile(&context, &project, profile).map_err(operation_error)
-                }
-                Some(ProfileAction::Uninstall) => {
-                    uninstall(&context, &project).map_err(operation_error)
-                }
                 Some(ProfileAction::MigrateLegacy) => {
                     migrate_legacy(&context, &project, options.accept_existing)
                         .map_err(operation_error)
                 }
-                Some(ProfileAction::Status) => status(&context, &project).map_err(operation_error),
                 _ => Err(CliFailure::Operation("Nieobsługiwana komenda".to_owned())),
             }
         }

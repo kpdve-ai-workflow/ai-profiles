@@ -6,17 +6,19 @@ TWORZENIE PROFILU
     Opcjonalny opis: DESCRIPTION="Opis profilu"
 
 PRACA Z PROJEKTEM
-  make install PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
-    Instaluje profil w projekcie, który jeszcze go nie ma.
-  make switch PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
+  make install CLIENT=KLIENT PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
+    Instaluje profil tylko dla wybranego klienta (nie aplikację klienta).
+  make install-opencode / install-claude / install-codex PROFILE=NAZWA PROJECT=SCIEZKA
+    Aliasy install z odpowiednim CLIENT; sprzeczne CLIENT jest błędem.
+  make switch CLIENT=KLIENT PROFILE=NAZWA PROJECT=SCIEZKA_DO_PROJEKTU
     Zmienia zainstalowany profil na inny.
   make status PROJECT=SCIEZKA_DO_PROJEKTU
-    Pokazuje wersje i lokalne zmiany.
-  make update PROJECT=SCIEZKA_DO_PROJEKTU
+    Pokazuje wszystkie integracje; opcjonalne CLIENT ogranicza wynik.
+  make update CLIENT=KLIENT PROJECT=SCIEZKA_DO_PROJEKTU
     Aktualizuje profil z lokalnych źródeł, bez pobierania zmian z sieci.
-  make pull-update PROJECT=SCIEZKA_DO_PROJEKTU
+  make pull-update CLIENT=KLIENT PROJECT=SCIEZKA_DO_PROJEKTU
     Pobiera źródła przez git pull --ff-only, potem aktualizuje profil.
-  make uninstall PROJECT=SCIEZKA_DO_PROJEKTU
+  make uninstall CLIENT=KLIENT PROJECT=SCIEZKA_DO_PROJEKTU
     Usuwa profil, zachowując własne pliki i ustawienia użytkownika.
 
 UTRZYMANIE REPOZYTORIUM
@@ -48,6 +50,11 @@ UTRZYMANIE REPOZYTORIUM
     Pokazuje pomoc. Samo make również pokazuje pomoc.
 
 ARGUMENTY
+  CLIENT       opencode|claude|codex|all; wymagany dla operacji zmieniających instalację.
+               CLI: --client KLIENT lub --client=KLIENT. Bez domyślnego klienta.
+               all: install dodaje brakujących (konflikt profili blokuje zapis),
+               update/switch/uninstall obejmują tylko zainstalowanych, w kolejności
+               OpenCode, Claude, Codex. Brak instalacji jest błędem tych trzech operacji.
   PROFILE      Wymagany tam, gdzie podano. Nie ma domyślnego profilu.
                create: nowa nazwa, małe litery/cyfry i pojedyncze myślniki.
                install/switch/bump/rename/validate: nazwa istniejącego profilu.

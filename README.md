@@ -13,9 +13,10 @@ Uruchamiaj polecenia z katalogu sklonowanego repozytorium:
 
 ```bash
 make help
-make install PROFILE=backend-go PROJECT=~/projects/my-api
+make install CLIENT=opencode PROFILE=backend-go PROJECT=~/projects/my-api
+make install-codex PROFILE=react PROJECT=~/projects/my-api
 make status PROJECT=~/projects/my-api
-make update PROJECT=~/projects/my-api
+make update CLIENT=codex PROJECT=~/projects/my-api
 make validate
 make test
 ```
@@ -25,14 +26,36 @@ Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
 Po instalacji, aktualizacji lub zmianie profilu uruchom ponownie narzędzie,
 w którym korzystasz z profilu.
 
-Wybrane skille są dystrybuowane raz do
-`.opencode/ai-profile/plugin/skills/`. OpenCode otrzymuje jawne źródło skills;
+Wybrane skille są kopiowane niezależnie do
+`.ai-profiles/<klient>/plugin/skills/`. OpenCode otrzymuje jawne źródło skills;
 repozytorium nie instaluje kopii pod `.agents/skills/` ani `.claude/skills/`.
 Wtyczki Claude Code i Codex wymagają natywnej rejestracji i zaufania projektu.
-Profile przygotowują wybrane MCP automatycznie dla OpenCode, Codex i Claude Code
+Profile przygotowują wybrane MCP tylko dla wskazanego klienta
 na poziomie projektu. Klienci mogą wymagać restartu, zaufania projektu,
 zatwierdzenia MCP lub osobnego logowania OAuth. Status potwierdza przygotowanie
 konfiguracji, nie połączenie z serwerem.
+
+`CLIENT=opencode|claude|codex|all` jest wymagany przy install/update/switch/uninstall
+i pull-update. Aliasy: `install-opencode`, `install-claude`, `install-codex`.
+`status` bez CLIENT pokazuje wszystkie trzy integracje, z CLIENT tylko wybraną.
+Każdy klient może mieć inny profil i wersję; operacja dla jednego nie zmienia
+plików ani rekordu pozostałych. Stan formatu 2: `.ai-profiles/state.json`;
+lokalne nadpisania MCP: `.ai-profiles/<klient>/local.json` (plik użytkownika).
+
+`install CLIENT=all` dodaje brakujących klientów, pomija zgodne profile i odrzuca
+konflikt profilu przed zapisem. Pozostałe operacje `all` dotyczą tylko
+zainstalowanych klientów; brak instalacji jest błędem. Kolejność: OpenCode,
+Claude, Codex. Nie ma transakcji między klientami: przygotowany stan i sukcesy
+pozostają zapisane także przy późniejszym błędzie aktywacji.
+
+Starszy stan formatu 1 jest rozpoznawany bez zapisu podczas statusu. Dopiero
+update/switch wybranego klienta przenosi jego konfigurację do osobnego payloadu.
+Stary stan `.opencode/ai-profile-state.json` i współdzielony payload pozostają
+zamrożonymi zasobami kompatybilności — nie są automatycznie usuwane, również
+po odinstalowaniu. Format 2 ma pierwszeństwo, także z pustą mapą klientów.
+Instalator nie instaluje aplikacji klientów, nie uruchamia Dockera ani OAuth.
+Współistnienie konfiguracji nie oznacza bezpiecznej równoległej edycji plików
+aplikacji przez agentów ani obsługi równoległych instalatorów.
 
 ## Dokumentacja
 

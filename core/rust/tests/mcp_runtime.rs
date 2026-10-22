@@ -23,6 +23,41 @@ fn project_location_follows_the_installed_adapter_not_its_invocation_path() {
 }
 
 #[test]
+fn isolated_adapters_and_local_overrides_use_their_own_client() {
+    use crate::{layout::Layout, model::Client};
+    let project = tempfile::tempdir().unwrap();
+    for client in Client::ALL {
+        let layout = Layout::Isolated(client);
+        let adapter = project.path().join(layout.adapter());
+        std::fs::create_dir_all(adapter.parent().unwrap()).unwrap();
+        std::fs::write(&adapter, b"adapter").unwrap();
+        std::fs::write(
+            project.path().join(layout.local()),
+            format!(
+                r#"{{"mcp":{{"server":{{"environment":{{"CLIENT":"{}"}}}}}}}}"#,
+                client.as_str()
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            crate::mcp::runtime::project_from_adapter(&adapter).unwrap(),
+            project.path().canonicalize().unwrap()
+        );
+        let base = json!({"server":{"type":"local","command":["example"]}});
+        let resolved = crate::mcp::config::resolve_at(
+            project.path(),
+            base.as_object().unwrap(),
+            &layout.local(),
+        )
+        .unwrap();
+        assert_eq!(
+            resolved.servers["server"]["environment"]["CLIENT"],
+            client.as_str()
+        );
+    }
+}
+
+#[test]
 fn project_metadata_overrides_every_environment_source_only_in_child() {
     let temp = tempfile::tempdir().unwrap();
     let project = temp.path().canonicalize().unwrap();

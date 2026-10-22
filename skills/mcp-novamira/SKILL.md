@@ -25,7 +25,7 @@ Multisite blogs have separate content, options, menus, and media. Never assume d
 4. Use read-only operations for inspection. Perform a write only when the user explicitly requests it.
 5. After a write, read the affected data back through Novamira and verify the result.
 
-This profile uses the ai-profiles stdio adapter and a pinned WordPress bridge with `OAUTH_ENABLED=false`, targeting `/wp-json/mcp/novamira` (not `/novamira-oauth`). The user configures a WordPress Application Password in a private env file. Never request credentials in chat, print them, read secret files into tool output, or put them in versioned files. Do not switch to OAuth or alter credentials as routine troubleshooting. User-facing setup instructions are in `.opencode/ai-profile/README.md`.
+This profile uses the ai-profiles stdio adapter and a pinned WordPress bridge with `OAUTH_ENABLED=false`, targeting `/wp-json/mcp/novamira` (not `/novamira-oauth`). The user configures a WordPress Application Password in a private env file. Never request credentials in chat, print them, read secret files into tool output, or put them in versioned files. Do not switch to OAuth or alter credentials as routine troubleshooting. User-facing setup instructions are in `{{AI_PROFILE_ROOT}}/README.md`.
 
 ## Safety boundaries
 
@@ -37,4 +37,4 @@ This profile uses the ai-profiles stdio adapter and a pinned WordPress bridge wi
 
 ## When the connection is unavailable
 
-Distinguish a missing tool surface from an authorization or network error. Novamira is disabled until the user configures and enables it in `.opencode/ai-profile.local.json`, runs update and restarts OpenCode. Check site availability, the intended host, plugin activation, AI Abilities, account permissions and the MCP connection state without exposing secrets. Do not disable TLS verification or repeatedly retry authentication. If the connection cannot be restored, report the blocking layer and stop before writing data.
+Distinguish a missing tool surface from an authorization or network error. Novamira is disabled until the user configures and enables it in `{{AI_PROFILE_LOCAL}}`, runs `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=<project>` and restarts the selected client. Check site availability, the intended host, plugin activation, AI Abilities, account permissions and the MCP connection state without exposing secrets. Do not disable TLS verification or repeatedly retry authentication. If the connection cannot be restored, report the blocking layer and stop before writing data.

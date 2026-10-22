@@ -2,6 +2,77 @@ use std::{cmp::Ordering, path::PathBuf, str::FromStr};
 
 use crate::error::ModelError;
 
+#[derive(
+    Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Client {
+    OpenCode,
+    Claude,
+    Codex,
+}
+
+impl Client {
+    pub(crate) const ALL: [Self; 3] = [Self::OpenCode, Self::Claude, Self::Codex];
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::OpenCode => "opencode",
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+        }
+    }
+}
+
+impl FromStr for Client {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "opencode" => Ok(Self::OpenCode),
+            "claude" => Ok(Self::Claude),
+            "codex" => Ok(Self::Codex),
+            _ => Err("Podaj klienta: opencode, claude lub codex".into()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ClientSelection {
+    One(Client),
+    All,
+}
+
+impl FromStr for ClientSelection {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value == "all" {
+            Ok(Self::All)
+        } else {
+            value.parse().map(Self::One)
+        }
+    }
+}
+
+impl Client {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        value.parse().ok()
+    }
+}
+
+impl ClientSelection {
+    pub(crate) fn parse(value: &str) -> Result<Self, String> {
+        if value == "all" {
+            Ok(Self::All)
+        } else {
+            Client::parse(value)
+                .map(Self::One)
+                .ok_or_else(|| "--client wymaga opencode, claude, codex albo all".to_owned())
+        }
+    }
+}
+
 /// A profile identifier in lowercase kebab-case.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ProfileName(String);

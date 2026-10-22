@@ -28,6 +28,9 @@ pub(crate) fn migrate_legacy(
     if !accept_existing {
         return Err(MigrationError::AcceptanceRequired);
     }
+    if file_path(project, crate::layout::STATE)?.exists() {
+        return Err(MigrationError::NotLegacyFormat);
+    }
 
     let state_path = file_path(project, STATE)?;
     if !state_path.exists() {
@@ -117,7 +120,7 @@ pub(crate) fn migrate_legacy(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(source) => return Err(MigrationError::Io { path: gate, source }),
     }
-    println!("OK: zaadoptowano stary profil {profile}; teraz uruchom update");
+    println!("OK: zaadoptowano stary profil {profile}; teraz uruchom make update CLIENT=opencode PROJECT=\"{}\"", project.display());
     Ok(())
 }
 

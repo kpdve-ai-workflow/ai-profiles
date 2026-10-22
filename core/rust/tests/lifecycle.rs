@@ -126,6 +126,607 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     (source, context)
 }
 
+fn scoped_action(
+    context: &RepositoryContext,
+    project: &Path,
+    action: crate::model::ProfileAction,
+    client: crate::model::Client,
+    profile: Option<&str>,
+) {
+    crate::profile_management::scoped::run(
+        context,
+        project,
+        action,
+        crate::model::ClientSelection::One(client),
+        profile,
+    )
+    .unwrap();
+}
+
+#[test]
+fn activation_is_scoped_failed_state_is_saved_and_retry_keeps_success_history() {
+    use crate::{
+        model::{Client, ClientSelection as S, ProfileAction as A},
+        process::{CommandOutput, CommandSpec, ProcessRunner},
+        profile_management::scoped::run_with_runner,
+    };
+    use std::{cell::RefCell, os::unix::process::ExitStatusExt};
+    struct Runner {
+        calls: RefCell<Vec<CommandSpec>>,
+        fail: bool,
+    }
+    impl ProcessRunner for Runner {
+        fn run(
+            &self,
+            spec: CommandSpec,
+        ) -> std::result::Result<CommandOutput, crate::error::ProcessError> {
+            assert_eq!(spec.program, "claude");
+            self.calls.borrow_mut().push(spec);
+            Ok(CommandOutput {
+                status: std::process::ExitStatus::from_raw(if self.fail { 256 } else { 0 }),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        }
+    }
+    let (_sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    let runner = Runner {
+        calls: RefCell::new(Vec::new()),
+        fail: false,
+    };
+    run_with_runner(
+        &context,
+        project.path(),
+        A::Install,
+        S::One(Client::OpenCode),
+        Some("wordpress"),
+        &runner,
+    )
+    .unwrap();
+    assert!(runner.calls.borrow().is_empty());
+    run_with_runner(
+        &context,
+        project.path(),
+        A::Install,
+        S::One(Client::Claude),
+        Some("wordpress"),
+        &runner,
+    )
+    .unwrap();
+    assert_eq!(runner.calls.borrow()[0].args[1], "install");
+    let successful = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    // Older native metadata can record synchronization without installed_before.
+    let mut historical = successful.clone();
+    historical["clients"]["claude"]["native"]["claude"]
+        .as_object_mut()
+        .unwrap()
+        .remove("installed_before");
+    put(
+        project.path(),
+        ".ai-profiles/state.json",
+        &json_bytes(&historical).unwrap(),
+    );
+    let failed_runner = Runner {
+        calls: RefCell::new(Vec::new()),
+        fail: true,
+    };
+    assert!(run_with_runner(
+        &context,
+        project.path(),
+        A::Update,
+        S::One(Client::Claude),
+        None,
+        &failed_runner
+    )
+    .is_err());
+    assert_eq!(failed_runner.calls.borrow()[0].args[1], "update");
+    let failed = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert_eq!(
+        failed["clients"]["claude"]["native"]["claude"]["activation"],
+        "failed"
+    );
+    assert_eq!(
+        successful["clients"]["claude"]["native"]["claude"]["last_successful_sync"],
+        failed["clients"]["claude"]["native"]["claude"]["last_successful_sync"]
+    );
+    assert_eq!(
+        successful["clients"]["opencode"],
+        failed["clients"]["opencode"]
+    );
+    run_with_runner(
+        &context,
+        project.path(),
+        A::Update,
+        S::One(Client::Claude),
+        None,
+        &runner,
+    )
+    .unwrap();
+}
+
+fn snapshot(root: &Path) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+    let mut result = std::collections::BTreeMap::new();
+    if root.is_dir() {
+        for entry in fs::read_dir(root).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                result.extend(snapshot(&path));
+            } else {
+                result.insert(path.clone(), fs::read(path).unwrap());
+            }
+        }
+    }
+    result
+}
+
+#[test]
+fn historical_combined_inspection_is_read_only() {
+    let (_sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    apply_profile(&context, project.path(), "wordpress").unwrap();
+    let state = read_json(&project.path().join(".opencode/ai-profile-state.json")).unwrap();
+    let before = snapshot(project.path());
+    crate::profile_management::native::current_status(project.path(), &state).unwrap();
+    crate::profile_management::native::mcp_configuration_status(project.path(), &state).unwrap();
+    assert_eq!(before, snapshot(project.path()));
+}
+
+#[test]
+fn versions_profiles_empty_selections_and_user_overrides_are_independent() {
+    use crate::model::{Client, ProfileAction as A};
+    let (sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Codex,
+        Some("wordpress"),
+    );
+    put(
+        sources.path(),
+        "profiles/wordpress/profile.json",
+        br#"{"name":"wordpress","version":"2.0.0","description":"WordPress"}"#,
+    );
+    scoped_action(&context, project.path(), A::Update, Client::OpenCode, None);
+    let open = snapshot(&project.path().join(".ai-profiles/opencode"));
+    let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert_eq!(state["clients"]["opencode"]["version"], "2.0.0");
+    assert_eq!(state["clients"]["codex"]["version"], "1.0.0");
+    put(
+        sources.path(),
+        "profiles/wordpress/profile.json",
+        br#"{"name":"wordpress","version":"1.0.0","description":"WordPress"}"#,
+    );
+    scoped_action(&context, project.path(), A::Update, Client::Codex, None);
+    assert!(crate::profile_management::scoped::run(
+        &context,
+        project.path(),
+        A::Update,
+        crate::model::ClientSelection::One(Client::OpenCode),
+        None
+    )
+    .is_err());
+    put(
+        sources.path(),
+        "profiles/empty/profile.json",
+        br#"{"name":"empty","version":"1.0.0","description":"Empty"}"#,
+    );
+    put(
+        sources.path(),
+        "profiles/empty/mcp.json",
+        br#"{"servers":[]}"#,
+    );
+    put(
+        sources.path(),
+        "profiles/empty/skills.json",
+        br#"{"skills":[]}"#,
+    );
+    put(
+        project.path(),
+        ".ai-profiles/codex/local.json",
+        br#"{"mcp":{}}"#,
+    );
+    scoped_action(
+        &context,
+        project.path(),
+        A::Switch,
+        Client::Codex,
+        Some("empty"),
+    );
+    assert!(!project
+        .path()
+        .join(".ai-profiles/codex/mcp/mariadb")
+        .exists());
+    assert!(!project
+        .path()
+        .join(".ai-profiles/codex/ai-profile-mcp")
+        .exists());
+    assert_eq!(
+        open,
+        snapshot(&project.path().join(".ai-profiles/opencode"))
+    );
+    let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert_eq!(state["clients"]["codex"]["profile"], "empty");
+    assert_eq!(state["clients"]["opencode"]["version"], "2.0.0");
+    scoped_action(&context, project.path(), A::Uninstall, Client::Codex, None);
+    assert!(!project.path().join(".ai-profiles/codex/plugin").exists());
+    assert_eq!(
+        fs::read(project.path().join(".ai-profiles/codex/local.json")).unwrap(),
+        br#"{"mcp":{}}"#
+    );
+}
+
+#[test]
+fn combined_legacy_native_migration_partitions_ownership_and_preserves_original_backups() {
+    use crate::model::{Client, ProfileAction as A};
+    let (_sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    put(
+        project.path(),
+        ".claude/settings.json",
+        br#"{"user":"keep"}"#,
+    );
+    put(
+        project.path(),
+        ".codex/config.toml",
+        b"# original\nmodel = \"keep\"\n",
+    );
+    apply_profile(&context, project.path(), "wordpress").unwrap();
+    put(
+        project.path(),
+        ".opencode/ai-profile.local.json",
+        br#"{"mcp":{"mariadb":{"environment":{"CUSTOM":"literal"}}}}"#,
+    );
+    let imported = crate::project::manifest_for(&context, project.path()).unwrap();
+    for client in Client::ALL {
+        assert_eq!(imported["clients"][client.as_str()]["layout"], "legacy");
+    }
+    assert!(!project.path().join(".ai-profiles").exists());
+    let frozen = snapshot(&project.path().join(".opencode"));
+    let open_config = fs::read(project.path().join("opencode.json")).unwrap();
+    let claude_config = fs::read(project.path().join(".claude/settings.json")).unwrap();
+    let claude_catalog = fs::read(project.path().join(".claude-plugin/marketplace.json")).unwrap();
+    let claude_mcp = fs::read(project.path().join(".mcp.json")).unwrap();
+    for action in [A::Update, A::Update, A::Uninstall] {
+        scoped_action(&context, project.path(), action, Client::Codex, None);
+        assert_eq!(frozen, snapshot(&project.path().join(".opencode")));
+        assert_eq!(
+            open_config,
+            fs::read(project.path().join("opencode.json")).unwrap()
+        );
+        assert_eq!(
+            claude_config,
+            fs::read(project.path().join(".claude/settings.json")).unwrap()
+        );
+        assert_eq!(
+            claude_catalog,
+            fs::read(project.path().join(".claude-plugin/marketplace.json")).unwrap()
+        );
+        assert_eq!(
+            claude_mcp,
+            fs::read(project.path().join(".mcp.json")).unwrap()
+        );
+        let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+        for client in [Client::OpenCode, Client::Claude] {
+            assert_eq!(
+                imported["clients"][client.as_str()],
+                state["clients"][client.as_str()]
+            );
+        }
+        if action == A::Update {
+            assert_eq!(state["clients"]["codex"]["layout"], "isolated");
+            assert_eq!(
+                state["clients"]["codex"]["native"]["codex"]["plugins_had_table"],
+                imported["clients"]["codex"]["native"]["codex"]["plugins_had_table"]
+            );
+            assert_eq!(
+                state["clients"]["codex"]["native"]["codex"]["enabled_previous"],
+                imported["clients"]["codex"]["native"]["codex"]["enabled_previous"]
+            );
+        }
+    }
+    assert!(project
+        .path()
+        .join(".ai-profiles/codex/local.json")
+        .is_file());
+    let remaining = fs::read_to_string(project.path().join(".codex/config.toml")).unwrap();
+    assert!(remaining.contains("# original"));
+    assert!(remaining.contains("model = \"keep\""));
+}
+
+#[test]
+fn all_keeps_successful_clients_when_native_activation_fails_later() {
+    use crate::{
+        model::{ClientSelection, ProfileAction as A},
+        process::{CommandOutput, CommandSpec, ProcessRunner},
+        profile_management::scoped::run_with_runner,
+    };
+    use std::{cell::RefCell, os::unix::process::ExitStatusExt};
+    struct Runner(RefCell<Vec<std::ffi::OsString>>);
+    impl ProcessRunner for Runner {
+        fn run(
+            &self,
+            spec: CommandSpec,
+        ) -> std::result::Result<CommandOutput, crate::error::ProcessError> {
+            let successful = spec.program == "claude";
+            self.0.borrow_mut().push(spec.program);
+            Ok(CommandOutput {
+                status: std::process::ExitStatus::from_raw(if successful { 0 } else { 256 }),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        }
+    }
+    let (_sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    let runner = Runner(RefCell::new(Vec::new()));
+    assert!(run_with_runner(
+        &context,
+        project.path(),
+        A::Install,
+        ClientSelection::All,
+        Some("wordpress"),
+        &runner
+    )
+    .is_err());
+    let calls: Vec<String> = runner
+        .0
+        .borrow()
+        .iter()
+        .map(|s| s.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(calls, ["claude", "codex"]);
+    let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert_eq!(state["clients"]["opencode"]["profile"], "wordpress");
+    assert_eq!(
+        state["clients"]["claude"]["native"]["claude"]["activation"],
+        "synchronized"
+    );
+    assert_eq!(
+        state["clients"]["codex"]["native"]["codex"]["activation"],
+        "failed"
+    );
+}
+
+#[test]
+fn scoped_clients_coexist_and_lifecycle_preserves_foreign_bytes_and_records() {
+    use crate::model::{Client, ProfileAction as A};
+    let (_sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    put(project.path(), ".codex/config.toml", b"malformed = [");
+    put(project.path(), ".claude/settings.json", b"not json");
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    assert!(!project.path().join(".claude-plugin").exists());
+    assert!(!project.path().join(".agents").exists());
+    assert!(!project
+        .path()
+        .join(".ai-profiles/opencode/plugin/.codex-plugin")
+        .exists());
+    let open_payload = snapshot(&project.path().join(".ai-profiles/opencode"));
+    let open_config = fs::read(project.path().join("opencode.json")).unwrap();
+    let before = read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]
+        ["opencode"]
+        .clone();
+    fs::remove_file(project.path().join(".codex/config.toml")).unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Codex,
+        Some("wordpress"),
+    );
+    assert_eq!(
+        open_payload,
+        snapshot(&project.path().join(".ai-profiles/opencode"))
+    );
+    assert_eq!(
+        open_config,
+        fs::read(project.path().join("opencode.json")).unwrap()
+    );
+    assert_eq!(
+        before,
+        read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]["opencode"]
+    );
+    fs::remove_file(project.path().join(".claude/settings.json")).unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Claude,
+        Some("wordpress"),
+    );
+    let claude_payload = snapshot(&project.path().join(".ai-profiles/claude"));
+    let claude_config = fs::read(project.path().join(".claude/settings.json")).unwrap();
+    let claude_record = read_json(&project.path().join(".ai-profiles/state.json")).unwrap()
+        ["clients"]["claude"]
+        .clone();
+    for action in [A::Update, A::Switch, A::Status, A::Uninstall] {
+        scoped_action(
+            &context,
+            project.path(),
+            action,
+            Client::Codex,
+            (action == A::Switch).then_some("wordpress"),
+        );
+        assert_eq!(
+            open_payload,
+            snapshot(&project.path().join(".ai-profiles/opencode"))
+        );
+        assert_eq!(
+            claude_payload,
+            snapshot(&project.path().join(".ai-profiles/claude"))
+        );
+        assert_eq!(
+            claude_config,
+            fs::read(project.path().join(".claude/settings.json")).unwrap()
+        );
+        let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+        assert_eq!(before, state["clients"]["opencode"]);
+        assert_eq!(claude_record, state["clients"]["claude"]);
+    }
+}
+
+#[test]
+fn native_only_clients_ignore_invalid_opencode_and_other_native_config() {
+    use crate::model::{Client, ProfileAction as A};
+    for client in [Client::Claude, Client::Codex] {
+        let (_sources, context) = native_source();
+        let project = tempfile::tempdir().unwrap();
+        put(project.path(), "opencode.json", b"invalid");
+        put(project.path(), "opencode.jsonc", b"invalid");
+        let other = if client == Client::Codex {
+            ".claude/settings.json"
+        } else {
+            ".codex/config.toml"
+        };
+        put(project.path(), other, b"invalid");
+        scoped_action(
+            &context,
+            project.path(),
+            A::Install,
+            client,
+            Some("wordpress"),
+        );
+        let before = snapshot(project.path());
+        scoped_action(&context, project.path(), A::Status, client, None);
+        assert_eq!(before, snapshot(project.path()));
+        scoped_action(&context, project.path(), A::Update, client, None);
+        scoped_action(&context, project.path(), A::Uninstall, client, None);
+        assert_eq!(
+            fs::read(project.path().join("opencode.json")).unwrap(),
+            b"invalid"
+        );
+        assert_eq!(fs::read(project.path().join(other)).unwrap(), b"invalid");
+    }
+}
+
+#[test]
+fn all_is_additive_preflights_conflicts_and_keeps_empty_authoritative_state() {
+    use crate::model::{Client, ClientSelection, ProfileAction as A};
+    use crate::profile_management::scoped::run;
+    let (_sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    assert!(run(
+        &context,
+        project.path(),
+        A::Update,
+        ClientSelection::All,
+        None
+    )
+    .is_err());
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    let before = snapshot(project.path());
+    assert!(run(
+        &context,
+        project.path(),
+        A::Install,
+        ClientSelection::All,
+        Some("unknown")
+    )
+    .is_err());
+    assert_eq!(before, snapshot(project.path()));
+    run(
+        &context,
+        project.path(),
+        A::Install,
+        ClientSelection::All,
+        Some("wordpress"),
+    )
+    .unwrap();
+    let before = snapshot(project.path());
+    run(
+        &context,
+        project.path(),
+        A::Install,
+        ClientSelection::All,
+        Some("wordpress"),
+    )
+    .unwrap();
+    assert_eq!(before, snapshot(project.path()));
+    run(
+        &context,
+        project.path(),
+        A::Uninstall,
+        ClientSelection::All,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"],
+        json!({})
+    );
+}
+
+#[test]
+fn lazy_legacy_import_and_selected_migration_retain_frozen_assets_and_overrides() {
+    use crate::model::{Client, ProfileAction as A};
+    let (_sources, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    put(
+        project.path(),
+        ".opencode/ai-profile/plugin/skills/frozen/SKILL.md",
+        b"frozen payload",
+    );
+    put(
+        project.path(),
+        ".opencode/ai-profile.local.json",
+        br#"{"mcp":{"mariadb":{"environment":{"PASSWORD":"do-not-print"}}}}"#,
+    );
+    let legacy = json!({"format":1,"profile":"wordpress","version":"1.0.0","files":{},"mcp":{},"mcp_base":{"mariadb":{"type":"local","command":[".opencode/mcp/mariadb/mariadb-launcher"]}},"native":{"opencode_skill_path_added":true},"had_config":false});
+    put(
+        project.path(),
+        ".opencode/ai-profile-state.json",
+        &json_bytes(&legacy).unwrap(),
+    );
+    let frozen = snapshot(&project.path().join(".opencode"));
+    scoped_action(&context, project.path(), A::Status, Client::OpenCode, None);
+    assert!(!project.path().join(".ai-profiles").exists());
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Codex,
+        Some("wordpress"),
+    );
+    assert_eq!(frozen, snapshot(&project.path().join(".opencode")));
+    assert!(!project
+        .path()
+        .join(".ai-profiles/codex/local.json")
+        .exists());
+    scoped_action(&context, project.path(), A::Update, Client::OpenCode, None);
+    assert_eq!(frozen, snapshot(&project.path().join(".opencode")));
+    assert!(project
+        .path()
+        .join(".ai-profiles/opencode/local.json")
+        .is_file());
+    assert_eq!(
+        read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]["codex"]
+            ["layout"],
+        "isolated"
+    );
+}
+
 const PLAYWRIGHT_FILES: [&str; 10] = [
     "Dockerfile",
     "entrypoint.sh",

@@ -19,6 +19,7 @@ use crate::{
 };
 
 const TIMEOUT_FIELDS: [&str; 3] = ["startup", "catalog", "execution"];
+#[cfg(test)]
 const LOCAL_CONFIG: &str = ".opencode/ai-profile.local.json";
 const NATIVE_LAUNCHER: &str = ".opencode/ai-profile-mcp";
 const OVERRIDE_FIELDS: [&str; 14] = [
@@ -269,11 +270,20 @@ pub(crate) fn definitions_to_map(definitions: &[McpServerDefinition]) -> Map<Str
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn load_local(
     project: &Path,
     servers: &Map<String, Value>,
 ) -> Result<Map<String, Value>, McpConfigError> {
-    let path = project_path(project, LOCAL_CONFIG)?;
+    load_local_at(project, servers, LOCAL_CONFIG)
+}
+
+fn load_local_at(
+    project: &Path,
+    servers: &Map<String, Value>,
+    local: &str,
+) -> Result<Map<String, Value>, McpConfigError> {
+    let path = project_path(project, local)?;
     if !path.exists() {
         return Ok(Map::new());
     }
@@ -401,11 +411,28 @@ pub(crate) struct McpConfiguration {
     pub(crate) overrides: Map<String, Value>,
 }
 
+#[cfg(test)]
 pub(crate) fn resolve(
     project: &Path,
     base: &Map<String, Value>,
 ) -> Result<McpConfiguration, McpConfigError> {
-    let overrides = load_local(project, base)?;
+    resolve_overrides(project, base, load_local(project, base)?)
+}
+
+pub(crate) fn resolve_at(
+    project: &Path,
+    base: &Map<String, Value>,
+    local: &str,
+) -> Result<McpConfiguration, McpConfigError> {
+    let overrides = load_local_at(project, base, local)?;
+    resolve_overrides(project, base, overrides)
+}
+
+pub(crate) fn resolve_overrides(
+    project: &Path,
+    base: &Map<String, Value>,
+    overrides: Map<String, Value>,
+) -> Result<McpConfiguration, McpConfigError> {
     let mut effective = Map::new();
     for (name, entry) in base {
         let merged = match overrides.get(name) {
@@ -455,14 +482,32 @@ pub(crate) fn render(effective: &Map<String, Value>) -> Result<Map<String, Value
     Ok(rendered)
 }
 
+#[cfg(test)]
 pub(crate) fn configured_mcp(
     project: &Path,
     base: &Map<String, Value>,
 ) -> Result<McpConfiguration, McpConfigError> {
+    configured_mcp_at(project, base, LOCAL_CONFIG, NATIVE_LAUNCHER)
+}
+
+pub(crate) fn configured_mcp_at(
+    project: &Path,
+    base: &Map<String, Value>,
+    local: &str,
+    adapter: &str,
+) -> Result<McpConfiguration, McpConfigError> {
+    configured_from(project, resolve_at(project, base, local)?, adapter)
+}
+
+pub(crate) fn configured_from(
+    project: &Path,
+    resolved: McpConfiguration,
+    adapter: &str,
+) -> Result<McpConfiguration, McpConfigError> {
     let McpConfiguration {
         servers: effective,
         overrides,
-    } = resolve(project, base)?;
+    } = resolved;
     let mut rendered = render(&effective)?;
     for (name, entry) in &mut rendered {
         if effective
@@ -478,7 +523,7 @@ pub(crate) fn configured_mcp(
             object.insert(
                 "command".to_owned(),
                 Value::Array(vec![
-                    Value::String(project.join(NATIVE_LAUNCHER).to_string_lossy().into_owned()),
+                    Value::String(project.join(adapter).to_string_lossy().into_owned()),
                     Value::String(name.clone()),
                 ]),
             );

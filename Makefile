@@ -3,6 +3,7 @@ RUST_TARGET := $(abspath core/rust/target)
 PROFILE_CLI := "$(RUST_TARGET)/release/ai-profile"
 PROJECT ?=
 PROFILE ?=
+CLIENT ?=
 NEW_NAME ?=
 DESCRIPTION ?=
 PART ?= patch
@@ -28,20 +29,26 @@ rename: check-profile check-new-name
 check-project:
 	@test -n "$(PROJECT)" || (echo "Podaj PROJECT=/sciezka/do/projektu" >&2; exit 2)
 
-install: check-project check-profile
-	$(PROFILE_CLI) install "$(PROFILE)" --project "$(PROJECT)"
+check-client:
+	@case "$(CLIENT)" in opencode|claude|codex|all) ;; *) echo 'Podaj CLIENT=opencode|claude|codex|all' >&2; exit 2;; esac
 
-update: check-project
-	$(PROFILE_CLI) update --project "$(PROJECT)"
+check-no-client:
+	@test "$(origin CLIENT)" = undefined -o "$(origin CLIENT)" = file || (echo 'Ta komenda nie przyjmuje CLIENT' >&2; exit 2)
 
-uninstall: check-project
-	$(PROFILE_CLI) uninstall --project "$(PROJECT)"
+install: check-client check-project check-profile
+	$(PROFILE_CLI) install "$(PROFILE)" --client "$(CLIENT)" --project "$(PROJECT)"
 
-switch: check-project check-profile
-	$(PROFILE_CLI) switch "$(PROFILE)" --project "$(PROJECT)"
+update: check-client check-project
+	$(PROFILE_CLI) update --client "$(CLIENT)" --project "$(PROJECT)"
+
+uninstall: check-client check-project
+	$(PROFILE_CLI) uninstall --client "$(CLIENT)" --project "$(PROJECT)"
+
+switch: check-client check-project check-profile
+	$(PROFILE_CLI) switch "$(PROFILE)" --client "$(CLIENT)" --project "$(PROJECT)"
 
 status: check-project
-	$(PROFILE_CLI) status --project "$(PROJECT)"
+	$(PROFILE_CLI) status $(if $(filter-out file undefined,$(origin CLIENT)),--client "$(CLIENT)") --project "$(PROJECT)"
 
 validate:
 	$(PROFILE_CLI) validate $(if $(strip $(PROFILE)),"$(PROFILE)")
@@ -119,9 +126,17 @@ _validate-rust-migration-guest: _check-test-guest
 	run_group make-validate make validate; \
 	run_group make-test make test
 
-pull-update: check-project
+pull-update: check-client check-project
 	git pull --ff-only
-	$(MAKE) update PROJECT="$(PROJECT)"
+	$(MAKE) update CLIENT="$(CLIENT)" PROJECT="$(PROJECT)"
+
+.PHONY: check-client check-no-client install-opencode install-claude install-codex
+create rename bump validate migrate-legacy: check-no-client
+
+install-opencode install-claude install-codex:
+	@selected="$(@:install-%=%)"; \
+	if test "$(origin CLIENT)" != file && test "$(CLIENT)" != "$$selected"; then echo 'CLIENT jest sprzeczne z aliasem' >&2; exit 2; fi; \
+	$(MAKE) install CLIENT="$$selected" PROFILE="$(PROFILE)" PROJECT="$(PROJECT)"
 
 # Compatibility aliases: the approval gate no longer exists.
 approve lock gate-status: check-project

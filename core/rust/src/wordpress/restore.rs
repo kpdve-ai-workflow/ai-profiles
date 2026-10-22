@@ -149,7 +149,10 @@ pub(crate) fn restore(
     println!("Backup lokalny: {}", backup.display());
 
     let safety = safety_path(project, ddev.docroot())?;
-    let payload_path = inside(project, ".opencode/ai-profile/scripts/local-safety.php")?;
+    let payload_path = inside(
+        project,
+        &format!("{}/local-safety.php", super::ddev::scripts_for(project)?),
+    )?;
     let payload = fs::read(&payload_path).map_err(|_| WordPressError::RestoreIo)?;
     let safety_existed = safety.exists();
     if safety_existed && fs::read(&safety).map_err(|_| WordPressError::RestoreIo)? != payload {

@@ -14,5 +14,5 @@ lokalizacji umiejętności obsługiwanej przez używane narzędzie.
 
 Zmiany w instrukcji lub materiałach pomocniczych oraz zmiany wyboru profilu
 docierają do zainstalowanego projektu po uruchomieniu
-`make update PROJECT=<projekt>`. Ten katalog nie obejmuje umiejętności
+`make update CLIENT=<klient> PROJECT=<projekt>`. Ten katalog nie obejmuje umiejętności
 lokalnych dla tego repozytorium, które nie są dystrybuowane z profilami.

@@ -4,6 +4,7 @@ pub(crate) mod migration;
 pub(crate) mod native;
 pub(crate) mod payload;
 pub(crate) mod profiles;
+pub(crate) mod scoped;
 pub(crate) mod status;
 pub(crate) mod uninstall;
 pub(crate) mod validation;

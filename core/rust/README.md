@@ -30,7 +30,7 @@ This builds, but does not run, the executables in
 | `test-inventory` | Shared test-discovery skill inventory | Installed as the skill's `scripts/inventory-tests` |
 
 These are examples of how to invoke the programs, not build or validation
-steps. `make install PROFILE=<profile> PROJECT=<project>` builds all
+steps. `make install CLIENT=<client> PROFILE=<profile> PROJECT=<project>` builds all
 executables and invokes the Rust manager. Other manager Make targets also
 build before invoking the manager. There is no `install2` target.
 
@@ -46,8 +46,9 @@ not use the caller's working directory or the compile-time Cargo manifest path
 as the source root.
 
 The MCP adapter is standalone after it has been copied to a project's
-`.opencode/` directory. It reads that project's installed state and local MCP
-override at each startup. The MariaDB launcher likewise starts only when
+`.ai-profiles/<client>/` directory. It reads only that client's record in format-2
+state and its `local.json` at each startup. Frozen legacy adapters under
+`.opencode/` keep reading the retained format-1 state. The MariaDB launcher likewise starts only when
 explicitly configured and invoked.
 
 ## Native project payload
@@ -62,14 +63,14 @@ project writes; direct Cargo users must build all release binaries there first.
 
 | Release binary | Installed executable (mode 0755) |
 | --- | --- |
-| `ai-profile-mcp` | `.opencode/ai-profile-mcp` |
-| `mariadb-launcher` | `.opencode/mcp/mariadb/mariadb-launcher` (selected MariaDB) |
-| `restore-updraft` | `.opencode/ai-profile/scripts/restore-updraft` (WordPress) |
-| `test-inventory` | `.opencode/ai-profile/plugin/skills/test-gap-discovery/scripts/inventory-tests` |
+| `ai-profile-mcp` | `.ai-profiles/<client>/ai-profile-mcp` (local MCP selected) |
+| `mariadb-launcher` | `.ai-profiles/<client>/mcp/mariadb/mariadb-launcher` (selected MariaDB) |
+| `restore-updraft` | `.ai-profiles/<client>/scripts/restore-updraft` (WordPress) |
+| `test-inventory` | `.ai-profiles/<client>/plugin/skills/test-gap-discovery/scripts/inventory-tests` |
 
 Installed files are copied, hashed and managed through the existing ownership
-checks. Update removes previously managed Python payloads only after verifying
-their stored hashes. Unmanaged files and local overrides remain protected.
+checks. Updates affect only the selected client's resources. Shared legacy
+resources are retained, not automatically collected. Unmanaged files and local overrides remain protected.
 PHP helpers and profile documentation are still delivered. Python sources stay
 in this repository as reference; Python files are not distributed. Installed
 executables need neither Cargo nor the source checkout.

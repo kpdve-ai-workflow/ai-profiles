@@ -2,7 +2,7 @@
 
 Testy Rust i pełny test integracyjny Playwright działają wyłącznie w prawdziwej
 VM QEMU/KVM Debian 13 Trixie amd64. Host nie uruchamia Cargo, Node ani Dockera.
-Wymagania te dotyczą testowania, nie lokalnego `make install PROFILE=… PROJECT=…`.
+Wymagania te dotyczą testowania, nie lokalnego `make install CLIENT=opencode PROFILE=… PROJECT=…`.
 Instalator nadal wymaga Rust/Cargo 1.85+, Git i Make.
 
 ## Przygotowanie hosta
@@ -263,6 +263,11 @@ provisioningu pozostawia VM do diagnozy; jawna udana naprawa zapisuje osobny
 marker pozwalający zachować historyczny błąd cloud-init bez blokowania testów.
 
 ## Źródła, cache i izolacja przebiegów
+
+Testy jednostkowe aktywacji używają wstrzykniętych runnerów; domyślny runner
+natywnych integracji w testach zgłasza brak CLI. Nigdy nie rejestrują marketplace
+w rzeczywistym HOME. Test adaptera Playwright instaluje wyłącznie CLIENT=opencode
+do jednorazowego projektu, pod `.ai-profiles/opencode/`.
 
 Jedna nieefemeryczna VM na kanoniczną ścieżkę checkoutu/użytkownika/hosta.
 Tożsamość w konfiguracji VM jest weryfikowana przed operacjami; kolizja

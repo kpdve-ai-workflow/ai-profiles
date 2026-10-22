@@ -92,7 +92,7 @@ bez wyłączania weryfikacji TLS. Storage state jest montowany tylko do odczytu
 i musi mieć prawa `0600` lub bardziej restrykcyjne. Trzymaj go poza raportami
 i Gitem. Przed użyciem dodaj prywatne pliki do projektowego `.gitignore`.
 
-Po zmianach lokalnych ustawień zrestartuj MCP. Po `make update` ponów jawny
+Po zmianach lokalnych ustawień zrestartuj MCP. Po `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=<projekt>` ponów jawny
 `docker build`, jeśli zmienił się Dockerfile lub entrypoint. Aktualizacja profilu
 nie przebudowuje i nie usuwa obrazów; uninstall zachowuje raporty i prywatne pliki.
 

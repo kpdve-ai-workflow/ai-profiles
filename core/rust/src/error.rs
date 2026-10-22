@@ -242,6 +242,7 @@ pub(crate) enum InstallationError {
     #[error("Conflict: path is not a directory: {0}")]
     ParentNotDirectory(PathBuf),
     #[error("Failed to read .gitignore as UTF-8")]
+    #[cfg(test)]
     GitignoreRead,
     #[error("Invalid installed profile state")]
     InvalidState,

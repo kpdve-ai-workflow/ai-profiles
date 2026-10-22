@@ -9,13 +9,127 @@ use serde_json::{json, Value};
 use crate::{
     error::ProjectError,
     filesystem::file_path,
-    model::{RepositoryContext, Version},
+    model::{Client, RepositoryContext, Version},
     repository::profile_names,
 };
 
-const STATE: &str = ".opencode/ai-profile-state.json";
+const STATE: &str = crate::layout::LEGACY_STATE;
 const IGNORE_LINE: &str = ".opencode/workflow-approval.json";
 const SCHEMA: &str = "https://opencode.ai/config.json";
+
+/// Format 2 is authoritative, even when its client map is empty. Legacy import
+/// is deliberately read-only until a selected operation saves the manifest.
+pub(crate) fn manifest_for(
+    context: &RepositoryContext,
+    project: &Path,
+) -> Result<Value, ProjectError> {
+    let path = file_path(project, crate::layout::STATE)?;
+    if path.exists() {
+        let manifest = crate::codec::read_json(&path)?;
+        let clients = manifest
+            .get("clients")
+            .and_then(Value::as_object)
+            .filter(|_| manifest.get("format").and_then(Value::as_u64) == Some(2))
+            .ok_or_else(|| ProjectError::UnsupportedState(path.clone()))?;
+        for (name, record) in clients {
+            name.parse::<Client>()
+                .map_err(|_| ProjectError::UnsupportedState(path.clone()))?;
+            validate_record(record, &path)?;
+            if !matches!(
+                record.get("layout").and_then(Value::as_str),
+                Some("legacy" | "isolated")
+            ) {
+                return Err(ProjectError::UnsupportedState(path.clone()));
+            }
+        }
+        return Ok(manifest);
+    }
+    let mut manifest = json!({"format":2,"clients":{}});
+    let Some(legacy) = state_for(context, project)? else {
+        return Ok(manifest);
+    };
+    let legacy_files = legacy
+        .get("files")
+        .and_then(Value::as_object)
+        .ok_or_else(|| ProjectError::UnsupportedState(project.join(STATE)))?;
+    let mut retained = legacy_files.clone();
+    for client in Client::ALL {
+        let native_key = client.as_str();
+        let catalog = match client {
+            Client::OpenCode => None,
+            Client::Claude => Some(".claude-plugin/marketplace.json"),
+            Client::Codex => Some(".agents/plugins/marketplace.json"),
+        };
+        let recorded = client == Client::OpenCode
+            || legacy
+                .pointer(&format!("/native/{native_key}"))
+                .is_some_and(Value::is_object)
+            || catalog.is_some_and(|path| legacy_files.contains_key(path));
+        if !recorded {
+            continue;
+        }
+        let mut record = legacy.clone();
+        record
+            .as_object_mut()
+            .expect("validated legacy object")
+            .remove("format");
+        record["layout"] = json!("legacy");
+        if record.get("mcp_base").is_none() {
+            record["mcp_base"] = record["mcp"].clone();
+        }
+        record["files"] = json!({});
+        if let Some(catalog) = catalog {
+            if let Some(hash) = legacy_files.get(catalog) {
+                record["files"][catalog] = hash.clone();
+                retained.remove(catalog);
+            }
+        }
+        let mut native = serde_json::Map::new();
+        let keys: &[&str] = match client {
+            Client::OpenCode => &["opencode_skill_path_added"],
+            Client::Claude => &["claude", "mcp_claude"],
+            Client::Codex => &["codex", "mcp_codex"],
+        };
+        for key in keys {
+            if let Some(value) = legacy.get("native").and_then(|v| v.get(key)) {
+                native.insert((*key).into(), value.clone());
+            }
+        }
+        record["native"] = Value::Object(native);
+        manifest["clients"][client.as_str()] = record;
+    }
+    manifest["retained_legacy"] = json!({"state":STATE,"files":retained});
+    Ok(manifest)
+}
+
+fn validate_record(record: &Value, path: &Path) -> Result<(), ProjectError> {
+    let valid = record.is_object()
+        && record.get("profile").and_then(Value::as_str).is_some()
+        && record
+            .get("files")
+            .and_then(Value::as_object)
+            .is_some_and(|files| files.values().all(Value::is_string))
+        && record.get("mcp").is_some_and(Value::is_object);
+    let valid = valid
+        && record.get("mcp_base").is_some_and(Value::is_object)
+        && record.get("native").is_some_and(Value::is_object);
+    if !valid {
+        return Err(ProjectError::UnsupportedState(path.to_owned()));
+    }
+    if let Some(version) = record.get("version").filter(|v| !v.is_null()) {
+        let version = version
+            .as_str()
+            .ok_or_else(|| ProjectError::UnsupportedState(path.to_owned()))?;
+        Version::from_str(version).map_err(|_| ProjectError::UnsupportedState(path.to_owned()))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn save_manifest(project: &Path, manifest: &Value) -> Result<(), ProjectError> {
+    let path = file_path(project, crate::layout::STATE)?;
+    crate::filesystem::write_atomic(&path, &crate::codec::json_bytes(manifest)?)?;
+    Ok(())
+}
 
 pub(crate) fn selected_project(
     context: &RepositoryContext,

@@ -13,7 +13,7 @@ use crate::{
     mcp::{config, environment::environment_for},
 };
 
-const STATE: &str = ".opencode/ai-profile-state.json";
+const STATE: &str = crate::layout::LEGACY_STATE;
 
 pub fn main() -> i32 {
     let mut args = env::args_os();
@@ -48,13 +48,37 @@ pub fn main() -> i32 {
 }
 
 fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
-    let project = project_from_executable()?;
-    let state_path = config::project_path(&project, STATE)?;
+    let executable = env::current_exe().map_err(|_| McpRuntimeError::ProjectLocation)?;
+    let (project, client) = identity_from_adapter(&executable)?;
+    let layout = client.map_or(
+        crate::layout::Layout::Legacy,
+        crate::layout::Layout::Isolated,
+    );
+    let state_path = config::project_path(
+        &project,
+        if client.is_some() {
+            crate::layout::STATE
+        } else {
+            STATE
+        },
+    )?;
     let state = crate::codec::read_json(&state_path).map_err(|_| McpRuntimeError::StateRead)?;
+    let state = if let Some(client) = client {
+        if state.get("format").and_then(Value::as_u64) != Some(2) {
+            return Err(McpRuntimeError::InvalidState);
+        }
+        state
+            .get("clients")
+            .and_then(|clients| clients.get(client.as_str()))
+            .cloned()
+            .ok_or(McpRuntimeError::InvalidState)?
+    } else {
+        state
+    };
     let Some(state_object) = state.as_object() else {
         return Err(McpRuntimeError::InvalidState);
     };
-    if !state_object.get("format").is_some_and(is_format_one) {
+    if client.is_none() && !state_object.get("format").is_some_and(is_format_one) {
         return Err(McpRuntimeError::InvalidState);
     }
     let Some(base) = state_object
@@ -65,7 +89,7 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
         return Err(McpRuntimeError::InvalidState);
     };
 
-    let servers = config::resolve(&project, base)?.servers;
+    let servers = config::resolve_at(&project, base, &layout.local())?.servers;
     let Some(entry) = servers.get(server_name).and_then(Value::as_object) else {
         return Err(McpRuntimeError::UnknownLocalServer);
     };
@@ -109,7 +133,7 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
     };
 
     // Managed launchers remain rooted in the project even with a custom cwd.
-    let program = if program.starts_with(".opencode/mcp/") {
+    let program = if program.starts_with(".opencode/mcp/") || program.starts_with(".ai-profiles/") {
         config::project_path(&project, program)?
     } else {
         PathBuf::from(program)
@@ -133,24 +157,42 @@ pub(crate) fn apply_environment(
         .env("AI_PROFILE_PROJECT_DIR", project);
 }
 
-fn project_from_executable() -> Result<PathBuf, McpRuntimeError> {
-    let executable = env::current_exe().map_err(|_| McpRuntimeError::ProjectLocation)?;
-    project_from_adapter(&executable)
+#[cfg(test)]
+pub(crate) fn project_from_adapter(executable: &Path) -> Result<PathBuf, McpRuntimeError> {
+    identity_from_adapter(executable).map(|(project, _)| project)
 }
 
-pub(crate) fn project_from_adapter(executable: &Path) -> Result<PathBuf, McpRuntimeError> {
+fn identity_from_adapter(
+    executable: &Path,
+) -> Result<(PathBuf, Option<crate::model::Client>), McpRuntimeError> {
     let executable = executable
         .canonicalize()
         .map_err(|_| McpRuntimeError::ProjectLocation)?;
-    let opencode = executable
+    let parent = executable
         .parent()
-        .filter(|parent| parent.file_name().is_some_and(|name| name == ".opencode"))
+        .ok_or(McpRuntimeError::ProjectLocation)?;
+    if let Some(client) = parent
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(crate::model::Client::parse)
+    {
+        let root = parent
+            .parent()
+            .filter(|p| p.file_name().is_some_and(|s| s == ".ai-profiles"))
+            .ok_or(McpRuntimeError::ProjectLocation)?;
+        let project = root.parent().ok_or(McpRuntimeError::ProjectLocation)?;
+        return Ok((project.to_owned(), Some(client)));
+    }
+    let opencode = parent
+        .file_name()
+        .filter(|name| *name == ".opencode")
+        .map(|_| parent)
         .ok_or(McpRuntimeError::ProjectLocation)?;
     let project = opencode.parent().ok_or(McpRuntimeError::ProjectLocation)?;
     if !project.is_dir() {
         return Err(McpRuntimeError::ProjectLocation);
     }
-    Ok(project.to_owned())
+    Ok((project.to_owned(), None))
 }
 
 fn inherited_environment() -> HashMap<String, String> {

@@ -51,6 +51,23 @@ pub(crate) fn desired_files(
     context: &RepositoryContext,
     profile: &str,
 ) -> Result<Vec<PayloadFile>, PayloadError> {
+    build_files(context, profile, None)
+}
+
+pub(crate) fn desired_files_for(
+    context: &RepositoryContext,
+    profile: &str,
+    client: crate::model::Client,
+) -> Result<Vec<PayloadFile>, PayloadError> {
+    build_files(context, profile, Some(client))
+}
+
+fn build_files(
+    context: &RepositoryContext,
+    profile: &str,
+    client: Option<crate::model::Client>,
+) -> Result<Vec<PayloadFile>, PayloadError> {
+    use crate::model::Client;
     let mut files = Vec::new();
     let selected = selected_skills(context, profile)?;
     for name in selected {
@@ -58,7 +75,8 @@ pub(crate) fn desired_files(
         collect_skill(context, &name, &folder, &mut files)?;
     }
 
-    // Both native compatibility manifests expose the same project-local skill tree.
+    // Only the selected native client receives a manifest. None is used for
+    // source validation and historical combined-installation test fixtures.
     let metadata = crate::repository::profile_metadata(context, profile)?;
     let description = metadata
         .get("description")
@@ -70,26 +88,37 @@ pub(crate) fn desired_files(
         .unwrap_or("1.0.0");
     let manifest = serde_json::json!({"name":"ai-profile","version":version,"description":description,"skills":["./skills/"]});
     let manifest_bytes = crate::codec::json_bytes(&manifest)?;
-    files.push(PayloadFile {
-        relative_path: ".opencode/ai-profile/plugin/.claude-plugin/plugin.json".into(),
-        contents: manifest_bytes.clone(),
-        kind: PayloadKind::Data,
-    });
-    files.push(PayloadFile {
-        relative_path: ".opencode/ai-profile/plugin/.codex-plugin/plugin.json".into(),
-        contents: manifest_bytes,
-        kind: PayloadKind::Data,
-    });
+    if client.is_none_or(|c| c == Client::Claude) {
+        files.push(PayloadFile {
+            relative_path: ".opencode/ai-profile/plugin/.claude-plugin/plugin.json".into(),
+            contents: manifest_bytes.clone(),
+            kind: PayloadKind::Data,
+        });
+    }
+    if client.is_none_or(|c| c == Client::Codex) {
+        files.push(PayloadFile {
+            relative_path: ".opencode/ai-profile/plugin/.codex-plugin/plugin.json".into(),
+            contents: manifest_bytes,
+            kind: PayloadKind::Data,
+        });
+    }
     // A real empty directory is ensured by installation when selection is empty.
 
-    insert_native(
-        context,
-        &mut files,
-        "ai-profile-mcp",
-        ".opencode/ai-profile-mcp",
-    )?;
+    let definitions = desired_mcp(context, profile)?;
+    if client.is_none()
+        || definitions
+            .iter()
+            .any(|definition| definition.command.is_some())
+    {
+        insert_native(
+            context,
+            &mut files,
+            "ai-profile-mcp",
+            ".opencode/ai-profile-mcp",
+        )?;
+    }
 
-    for definition in desired_mcp(context, profile)? {
+    for definition in definitions {
         let name = definition.name.as_str();
         if name == "mariadb" {
             insert_native(

@@ -1,17 +1,17 @@
-use std::{fs, path::Path, str::FromStr};
+use std::path::Path;
+#[cfg(test)]
+use std::{fs, str::FromStr};
 
 use serde_json::{Map, Value};
 
+use crate::error::InstallationError;
+#[cfg(test)]
 use crate::{
     codec::{json_bytes, sha},
-    error::InstallationError,
     filesystem::{
         check_files, cleanup_empty_directories, file_path, write_bytes, write_executable,
     },
-    mcp::config::{
-        changed_override_paths, check_mcp, configured_mcp, definitions_to_map, desired_mcp,
-        McpConfiguration,
-    },
+    mcp::config::{check_mcp, configured_mcp, definitions_to_map, desired_mcp, McpConfiguration},
     model::{RepositoryContext, Version},
     profile_management::payload::{desired_files, PayloadFile, PayloadKind},
     project::{config_for, remove_gitignore_line, state_for},
@@ -19,9 +19,13 @@ use crate::{
 };
 
 const RULE: &str = ".opencode/workflow-rules.md";
+#[cfg(test)]
 const GATE: &str = ".opencode/workflow-approval.json";
+#[cfg(test)]
 const STATE: &str = ".opencode/ai-profile-state.json";
 
+// Historical combined installer retained only to construct/test format-1 fixtures.
+#[cfg(test)]
 pub(crate) fn apply_profile(
     context: &RepositoryContext,
     project: &Path,
@@ -138,7 +142,13 @@ pub(crate) fn apply_profile(
     }
 
     let commit = source_commit(context);
-    let skill_source_added = update_project_config(&mut config, old.as_ref(), &mcp, project)?;
+    let skill_source_added = update_project_config(
+        &mut config,
+        old.as_ref(),
+        &mcp,
+        project,
+        crate::layout::Layout::Legacy,
+    )?;
 
     if let Some(old_files) = old.as_ref().and_then(|state| state.get("files")) {
         let Some(old_files) = old_files.as_object() else {
@@ -357,6 +367,7 @@ pub(crate) fn apply_profile(
     Ok(())
 }
 
+#[cfg(test)]
 fn prior_base(old: Option<&Value>) -> Result<Map<String, Value>, InstallationError> {
     let Some(old) = old else {
         return Ok(Map::new());
@@ -371,7 +382,7 @@ fn prior_base(old: Option<&Value>) -> Result<Map<String, Value>, InstallationErr
     }
 }
 
-fn print_override_warnings(
+pub(crate) fn print_override_warnings(
     prior_base: &Map<String, Value>,
     new_base: &Map<String, Value>,
     overrides: &Map<String, Value>,
@@ -384,7 +395,7 @@ fn print_override_warnings(
         ) else {
             continue;
         };
-        for path in changed_override_paths(previous, current, override_object) {
+        for path in crate::mcp::config::changed_override_paths(previous, current, override_object) {
             println!(
                 "WARNING: upstream changed overridden field {name}.{path}; local override wins."
             );
@@ -392,11 +403,12 @@ fn print_override_warnings(
     }
 }
 
-fn update_project_config(
+pub(crate) fn update_project_config(
     config: &mut Value,
     old: Option<&Value>,
     managed_mcp: &Map<String, Value>,
     project: &Path,
+    layout: crate::layout::Layout,
 ) -> Result<bool, InstallationError> {
     let object = config
         .as_object_mut()
@@ -450,7 +462,7 @@ fn update_project_config(
             source,
         })?;
     let skill_path = canonical_project
-        .join(".opencode/ai-profile/plugin/skills")
+        .join(layout.skills())
         .to_string_lossy()
         .into_owned();
     let skills = object
@@ -510,6 +522,7 @@ fn is_truthy(value: &Value) -> bool {
     }
 }
 
+#[cfg(test)]
 struct InstallationState<'a> {
     profile: &'a str,
     version: &'a str,
@@ -522,6 +535,7 @@ struct InstallationState<'a> {
     existed: bool,
 }
 
+#[cfg(test)]
 fn build_updated_state(input: InstallationState<'_>) -> Result<Value, InstallationError> {
     let InstallationState {
         profile,

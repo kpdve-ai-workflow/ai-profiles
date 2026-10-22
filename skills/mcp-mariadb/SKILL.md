@@ -49,4 +49,4 @@ builds or restart WordPress to diagnose a normal first build.
 Distinguish disabled configuration, missing variables, Docker/image-build errors,
 database connectivity and SQL permissions. Do not change database credentials,
 grants or Docker networking without user authorization. User-facing setup
-instructions are in the installed `.opencode/ai-profile/README.md`.
+instructions are in the installed `{{AI_PROFILE_ROOT}}/README.md`.

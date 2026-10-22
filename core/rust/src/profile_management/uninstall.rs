@@ -1,10 +1,13 @@
-use std::{fs, path::Path};
+#[cfg(test)]
+use std::fs;
+use std::path::Path;
 
 use serde_json::{Map, Value};
 
+use crate::error::UninstallError;
+#[cfg(test)]
 use crate::{
     codec::json_bytes,
-    error::UninstallError,
     filesystem::{check_files, cleanup_empty_directories, file_path, write_bytes},
     mcp::config::check_mcp,
     model::RepositoryContext,
@@ -12,10 +15,14 @@ use crate::{
 };
 
 const RULE: &str = ".opencode/workflow-rules.md";
+#[cfg(test)]
 const GATE: &str = ".opencode/workflow-approval.json";
+#[cfg(test)]
 const STATE: &str = ".opencode/ai-profile-state.json";
+#[cfg(test)]
 const SCHEMA: &str = "https://opencode.ai/config.json";
 
+#[cfg(test)]
 pub(crate) fn uninstall(context: &RepositoryContext, project: &Path) -> Result<(), UninstallError> {
     let old = state_for(context, project)?.ok_or(UninstallError::NoInstalledProfile)?;
     let (mut config, _) = config_for(project)?;
@@ -137,7 +144,7 @@ pub(crate) fn uninstall(context: &RepositoryContext, project: &Path) -> Result<(
 
     remove_managed_mcp(&mut config, &old)?;
     remove_managed_instruction(&mut config, &old)?;
-    remove_managed_skill_source(&mut config, project, &old)?;
+    remove_managed_skill_source(&mut config, project, &old, crate::layout::Layout::Legacy)?;
 
     let config_path = file_path(project, "opencode.json")?;
     if !is_truthy(old.get("had_config").unwrap_or(&Value::Null)) && is_schema_only(&config) {
@@ -179,10 +186,11 @@ pub(crate) fn uninstall(context: &RepositoryContext, project: &Path) -> Result<(
     Ok(())
 }
 
-fn remove_managed_skill_source(
+pub(crate) fn remove_managed_skill_source(
     config: &mut Value,
     project: &Path,
     old: &Value,
+    layout: crate::layout::Layout,
 ) -> Result<(), UninstallError> {
     if old
         .pointer("/native/opencode_skill_path_added")
@@ -199,7 +207,7 @@ fn remove_managed_skill_source(
             source,
         })?;
     let source = canonical_project
-        .join(".opencode/ai-profile/plugin/skills")
+        .join(layout.skills())
         .to_string_lossy()
         .into_owned();
     let remove_skills = {
@@ -228,7 +236,7 @@ fn remove_managed_skill_source(
     Ok(())
 }
 
-fn remove_managed_mcp(config: &mut Value, old: &Value) -> Result<(), UninstallError> {
+pub(crate) fn remove_managed_mcp(config: &mut Value, old: &Value) -> Result<(), UninstallError> {
     let object = config.as_object_mut().ok_or(UninstallError::InvalidState)?;
     let mut current = match object.get("mcp") {
         None => Map::new(),
@@ -252,7 +260,10 @@ fn remove_managed_mcp(config: &mut Value, old: &Value) -> Result<(), UninstallEr
     Ok(())
 }
 
-fn remove_managed_instruction(config: &mut Value, old: &Value) -> Result<(), UninstallError> {
+pub(crate) fn remove_managed_instruction(
+    config: &mut Value,
+    old: &Value,
+) -> Result<(), UninstallError> {
     let object = config.as_object_mut().ok_or(UninstallError::InvalidState)?;
     let mut instructions = match object.get("instructions") {
         None => Vec::new(),
@@ -272,6 +283,7 @@ fn remove_managed_instruction(config: &mut Value, old: &Value) -> Result<(), Uni
     Ok(())
 }
 
+#[cfg(test)]
 fn is_schema_only(config: &Value) -> bool {
     let Some(object) = config.as_object() else {
         return false;
