@@ -144,8 +144,9 @@ docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwr
 
 Następnie zrestartuj klienta AI. Jak dla pozostałych lokalnych MCP, wspólny
 adapter `ai-profile-mcp` odczytuje konfigurację i uruchamia jej komendę — tutaj
-standardowe `docker compose run` bez TTY. Nie ma dedykowanego launchera Playwright,
-publikacji GHCR, tokenów ani automatycznego buildu/pull obrazu. Nie uruchamiaj
+natywny `playwright-launcher`, który przygotowuje runtime i wykonuje standardowe
+`docker compose run` bez TTY. Nie ma publikacji GHCR, tokenów ani automatycznego
+buildu/pull obrazu. Nie uruchamiaj
 `compose up -d`: każdy klient ma własny kontener i sesję przeglądarki.
 
 Compose montuje projekt pod jego rzeczywistą bezwzględną ścieżką hosta, tylko
@@ -168,8 +169,25 @@ Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwri
 
 ### Sieć, certyfikaty i artefakty
 
-W `.ai-profiles/<klient>/local.json` ustawiaj `environment` dla `playwright`.
-Przykład konfiguracji lokalnej DDEV (sprawdź nazwę sieci u siebie):
+Na Linuxie z lokalnym Docker Engine domyślną siecią jest `host`, z dostępem do
+hostowego `localhost`. Launcher automatycznie dodaje `compose.host.yaml`:
+istniejące `/etc/hosts` i `/etc/resolv.conf` są montowane RO, z
+`create_host_path: false`. Nie wymaga to `local.json` ani wyboru sieci DDEV.
+Wykorzystywana jest zastana łączność hosta, również już działający VPN;
+narzędzie nie konfiguruje VPN, DNS, tras ani firewalla i nie naprawia sieci.
+Po zmianie środowiska hosta może być potrzebny restart MCP/klienta.
+Nie jest to gwarancja obsługi konkretnego firmowego VPN, Docker Desktop ani
+zdalnego Engine.
+
+Opcjonalne nadpisania `environment` umieszczaj w
+`.ai-profiles/<klient>/local.json`. `AI_PROFILE_PLAYWRIGHT_NETWORK` nieustawione,
+puste lub równe `host` włącza host overlay; każdy jawny inny tryb go nie dodaje.
+W bridge hostowy loopback DNS/HTTP nie jest loopbackiem kontenera.
+Automatyczne rozszerzenia poprzedzają oryginalne `COMPOSE_FILE`, zachowując
+priorytet jawnych plików; już obecny overlay nie jest dublowany ani przenoszony.
+Zmieniając sieć wyłącznie własnym Compose, sam zadbaj o zgodność mountów.
+
+Przykład świadomego wyboru innej sieci DDEV (sprawdź jej nazwę u siebie):
 
 ```json
 {
@@ -184,16 +202,34 @@ Przykład konfiguracji lokalnej DDEV (sprawdź nazwę sieci u siebie):
 }
 ```
 
-Używaj URL dostępnego w tej sieci, np. `https://<projekt>.ddev.site`, nie
+W tym niestandardowym trybie używaj URL dostępnego w tej sieci, np.
+`https://<projekt>.ddev.site`, nie
 `localhost` hosta. Dla lokalnego HTTPS
-`AI_PROFILE_PLAYWRIGHT_CA_CERT` wskazuje plik CA. Włącz dodatkowo `compose.ca.yaml`
-przez lokalne `environment.COMPOSE_FILE`, zgodnie z dostarczoną instrukcją.
-Compose montuje plik oddzielnie, a kontener dodaje go do magazynów CA systemu i Chromium
-przed startem Chromium; weryfikacja TLS pozostaje włączona.
+launcher automatycznie wybiera publiczny CA: jawny
+`AI_PROFILE_PLAYWRIGHT_CA_CERT`, następnie `CAROOT/rootCA.pem`, następnie wynik
+odczytowego `mkcert -CAROOT` i jego `rootCA.pem`, jeśli program jest już na PATH.
+Zapytanie ma limit 5 sekund i ograniczony capture, bez przekazywania sekretów MCP
+do procesu mkcert. Nie instalujemy mkcert, nie generujemy CA ani nie wykonujemy
+`mkcert -install`. Standardowy istniejący DDEV/mkcert nie wymaga lokalnego wpisu
+CA/Compose, jeśli jego lokalizacja jest dostępna w środowisku klienta AI.
+
+Launcher sam dołącza `compose.ca.yaml` przed oryginalną listą Compose, bez
+dublowania ręcznego wpisu. Montuje osobno tylko wybrany publiczny plik RO,
+nigdy cały CAROOT ani `rootCA-key.pem`. System/NSS Chromium i
+`NODE_EXTRA_CA_CERTS` są konfigurowane wyłącznie w kontenerze; TLS pozostaje
+włączony. Brak automatycznego CA nie blokuje publicznych stron. Ustawiony CAROOT
+bez `rootCA.pem` kończy wykrywanie bez fallbacku; błąd/timeout/wadliwy wynik mkcert
+daje krótką diagnostykę i brak autoimportu. Nieprawidłowa jawna ścieżka lub
+wadliwa zawartość istniejącego wybranego CA zatrzymuje start.
+
+Nie skanujemy HOME ani firmowych/systemowych trust stores i nie zmieniamy
+zaufania hosta. Niestandardowy CA wymaga jawnego publicznego pliku przez
+`AI_PROFILE_PLAYWRIGHT_CA_CERT`; nie obiecujemy zero-config dla nieznanego
+firmowego CA. Po zmianie środowiska/ustawień zrestartuj klienta/MCP.
 
 Uwierzytelniony audyt może użyć `AI_PROFILE_PLAYWRIGHT_STORAGE_STATE` wskazującego
-prywatny plik storage state o prawach `0600`. Włącz `compose.auth.yaml` przez
-`COMPOSE_FILE`. Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
+prywatny plik storage state o prawach `0600`. Launcher sam włącza `compose.auth.yaml`.
+Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
 nie należy do raportów ani stanu instalacji.
 
 HTTP Basic Auth włączaj oddzielnie przez `compose.basic-auth.yaml` oraz
@@ -229,6 +265,16 @@ testowego MCP. Sprawdza entrypoint, a następnie instalację przez `make install
 i wspólny adapter uruchomiony z `/`, z prawdziwymi MCP roots. Przeglądarka i axe
 pozostają w kontenerze. Test używa ścieżki projektu ze spacjami i przecinkiem,
 weryfikuje artefakty także na hoście oraz próby nadpisania metadanych adaptera.
+Scenariusz sieciowy potwierdza rzeczywiste mounty RO i ich zgodność z plikami
+hosta VM oraz hostowy loopback bez lokalnej konfiguracji. Syntetyczny resolver
+na `127.203.77.53:53` obsługuje wyłącznie `app.corp.test`; Chromium odwiedza tę
+domenę przez testowy overlay, bez zmiany `/etc/resolv.conf` VM. To dowód
+„syntetyczny resolver + host networking”, nie weryfikacja firmowego VPN.
+Scenariusz CA tworzy syntetyczny CAROOT poza projektem: prawdziwe Chromium ufa
+wykrytemu `rootCA.pem`, odrzuca obcy CA i zachowuje współdziałanie TLS, Basic Auth
+oraz storage state. Inspect potwierdza oddzielny mount publicznego pliku RO,
+bez katalogu CAROOT/klucza; sentinel klucza i credentials nie trafiają do
+protokołu, logów, stanu ani raportów. Test obejmuje brak i wadliwą zawartość CA.
 
 Timeouty: Codex dostaje startup/tool timeouty w sekundach. Claude dostaje
 `env.MCP_TIMEOUT` w milisekundach (wpisany automatycznie, jeśli brak jawnej

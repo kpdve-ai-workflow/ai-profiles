@@ -12,7 +12,7 @@ chmod 755 "$run" "$project" "$project/reports"
 # Only this fresh, disposable reports tree is writable by container UID 1000.
 chmod 777 "$project/reports"
 cleanup() {
-  docker rm -f "$name" "$name-fixtures" >/dev/null 2>&1 || true
+  docker rm -f "$name" "$name-fixtures" "$name-dns" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -106,3 +106,36 @@ SMOKE_AUTH_PROJECT="$auth_project" \
   SMOKE_AUTH_ADAPTER="$auth_project/.ai-profiles/opencode/ai-profile-mcp" \
   timeout --signal=TERM --kill-after=10s 240s node "$tests/auth-smoke.cjs"
 git -C "$auth_project" check-ignore --no-index -q .private/playwright-basic-auth.json
+
+network_project="$run/network project space,comma"
+mkdir "$network_project"
+make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$network_project"
+docker run -d --rm --pull=never --name "$name-dns" --network host --entrypoint node \
+  --mount "type=bind,src=$tests,dst=/smoke,readonly" \
+  "$image" /smoke/dns-fixture.cjs
+attempt=0
+until docker logs "$name-dns" 2>&1 | grep -q DNS_READY; do
+  if [ "$(docker inspect --format '{{.State.Running}}' "$name-dns")" != true ] || [ "$attempt" -ge 50 ]; then
+    docker logs "$name-dns" >&2
+    echo 'FAIL: synthetic DNS fixture unavailable (infrastructure)' >&2
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  sleep 0.1
+done
+SMOKE_NETWORK_PROJECT="$network_project" SMOKE_DNS_CONTAINER="$name-dns" \
+  timeout --signal=TERM --kill-after=10s 180s node "$tests/network-smoke.cjs"
+
+ca_project="$run/CA project space,comma"
+ca_fixtures="$run/CA fixtures"
+mkdir "$ca_project" "$ca_fixtures"
+for ca in 'CA with spaces' 'other CA'; do
+  timeout --signal=TERM --kill-after=10s 30s docker run --rm --pull=never --name "$name-fixtures" --entrypoint node \
+    -e "FIXTURE_DIRECTORY=/fixtures/$ca" \
+    --mount "type=bind,src=$tests,dst=/smoke,readonly" \
+    --volume "$ca_fixtures:/fixtures" \
+    "$image" /smoke/create-fixtures.cjs
+done
+make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$ca_project"
+SMOKE_CA_PROJECT="$ca_project" SMOKE_CA_FIXTURES="$ca_fixtures" \
+  timeout --signal=TERM --kill-after=10s 180s node "$tests/ca-smoke.cjs"

@@ -6,15 +6,24 @@ use std::{
     os::unix::{fs::PermissionsExt, process::CommandExt},
     path::{Component, Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 
-use crate::{filesystem::file_path, model::Client};
+use crate::{
+    filesystem::file_path,
+    model::Client,
+    process::{
+        CancellationToken, CommandSpec, ProcessRunner, StdinMode, StreamMode, SystemProcessRunner,
+    },
+};
 
 const PROJECT_METADATA: &str = "AI_PROFILE_PROJECT_DIR";
 const COMPOSE_FILE: &str = "COMPOSE_FILE";
 const BASIC_AUTH_FILE: &str = "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE";
 const STORAGE_STATE: &str = "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE";
 const DEFAULT_BASIC_AUTH: &str = ".private/playwright-basic-auth.json";
+const CA_CERT: &str = "AI_PROFILE_PLAYWRIGHT_CA_CERT";
+const CAROOT_OUTPUT_LIMIT: usize = 8192;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PlaywrightError {
@@ -28,6 +37,10 @@ pub(crate) enum PlaywrightError {
     InvalidPrivateInput,
     #[error("Cannot prepare Playwright Compose configuration")]
     InvalidCompose,
+    #[error(
+        "Invalid Playwright CA certificate path; expected an existing public certificate file"
+    )]
+    InvalidCa,
 }
 
 pub(crate) struct LaunchPlan {
@@ -39,6 +52,15 @@ pub(crate) fn prepare_launch(
     executable: &Path,
     project_dir: &OsStr,
     inherited: &HashMap<OsString, OsString>,
+) -> Result<LaunchPlan, PlaywrightError> {
+    prepare_launch_with(executable, project_dir, inherited, &SystemProcessRunner)
+}
+
+pub(crate) fn prepare_launch_with(
+    executable: &Path,
+    project_dir: &OsStr,
+    inherited: &HashMap<OsString, OsString>,
+    runner: &impl ProcessRunner,
 ) -> Result<LaunchPlan, PlaywrightError> {
     let (project, launcher_directory) = installed_identity(executable)?;
     let metadata_project = fs::canonicalize(PathBuf::from(project_dir))
@@ -55,6 +77,16 @@ pub(crate) fn prepare_launch(
 
     let mut environment = HashMap::new();
     let mut overlays = Vec::new();
+    if inherited
+        .get(OsStr::new("AI_PROFILE_PLAYWRIGHT_NETWORK"))
+        .is_none_or(|network| network.is_empty() || network == "host")
+    {
+        overlays.push(launcher_directory.join("compose.host.yaml"));
+    }
+    if let Some(certificate) = ca_certificate(&project, inherited, runner)? {
+        environment.insert(OsString::from(CA_CERT), certificate.into_os_string());
+        overlays.push(launcher_directory.join("compose.ca.yaml"));
+    }
     if let Some(value) = inherited
         .get(OsStr::new(STORAGE_STATE))
         .filter(|value| !value.is_empty())
@@ -96,6 +128,112 @@ pub(crate) fn prepare_launch(
         project,
         environment,
     })
+}
+
+fn ca_certificate(
+    project: &Path,
+    inherited: &HashMap<OsString, OsString>,
+    runner: &impl ProcessRunner,
+) -> Result<Option<PathBuf>, PlaywrightError> {
+    if let Some(explicit) = inherited
+        .get(OsStr::new(CA_CERT))
+        .filter(|value| !value.is_empty())
+    {
+        return public_certificate(&absolute_path(project, Path::new(explicit))).map(Some);
+    }
+    if let Some(caroot) = inherited
+        .get(OsStr::new("CAROOT"))
+        .filter(|value| !value.is_empty())
+    {
+        return existing_ca(&absolute_path(project, Path::new(caroot)));
+    }
+    let Some(program) = inherited.get(OsStr::new("PATH")).and_then(|path| {
+        env::split_paths(path)
+            .map(|directory| absolute_path(project, &directory).join("mkcert"))
+            .find(|program| {
+                fs::metadata(program).is_ok_and(|metadata| {
+                    metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+                })
+            })
+    }) else {
+        return Ok(None);
+    };
+    // mkcert's CAROOT query only needs location-related environment, not MCP secrets.
+    let environment = ["PATH", "HOME", "XDG_DATA_HOME"]
+        .into_iter()
+        .filter_map(|key| {
+            inherited
+                .get(OsStr::new(key))
+                .map(|value| (OsString::from(key), value.clone()))
+        })
+        .collect();
+    let output = runner.run(CommandSpec {
+        program: program.into_os_string(),
+        args: vec![OsString::from("-CAROOT")],
+        cwd: Some(project.to_owned()),
+        env: environment,
+        clear_env: true,
+        stdin: StdinMode::Null,
+        stdout: StreamMode::CaptureLimited(CAROOT_OUTPUT_LIMIT),
+        stderr: StreamMode::Null,
+        timeout: Some(Duration::from_secs(5)),
+        cancellation: CancellationToken::new(),
+    });
+    let caroot = output
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| parse_caroot(&output.stdout));
+    match caroot {
+        Some(caroot) => existing_ca(&caroot),
+        None => {
+            eprintln!("playwright: cannot discover mkcert CA; continuing without automatic CA");
+            Ok(None)
+        }
+    }
+}
+
+fn absolute_path(project: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_owned()
+    } else {
+        project.join(path)
+    }
+}
+
+fn parse_caroot(output: &[u8]) -> Option<PathBuf> {
+    if output.len() > CAROOT_OUTPUT_LIMIT {
+        return None;
+    }
+    let text = std::str::from_utf8(output).ok()?;
+    let text = text.strip_suffix('\n').unwrap_or(text);
+    let text = text.strip_suffix('\r').unwrap_or(text);
+    let path = Path::new(text);
+    (path.is_absolute() && !text.contains(['\n', '\r', '\0'])).then(|| path.to_owned())
+}
+
+fn existing_ca(caroot: &Path) -> Result<Option<PathBuf>, PlaywrightError> {
+    let path = caroot.join("rootCA.pem");
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_) => Err(PlaywrightError::InvalidCa),
+        Ok(_) => public_certificate(&path).map(Some),
+    }
+}
+
+fn public_certificate(path: &Path) -> Result<PathBuf, PlaywrightError> {
+    // Only inspect metadata on the host. Certificate parsing/import stays in Docker.
+    // Preserve explicit public-CA symlinks, but mount only the resolved file.
+    let path = path
+        .canonicalize()
+        .map_err(|_| PlaywrightError::InvalidCa)?;
+    if path.file_name() == Some(OsStr::new("rootCA-key.pem")) {
+        return Err(PlaywrightError::InvalidCa);
+    }
+    let metadata = fs::metadata(&path).map_err(|_| PlaywrightError::InvalidCa)?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o444 == 0 {
+        return Err(PlaywrightError::InvalidCa);
+    }
+    Ok(path)
 }
 
 fn installed_identity(executable: &Path) -> Result<(PathBuf, PathBuf), PlaywrightError> {

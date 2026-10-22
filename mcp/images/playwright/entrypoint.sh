@@ -6,6 +6,10 @@ if [ "${TARGETARCH:-$(dpkg --print-architecture)}" != "amd64" ] && [ "${TARGETAR
 fi
 if [ -n "${PLAYWRIGHT_CA_CERT:-}" ]; then
   if [ ! -f "$PLAYWRIGHT_CA_CERT" ]; then echo "playwright: configured CA file is unavailable" >&2; exit 2; fi
+  if ! openssl x509 -in "$PLAYWRIGHT_CA_CERT" -noout >/dev/null 2>&1; then
+    echo "playwright: configured CA certificate is invalid" >&2
+    exit 2
+  fi
   install -m 0644 "$PLAYWRIGHT_CA_CERT" /usr/local/share/ca-certificates/ai-profile-custom.crt
   update-ca-certificates >&2
 fi

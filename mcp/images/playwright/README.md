@@ -18,7 +18,8 @@ na hoście, tokena GHCR ani publikacji obrazu. Obraz jest współdzielony lokaln
 przez projekty korzystające z tej samej wersji.
 
 Następnie zrestartuj klienta AI. Wspólny adapter `ai-profile-mcp` uruchamia
-standardowe `docker compose run` przez stdio, bez osobnego launchera Playwright.
+natywny `playwright-launcher`, który przygotowuje runtime i wykonuje
+standardowe `docker compose run` przez stdio.
 Nie wykonuj `compose up -d`: każdy klient otrzymuje własny kontener i sesję.
 Konfiguracja nie buduje ani nie pobiera brakującego obrazu automatycznie.
 
@@ -48,7 +49,29 @@ dostępu do dowolnych katalogów hosta.
 
 ## Lokalne ustawienia
 
-Przykład `.opencode/ai-profile.local.json` dla sieci DDEV:
+### Sieć lokalnego Linux Docker Engine
+
+Domyślnie kontener korzysta z sieci `host`: `localhost` oznacza komputer,
+na którym działa lokalny Docker Engine. Launcher automatycznie dołącza
+`compose.host.yaml`, montując istniejące `/etc/hosts` i `/etc/resolv.conf`
+tylko do odczytu (`create_host_path: false`). Lokalna aplikacja oraz gotowe
+mapowania nazw i resolver hosta nie wymagają wyboru sieci DDEV w `local.json`.
+
+Narzędzie nie uruchamia ani nie konfiguruje VPN, nie zmienia DNS, tras,
+firewalla czy plików hosta. Korzysta z już działającego środowiska; nie gwarantuje
+zgodności z dowolną polityką firmowej sieci. Po zmianie środowiska hosta zrestartuj
+MCP/klienta. Docker Desktop i zdalny Engine nie są objęte tym kontraktem.
+
+Nieustawione, puste lub równe `host` `AI_PROFILE_PLAYWRIGHT_NETWORK` włącza
+automatyczny host overlay. Jawny inny tryb (np. `bridge` lub sieć DDEV) go nie
+otrzymuje: hostowy loopback DNS nie jest resolverem kontenera bridge.
+Automatyczny overlay poprzedza oryginalną listę `COMPOSE_FILE`, więc jawne pliki
+użytkownika zachowują priorytet; overlay już obecny na liście nie jest dublowany
+ani przenoszony. Sama zmiana sieci we własnym Compose wymaga zadbania o zgodność
+mountów — launcher nie analizuje znaczenia takiego pliku.
+
+Przykład opcjonalnego nadpisania w `.ai-profiles/{{AI_PROFILE_CLIENT}}/local.json`
+dla świadomie wybranej sieci DDEV (sprawdź jej nazwę):
 
 ```json
 {
@@ -62,22 +85,48 @@ Przykład `.opencode/ai-profile.local.json` dla sieci DDEV:
 }
 ```
 
-Używaj adresu aplikacji dostępnego z kontenera (np. adresu DDEV), nie `localhost`
-hosta. Lokalny plik może również wskazać `env_file` ze ścieżką względem projektu.
+W takim niestandardowym trybie używaj adresu aplikacji dostępnego z kontenera
+(np. adresu DDEV), nie zakładaj dostępu do hostowego `localhost`.
+Lokalny plik może również wskazać `env_file` ze ścieżką względem projektu.
 Nie zapisuj sekretów w zarządzanych plikach.
 
 ### Zaufany CA i uwierzytelniony audyt
 
-Opcjonalne pliki Compose włączaj przez `COMPOSE_FILE` w lokalnym `environment`.
-Przykład z obydwoma rozszerzeniami:
+Launcher automatycznie wybiera istniejący publiczny CA w kolejności:
+
+1. Jawny `AI_PROFILE_PLAYWRIGHT_CA_CERT` (ma pierwszeństwo).
+2. `rootCA.pem` z niepustego `CAROOT` odziedziczonego przez klienta AI.
+3. `rootCA.pem` w lokalizacji zwróconej przez `mkcert -CAROOT`, jeśli `mkcert`
+   jest już na PATH. To wyłącznie odczytowe zapytanie, z limitem 5 sekund
+   i ograniczonym wynikiem; nie instaluje ani nie generuje CA.
+
+Dla standardowego istniejącego DDEV/mkcert nie wpisujesz CA ani `COMPOSE_FILE`
+do `local.json`. Klient musi widzieć istniejące `CAROOT` lub `mkcert` na PATH;
+po zmianie jego środowiska uruchom go ponownie. Launcher sam dołącza
+`compose.ca.yaml`, bez dublowania ręcznie dodanego rozszerzenia. Oryginalna lista
+Compose zachowuje kolejność i priorytet nad automatycznymi plikami.
+
+Nie skanujemy HOME ani systemowych/firmowych trust stores. Montowany jest tylko
+wybrany zwykły publiczny plik CA, osobno i RO — nigdy cały CAROOT ani
+`rootCA-key.pem`. Import do systemu/NSS Chromium i `NODE_EXTRA_CA_CERTS` odbywa
+się wyłącznie wewnątrz kontenera. Weryfikacja TLS pozostaje włączona.
+
+Brak mkcert lub automatycznego `rootCA.pem` nie blokuje stron z publicznym CA.
+Ustawione CAROOT bez `rootCA.pem` nie uruchamia dalszego wyszukiwania.
+Timeout/błąd/nieprawidłowy wynik mkcert daje krótką diagnostykę i brak autoimportu.
+Błędna jawna ścieżka CA albo istniejący wybrany plik z błędną zawartością
+zatrzymuje start — bez wyłączania TLS.
+
+Niestandardowy (np. firmowy) CA nadal wymaga jawnego publicznego źródła zaufania:
+ustaw `AI_PROFILE_PLAYWRIGHT_CA_CERT` w
+`.ai-profiles/{{AI_PROFILE_CLIENT}}/local.json`. Nie przekazuj klucza CA.
+Przykład jawnego CA i opcjonalnego storage state, bez ręcznego Compose:
 
 ```json
 {
   "mcp": {
     "playwright": {
       "environment": {
-        "COMPOSE_FILE": ".opencode/mcp/playwright/compose.yaml:.opencode/mcp/playwright/compose.ca.yaml:.opencode/mcp/playwright/compose.auth.yaml",
-        "AI_PROFILE_PLAYWRIGHT_NETWORK": "ddev_default",
         "AI_PROFILE_PLAYWRIGHT_CA_CERT": ".ddev/ai-profile-ca.crt",
         "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE": ".private/playwright-auth.json"
       }
@@ -86,9 +135,9 @@ Przykład z obydwoma rozszerzeniami:
 }
 ```
 
-Można włączyć tylko potrzebne rozszerzenie. Ścieżki są względne katalogu głównego
-projektu; pliki muszą już istnieć. CA trafia do magazynów zaufania systemu i Chromium,
-bez wyłączania weryfikacji TLS. Storage state jest montowany tylko do odczytu
+Można wskazać tylko potrzebne wejście. Względne ścieżki są względem katalogu
+głównego projektu; bezwzględne też są obsługiwane. Pliki muszą już istnieć.
+Storage state automatycznie włącza `compose.auth.yaml` i jest montowany tylko do odczytu
 i musi mieć prawa `0600` lub bardziej restrykcyjne. Trzymaj go poza raportami
 i Gitem. Przed użyciem dodaj prywatne pliki do projektowego `.gitignore`.
 

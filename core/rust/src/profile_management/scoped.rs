@@ -77,6 +77,7 @@ pub(crate) fn render_mcp(servers: &mut Map<String, Value>, layout: Layout) {
                     .map(|part| {
                         if [
                             "compose.yaml",
+                            "compose.host.yaml",
                             "compose.ca.yaml",
                             "compose.auth.yaml",
                             "compose.basic-auth.yaml",

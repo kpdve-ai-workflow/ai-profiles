@@ -4,9 +4,9 @@
 
 Plan readiness: READY
 
-Postęp: T-01 i T-02 ukończone i zweryfikowane. READY oznacza gotowe kontrakty zadań, nie zweryfikowane działanie pozostałych zmian planu.
+Postęp: T-01, T-02, T-03 i T-04 ukończone i zweryfikowane. READY oznacza gotowe kontrakty zadań, nie zweryfikowane działanie pozostałych zmian planu.
 
-Next action: Wykonaj wyłącznie [T-03](tasks/T-03.md).
+Next action: Wykonaj wyłącznie [T-05](tasks/T-05.md).
 
 ## Cel i granice
 
@@ -129,16 +129,16 @@ Ustalenia pochodzą z odczytu plików i dokumentacji. Historyczne logi nie są d
   - Verification: PASSED
   - Depends on: T-01
   - Evidence: `make test-all` PASSED (59 testów Rust, walidacja/Clippy/build oraz testy Playwright), nowy launcher uruchomił MCP z `cwd=/`; czysty projekt bez `reports` i `local.json` przeszedł publiczną nawigację, Basic Auth 401/200, zły port/hasło i izolację nagłówka Authorization od drugiego origin/redirectu. `git check-ignore --no-index` sprawdził domyślny plik. T-03 pozostaje osobnym zadaniem.
-- [ ] [T-03 — Istniejące nazwy hostów i DNS dostępne w kontenerze](tasks/T-03.md)
-  - Execution: TODO
-  - Verification: NOT RUN
+- [x] [T-03 — Istniejące nazwy hostów i DNS dostępne w kontenerze](tasks/T-03.md)
+  - Execution: IMPLEMENTED
+  - Verification: PASSED
   - Depends on: T-02
-  - Evidence: brak
-- [ ] [T-04 — Automatyczny import istniejącego publicznego CA mkcert](tasks/T-04.md)
-  - Execution: TODO
-  - Verification: NOT RUN
+  - Evidence: RED `make test` wykazał brak host overlay; RED `make test-playwright` po udanej nawigacji localhost wykazał `missing host mount /etc/hosts`. Końcowe `make test-all` PASSED (60 testów Rust, format/build/Clippy/walidacja i integracja Playwright). Rzeczywisty instalowany launcher z cwd `/` potwierdził mounty RO zgodne z hosts/resolv hosta VM, loopback HTTP oraz syntetyczny resolver + host networking (`app.corp.test` w Chromium, zarejestrowane zapytanie DNS i priorytet testowego overlay). `git diff --check` PASSED.
+- [x] [T-04 — Automatyczny import istniejącego publicznego CA mkcert](tasks/T-04.md)
+  - Execution: IMPLEMENTED
+  - Verification: PASSED
   - Depends on: T-03
-  - Evidence: brak
+  - Evidence: RED `make test` (60 PASSED / 3 FAILED) wykazał brak wyboru CA; RED `make test-playwright` wykazał `ERR_CERT_AUTHORITY_INVALID` na poprawnej fixture podpisanej CA z CAROOT. Końcowe `make test-all` PASSED: 69 testów Rust, format/build/Clippy/walidacja, rzeczywiste Chromium HTTPS z automatycznym CA, odrzucenie obcego CA, CA + Basic Auth + storage state, inspect pojedynczego mountu publicznego pliku RO oraz brak sentinel/credentials w protokole/logach/stanie/raportach. `git diff --check` PASSED.
 - [ ] [T-05 — Publikacja profili i krótka instrukcja użytkownika](tasks/T-05.md)
   - Execution: TODO
   - Verification: NOT RUN
@@ -151,6 +151,8 @@ T-01: Compose/output przełączone na `reports/`; obraz i instrukcje zaktualizow
 
 T-02: Dodano natywny launcher Rust i jego binarium do payloadu wyłącznie klientów wybierających Playwright; instalacja tworzy `reports/` przy starcie, automatycznie dołącza bezpieczne pliki Basic Auth/storage state i zachowuje ręczną listę Compose. Dla Playwright instalacja dopisuje do `.gitignore` brakującą regułę bez zarządzania jej hashem; uninstall jej nie usuwa. Domyślny Compose używa host network.
 
+T-03: Dodano dystrybuowany i hashowany `compose.host.yaml` z wąskimi mountami RO `/etc/hosts` i `/etc/resolv.conf`, `create_host_path: false`. Launcher dołącza go przed oryginalną listą Compose tylko dla nieustawionego/pustego/jawnego `host`; jawny inny tryb nie otrzymuje overlay. Zachowano kolejność i brak duplikatów jawnych plików. Test lifecycle potwierdza dystrybucję i renderowanie ścieżek dla wszystkich trzech klientów. Dokumentacja runtime opisuje lokalny Linux Engine, brak automatyzacji VPN i ograniczenia bridge/remote/Desktop.
+
 2026-10-22 — Brain: odczytowy skrypt `python3` sprawdził 7 plików handoffu: komplet plików, lokalne linki i kotwice, pięć niezaznaczonych zadań, dokładnie jeden `Next action`, brak drugiego rejestru statusów w zadaniach, końcowe nowe linie, whitespace i domknięcie bloków kodu. Wynik: exit 0. To kontrola dokumentów, nie test zachowania aplikacji lub agentów.
 
 2026-10-22 — Implementer, T-01: test-first RED potwierdził `EROFS` przy próbie zapisu rzeczywistym Chromium przez MCP do `reports/relative.png` ze starym układem mountów. Wczesne iteracje fixture kończyły się błędami samej asercji mountu, `chown` lub diagnostycznego zapisu; nie zostały uznane za RED produktu i poprawiono je przed uzyskaniem powyższego wyniku. Po zmianach `make test-all` zakończone powodzeniem: format, release build, Clippy, walidacja oraz 48 testów Rust; bezpośredni smoke kontenera i test MCP przez zainstalowany adapter przeszły. `bash tests/vm/check.sh` zakończone kodem 0 z kontrolą składni i fixture filtra; wyświetliło ostrzeżenia `cannot delete non-empty directory` w sprzątaniu istniejącej scratch kopii, ale finalny wynik to `OK`. `git diff --check` zakończone bez błędów. Ostatnia bramka `make test-all` uruchomiona ponownie po korekcie formatowania również PASSED.
@@ -159,8 +161,12 @@ T-02: Dodano natywny launcher Rust i jego binarium do payloadu wyłącznie klien
 
 Zastane modyfikacje użytkownika, których nie wolno nadpisywać: `.opencode/skills/brain-to-implementer/SKILL.md`, `.opencode/skills/brain-to-implementer/references/behavior-checks.md`, `.opencode/skills/brain-to-implementer/references/handoff-layout.md`, `AGENTS.md`, `docs/testing.md`. Przed każdym zadaniem porównać ten zapis z rzeczywistym working tree. W `docs/testing.md` wolno zmienić tylko wymagane opisy ścieżek raportów/nowego scenariusza, zachowując politykę i pozostałe zmiany użytkownika.
 
+2026-10-22 — Implementer, T-03: working tree przed zadaniem był czysty; nie zmieniano `AGENTS.md`, `docs/testing.md` ani skillów użytkownika. Test-first: `make test` zakończył się 57 PASSED / 3 FAILED z powodu brakującego automatycznego host overlay; `make test-playwright` potwierdził działający localhost, następnie zasadny RED `missing host mount /etc/hosts`. Po implementacji dwie wczesne bramki zatrzymały się na formatowaniu nowych testów Rust — poprawiono format, bez zmiany oczekiwań. Dwie kolejne bramki `make test-all` PASSED, ostatnia po zmianach dokumentacji: `.test-vm/artifacts/20261022T150811Z-709e8d0f-04e6-4713-8441-29a1f42359d2/`. W wynikach wykonano 60 testów Rust, w tym `host_overlay_tracks_network_mode_and_preserves_explicit_compose_precedence` i rozszerzony lifecycle wszystkich klientów. Integracja użyła zainstalowanego adaptera/launchera z cwd `/`, projektu ze spacjami i przecinkiem, prawdziwego Chromium i syntetycznego DNS na `127.203.77.53:53`. Potwierdzono bindy hosts/resolv RO oraz identyczne treści z hostem VM, localhost bez `local.json`, odmowę zapisu w korzeniu projektu, prywatną domenę `app.corp.test`, query DNS i screenshot w `reports/`. Nie zmieniano plików `/etc`, sieci hosta/VM, VPN, Incus ani polityki TLS. Testowy resolver jest osobnym jednorazowym kontenerem sprzątanym przez istniejący trap. Dowód dotyczy „syntetyczny resolver + host networking”, nie rzeczywistego firmowego VPN. `git diff --check` PASSED. T-04 i T-05 nie były wykonywane.
+
+2026-10-22 — Implementer, T-04: zachowano zastane, niezacommitowane zmiany T-03; nie zmieniano `AGENTS.md`, `docs/testing.md` ani skillów użytkownika. Launcher wybiera jawny CA, następnie istniejący `CAROOT/rootCA.pem`, następnie wynik odczytowego `mkcert -CAROOT` (tylko gdy program jest na PATH). Wybór pliku opiera się na metadanych; parser/import certyfikatu pozostaje w kontenerze. Ręczne CA/Compose zachowują priorytet i nie są dublowane; zachowano jawne symlinki do publicznego CA, montując docelowy plik, z odrzuceniem znanej ścieżki klucza. Dodano ograniczony capture 8192 + 1 bajt wykrycia overflow, środowisko mkcert ograniczone do PATH/HOME/XDG_DATA_HOME, brak stdin i stderr procesu oraz deadline 5 s. Dodatkowy zasadny RED runnera pokazał przekroczenie deadline przez odziedziczony stdout przy nadal działającym potomku i przy już zakończonym procesie głównym; poprawiono obsługę błędów/oczekiwania na ograniczony capture, bez zmiany oczekiwań. Testy obejmują spec procesu, spacje w CAROOT/PATH, priorytet i brak fallbacku dla ustawionego CAROOT, brak programu/pliku, timeout/błąd, błędny UTF-8/wieloliniowy/względny/NUL/nadmierny wynik, typ pliku oraz brak dostępu do klucza. Wczesne bramki wykryły formatowanie i zapis praw 0 zamiast 0o0 w teście (Clippy); poprawiono je. Pierwsza iteracja GREEN integracji ujawniła wyścig fixture po celowej nawigacji na stronę z obcym CA: screenshot przeniesiono przed tę nawigację, bez osłabienia asercji błędu certyfikatu; dalsze scenariusze używają świeżego kontekstu. Końcowe `make test-all` PASSED: `.test-vm/artifacts/20261022T153653Z-0dfad998-0733-46f8-90c8-82fa7613f4a6/` (69 testów Rust i pełny Playwright w wymaganej VM). CAROOT fixture leży poza projektem; syntetyczny klucz ma sentinel i prawa 000. HTTPS z wykrytym CA i Basic Auth/storage state działa, obcy CA daje `ERR_CERT_AUTHORITY_INVALID`, inspect nie zawiera mountu całego CAROOT/klucza, sentinel i credentials nie występują w protokole/logach/stanie/raportach. Brak automatycznego pliku CA nie blokuje inicjalizacji i zwykłego HTTP; wadliwy istniejący certyfikat zatrzymuje start z bezpieczną diagnostyką. Zachowano wcześniejszy test jawnego CA. Nie instalowano mkcert, nie zmieniano zaufania/sieci hosta ani provisioningu VM; nie wykonywano T-05. `git diff --check` PASSED.
+
 ## Blokady
 
 Brak znanych blokad projektowych. Pytanie o dodatkowe pole `origin` rozstrzygnął użytkownik: zaakceptował jeden plik z loginem, hasłem i origin.
 
-Gotowość środowiska testowego nie została sprawdzona przez Brain. Implementer potwierdził działanie wymaganej VM dla T-01 i T-02. Kolejne zadania nadal muszą zatrzymać się z dokładnym błędem i statusem BLOCKED/NOT RUN albo BLOCKED/FAILED, jeśli wymagane Make nie wykona testów w VM; nie przesuwać kolejki.
+Gotowość środowiska testowego nie została sprawdzona przez Brain. Implementer potwierdził działanie wymaganej VM dla T-01, T-02, T-03 i T-04. Kolejne zadania nadal muszą zatrzymać się z dokładnym błędem i statusem BLOCKED/NOT RUN albo BLOCKED/FAILED, jeśli wymagane Make nie wykona testów w VM; nie przesuwać kolejki.

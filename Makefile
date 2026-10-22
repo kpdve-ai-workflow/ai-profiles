@@ -9,7 +9,7 @@ DESCRIPTION ?=
 PART ?= patch
 .DEFAULT_GOAL := help
 
-.PHONY: help create rename check-profile check-new-name check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy test-playwright test-all test-vm-up test-vm-stop test-vm-sync test-vm-reprovision _test-guest _validate-rust-migration-guest _check-test-guest
+.PHONY: help create rename check-profile check-new-name check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy test-playwright test-all test-vm-up test-vm-stop test-vm-sync test-vm-reprovision test-vm-logs _test-guest _validate-rust-migration-guest _check-test-guest
 
 help:
 	@cat core/rust/help.txt
@@ -73,6 +73,9 @@ test-vm-sync:
 	@bash tests/vm/host.sh sync
 test-vm-reprovision:
 	@bash tests/vm/host.sh reprovision
+
+test-vm-logs:
+	@bash tests/vm/logs.sh
 
 _check-test-guest:
 	@test -f /var/lib/ai-profiles-vm/ready && test "$$(id -u):$$(id -g)" = 1000:1000 || \

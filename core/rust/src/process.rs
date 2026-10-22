@@ -17,6 +17,8 @@ use crate::error::ProcessError;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum StreamMode {
     Capture,
+    // Keep at most limit + 1 bytes, allowing the caller to reject overflow.
+    CaptureLimited(usize),
     Inherit,
     Null,
     RedirectToStderr,
@@ -98,19 +100,24 @@ impl ProcessRunner for SystemProcessRunner {
             .spawn()
             .map_err(|source| ProcessError::Spawn { source })?;
         let stdin_writer = take_stdin(&mut child, &spec.stdin);
-        let stdout_reader = take_reader(child.stdout.take());
-        let stderr_reader = take_reader(child.stderr.take());
+        let stdout_reader = take_reader(child.stdout.take(), spec.stdout);
+        let stderr_reader = take_reader(child.stderr.take(), spec.stderr);
         let started = Instant::now();
 
         let result = wait_for_child(&mut child, started, spec.timeout, &spec.cancellation);
-        if result.is_err() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        let status = match result {
+            Ok(status) => status,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                // A descendant may still hold an inherited pipe open. Do not
+                // defeat the process deadline by joining its stream readers.
+                return Err(error);
+            }
+        };
         let writer_result = join_writer(stdin_writer);
-        let stdout_result = join_reader(stdout_reader);
-        let stderr_result = join_reader(stderr_reader);
-        let status = result?;
+        let stdout_result = join_reader(stdout_reader, spec.stdout, started, spec.timeout);
+        let stderr_result = join_reader(stderr_reader, spec.stderr, started, spec.timeout);
         writer_result?;
         let stdout = stdout_result?;
         let stderr = stderr_result?;
@@ -133,7 +140,7 @@ fn stdin_stdio(mode: &StdinMode) -> Stdio {
 
 fn stream_stdio(mode: StreamMode, is_stdout: bool) -> Stdio {
     match mode {
-        StreamMode::Capture => Stdio::piped(),
+        StreamMode::Capture | StreamMode::CaptureLimited(_) => Stdio::piped(),
         StreamMode::Inherit => Stdio::inherit(),
         StreamMode::Null => Stdio::null(),
         StreamMode::RedirectToStderr if is_stdout => Stdio::from(std::io::stderr()),
@@ -155,11 +162,18 @@ fn take_stdin(
 
 fn take_reader<R: Read + Send + 'static>(
     reader: Option<R>,
+    mode: StreamMode,
 ) -> Option<thread::JoinHandle<std::io::Result<Vec<u8>>>> {
     reader.map(|mut reader| {
         thread::spawn(move || {
             let mut bytes = Vec::new();
-            reader.read_to_end(&mut bytes)?;
+            if let StreamMode::CaptureLimited(limit) = mode {
+                reader
+                    .take((limit as u64).saturating_add(1))
+                    .read_to_end(&mut bytes)?;
+            } else {
+                reader.read_to_end(&mut bytes)?;
+            }
             Ok(bytes)
         })
     })
@@ -179,10 +193,21 @@ fn join_writer(
 
 fn join_reader(
     reader: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
+    mode: StreamMode,
+    started: Instant,
+    timeout: Option<Duration>,
 ) -> Result<Vec<u8>, ProcessError> {
     let Some(reader) = reader else {
         return Ok(Vec::new());
     };
+    if let (StreamMode::CaptureLimited(_), Some(limit)) = (mode, timeout) {
+        while !reader.is_finished() {
+            if started.elapsed() >= limit {
+                return Err(ProcessError::Timeout);
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
     reader
         .join()
         .map_err(|_| ProcessError::StreamThread)?

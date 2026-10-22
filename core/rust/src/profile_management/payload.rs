@@ -144,6 +144,7 @@ fn build_files(
                 "README.md",
                 ".dockerignore",
                 "compose.yaml",
+                "compose.host.yaml",
                 "compose.ca.yaml",
                 "compose.auth.yaml",
                 "compose.basic-auth.yaml",

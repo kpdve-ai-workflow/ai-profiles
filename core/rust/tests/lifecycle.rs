@@ -728,7 +728,7 @@ fn lazy_legacy_import_and_selected_migration_retain_frozen_assets_and_overrides(
     );
 }
 
-const PLAYWRIGHT_FILES: [&str; 10] = [
+const PLAYWRIGHT_FILES: [&str; 11] = [
     "Dockerfile",
     "entrypoint.sh",
     "basic-auth.cjs",
@@ -736,6 +736,7 @@ const PLAYWRIGHT_FILES: [&str; 10] = [
     "README.md",
     ".dockerignore",
     "compose.yaml",
+    "compose.host.yaml",
     "compose.ca.yaml",
     "compose.auth.yaml",
     "compose.basic-auth.yaml",
@@ -842,7 +843,16 @@ fn playwright_distributes_build_config_only_to_selected_profiles() {
 fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() {
     use crate::model::{Client, ProfileAction as A};
 
-    let (_source, context) = playwright_source();
+    let (source, context) = playwright_source();
+    let registry_path = source.path().join("mcp/servers/playwright.json");
+    let mut registry = read_json(&registry_path).unwrap();
+    registry["environment"]["COMPOSE_FILE"] =
+        json!(".opencode/mcp/playwright/compose.yaml:.opencode/mcp/playwright/compose.host.yaml");
+    put(
+        source.path(),
+        "mcp/servers/playwright.json",
+        &json_bytes(&registry).unwrap(),
+    );
     let project = tempfile::tempdir().unwrap();
     disable_native_activation(project.path());
     let original_ignore = b"# user bytes\r\n/private-data\r\n";
@@ -871,6 +881,19 @@ fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() 
         assert_eq!(record["files"][&relative], sha(&bytes));
         assert!(fs::metadata(&launcher).unwrap().permissions().mode() & 0o111 != 0);
         assert_eq!(record["mcp_base"]["playwright"]["command"][0], relative);
+        let host_overlay = format!(
+            ".ai-profiles/{}/mcp/playwright/compose.host.yaml",
+            client.as_str()
+        );
+        let contents = fs::read(project.path().join(&host_overlay)).unwrap();
+        assert_eq!(record["files"][&host_overlay], sha(&contents));
+        assert_eq!(
+            record["mcp_base"]["playwright"]["environment"]["COMPOSE_FILE"],
+            format!(
+                ".ai-profiles/{}/mcp/playwright/compose.yaml:{host_overlay}",
+                client.as_str()
+            )
+        );
         assert!(!record["files"]
             .as_object()
             .unwrap()

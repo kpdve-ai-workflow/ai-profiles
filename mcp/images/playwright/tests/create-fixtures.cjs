@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 
-const directory = '/project/.private';
+const directory = process.env.FIXTURE_DIRECTORY || '/project/.private';
 fs.mkdirSync(directory, { mode: 0o700 });
 function openssl(...args) {
   execFileSync('openssl', args, { cwd: directory, stdio: 'pipe' });
@@ -21,3 +21,9 @@ fs.writeFileSync(`${directory}/auth.json`, JSON.stringify({
 }), { mode: 0o600 });
 for (const name of fs.readdirSync(directory)) fs.chownSync(`${directory}/${name}`, 1000, 1000);
 fs.chownSync(directory, 1000, 1000);
+if (process.env.FIXTURE_DIRECTORY) {
+  fs.renameSync(`${directory}/ca.crt`, `${directory}/rootCA.pem`);
+  fs.renameSync(`${directory}/ca.key`, `${directory}/rootCA-key.pem`);
+  fs.appendFileSync(`${directory}/rootCA-key.pem`, '\nT04_CA_PRIVATE_KEY_MUST_NOT_BE_READ\n');
+  fs.chmodSync(`${directory}/rootCA-key.pem`, 0);
+}
