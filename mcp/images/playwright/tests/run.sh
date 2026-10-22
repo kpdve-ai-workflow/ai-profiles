@@ -6,18 +6,18 @@ tests=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 run=$(mktemp -d "${TMPDIR:-/tmp}/playwright-smoke.XXXXXXXX")
 name=playwright-smoke-${run##*.}
 project="$run/project space,comma"
-mkdir -p "$project/reports/wcag"
+mkdir -p "$project/reports"
 cp "$tests/fixture.html" "$project/fixture.html"
 chmod 755 "$run" "$project" "$project/reports"
-# Only this fresh, disposable report directory is writable by container UID 1000.
-chmod 777 "$project/reports/wcag"
+# Only this fresh, disposable reports tree is writable by container UID 1000.
+chmod 777 "$project/reports"
 cleanup() {
   docker rm -f "$name" "$name-fixtures" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-echo "Smoke artifacts (retained on failure too): $project/reports/wcag"
+echo "Smoke artifacts (retained on failure too): $project/reports"
 docker image inspect --format 'Image architecture: {{.Os}}/{{.Architecture}}' "$image"
 docker run --rm --pull=never --entrypoint node \
   -e BASIC_AUTH_HELPER=/opt/playwright/basic-auth.cjs \
@@ -85,8 +85,8 @@ cat > "$project/.ai-profiles/opencode/local.json" <<'JSON'
 }}}}
 JSON
 # Preserve the first run's evidence, including automatic filename checks.
-mkdir "$project/reports/wcag/direct"
-find "$project/reports/wcag" -maxdepth 1 -type f -exec mv {} "$project/reports/wcag/direct/" \;
+mkdir "$project/reports/direct"
+find "$project/reports" -maxdepth 1 -type f -exec mv {} "$project/reports/direct/" \;
 SMOKE_PROJECT_DIR="$project" SMOKE_ADAPTER="$project/.ai-profiles/opencode/ai-profile-mcp" \
   AI_PROFILE_SMOKE_IMAGE="$image" \
   timeout --signal=TERM --kill-after=10s 180s node "$tests/smoke.cjs"

@@ -20,6 +20,8 @@ Use a short lowercase ASCII kebab-case slug. A new request must use an unused di
 
 `plan.md` alone owns statuses, dependencies, completion evidence, and the single next action. Task files own detailed procedures; they must not acquire duplicate mutable status/dependency/evidence ledgers. The reusable prompt points at the actual package path. No runner or extra dependency is needed.
 
+Before deriving test scenarios, Brain must apply `test-gap-discovery`, loading the skill when available. If unavailable, report it and retain the methodology in `../SKILL.md` and the target project's testing policy. Inspect that policy and cite its actual paths in the handoff. Infer required environments, commands, isolation, and acceptance gates from the target project; never impose this repository's infrastructure on another project.
+
 ## `plan.md` template
 
 ```markdown
@@ -48,6 +50,12 @@ Next action: Execute [T-01](tasks/T-01.md) only.
 | <Named choice> | <One resolved approach within approved scope> | BRAIN-SELECTED |
 
 ## Shared contracts
+### Testing policy and methodology
+<Actual target-project testing instruction paths, required execution environments,
+permissions/isolation and verification gates. State that Brain and Implementer apply
+test-gap-discovery, load its skill when available, and retain the methodology if absent.
+Keep task-specific scenarios and commands in task files unless shared.>
+
 ### <Named contract needed by multiple tasks>
 <Linked requirements and decisions; exact interfaces, behavior, data/control flow,
 state, failure/security/compatibility rules and verification expectations where relevant.
@@ -121,8 +129,11 @@ Non-goals: <What must remain unchanged; no unrelated refactors or speculative wo
 5. <Run the same focused check for GREEN, then the specified relevant regression checks.>
 
 ## Verification and expected results
-<Exact inspected commands/check procedures, locations, fixtures/isolation where needed,
-expected RED reason, GREEN result, regression scope, and manual acceptance if required.
+<Link the target-project testing policy. For behavior changes specify independent
+expectation sources, risk-based scenarios, discriminating assertions and plausible faults,
+test level, locations, fixtures/data, isolation and mock boundaries. Give exact inspected
+commands/check procedures, expected RED reason for new/repaired behavior, GREEN result,
+regression scope, acceptance criteria, and manual acceptance if required.
 These are expectations, not execution evidence. Actual results belong in ../plan.md.>
 
 ## Completion criteria
@@ -135,7 +146,7 @@ failure, ambiguity, or contradiction. Preserve partial changes and record the ex
 in ../plan.md; do not redesign, weaken tests, skip ahead, clean up speculatively, or revert.>
 ```
 
-For documentation-only tasks, **replace** the test/RED/implementation/GREEN sequence with content-expectation review, bounded documentation edits, and concrete content/link/consistency checks with expected results. Do not invent tests. For behavior tasks, identify the independent oracle, test seam, intended failure, minimal change, and regression scope before marking ready. If initial tests are GREEN, inspect whether behavior exists or the test lacks sensitivity; do not force RED by breaking code. Unresolved or unexpected outcomes require stopping, not guessing. Missing essential locations or verification blocks the task; do not leave “figure it out” instructions.
+For documentation-only tasks, **replace** the test/RED/implementation/GREEN sequence with content-expectation review, bounded documentation edits, and concrete content/link/consistency checks with expected results. Do not invent tests. For behavior tasks, identify the independent oracle, test seam, intended failure, minimal change, and regression scope before marking ready. The ordered test-first sequence applies to new or repaired behavior. A test protecting existing correct behavior may be GREEN immediately: adapt that sequence without requiring RED. If initial tests are GREEN, inspect whether behavior exists or the test lacks sensitivity; do not force RED by breaking code. Unresolved or unexpected outcomes require stopping, not guessing or unilaterally changing the testing contract. Missing essential locations or verification blocks the task; do not leave “figure it out” instructions.
 
 ## `implementer-prompt.md` template
 
@@ -157,6 +168,10 @@ You are the implementation agent working in the target project. The handoff is a
    Otherwise open only the selected task specification and context/source files
    needed for it. Do not load every future task by default.
 3. Confirm dependencies are checked complete and scope and verification are executable.
+   Read the target project's testing instructions identified in the plan and applicable
+   local policies. When adding, correcting, or reviewing tests, apply test-gap-discovery,
+   loading its skill when available. Report absence, but retain the methodology below
+   and the project's rules; skill availability does not waive them.
    Inspect actual working-tree changes before editing; preserve unrelated work.
    Resume an interrupted task using its recorded state and existing partial changes,
    not a blind restart. Never repeat checked tasks automatically.
@@ -181,14 +196,32 @@ A checkbox is checked only when completion criteria are met and required verific
 has passed. NOT APPLICABLE requires a task-specific justification for genuinely
 inapplicable checks; it is not an escape from unavailable tests. IMPLEMENTED with
 MANUAL PENDING remains unchecked: preserve progress without claiming acceptance.
+Unavailable required verification leaves the task unaccepted and unchecked: record
+BLOCKED execution, NOT RUN (or FAILED if attempted and failed), completed edits and
+actual limitations. Do not advance or relabel required checks NOT APPLICABLE.
+
+Testing methodology: establish observable requirements and independent expectation
+sources before copying expectations from implementation. Derive risk-relevant scenarios;
+select the test level, data, isolation and mock boundaries. Identify plausible incorrect
+behavior and discriminating assertions. Current output alone is not an oracle; mocking
+the behavior under test or checking orchestration does not prove real integration.
+Use test-first and justified RED before implementation for new or repaired behavior,
+then GREEN and required regression checks in the project's approved environment.
+Diagnose failures: product defect, wrong expectation, faulty fixture, nondeterminism,
+or infrastructure. No required bug finding, case quota, mutation experiment, or separate
+per-test report. Mutations need explicit permission and safe disposable isolation.
 
 Stop on missing permission, unavailable required verification, unexpected test failure,
 ambiguous requirements, or contradictions affecting this task. Mark blocked execution
 when appropriate; record partial changes and the exact blocker and actual verification
 state. Do not skip a blocked selected task to choose unrelated work. Preserve changes;
 no speculative cleanup or reverts. Never weaken tests or fabricate results to finish.
+Do not unilaterally change the testing contract, requirements, or legitimate assertions,
+add skips to get GREEN, omit required checks, or bypass isolation. Stop and report any
+unresolved contradiction; preserve completed edits without claiming acceptance.
 If a focused test is GREEN initially, inspect existing behavior and test sensitivity;
-never break code to manufacture RED. Stop if the discrepancy cannot be resolved
+tests of existing correct behavior may be GREEN from the first run. Never break code
+to manufacture RED. Stop if the discrepancy cannot be resolved
 within the binding task contract.
 
 These are workflow instructions, not a runtime-enforced permission boundary.

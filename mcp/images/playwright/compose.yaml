@@ -1,6 +1,6 @@
 services:
   playwright:
-    image: ai-profiles-playwright:0.1.0
+    image: ai-profiles-playwright:0.2.0
     pull_policy: never
     init: true
     stdin_open: true
@@ -10,7 +10,7 @@ services:
     environment:
       HOST_UID: "${HOST_UID:-}"
       HOST_GID: "${HOST_GID:-}"
-      PLAYWRIGHT_MCP_OUTPUT_DIR: "${AI_PROFILE_PROJECT_DIR:?}/reports/wcag"
+      PLAYWRIGHT_MCP_OUTPUT_DIR: "${AI_PROFILE_PROJECT_DIR:?}/reports"
     volumes:
       - type: bind
         source: "${AI_PROFILE_PROJECT_DIR:?}"
@@ -19,7 +19,7 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: "${AI_PROFILE_PROJECT_DIR:?}/reports/wcag"
-        target: "${AI_PROFILE_PROJECT_DIR:?}/reports/wcag"
+        source: "${AI_PROFILE_PROJECT_DIR:?}/reports"
+        target: "${AI_PROFILE_PROJECT_DIR:?}/reports"
         bind:
           create_host_path: false

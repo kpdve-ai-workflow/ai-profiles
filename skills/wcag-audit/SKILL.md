@@ -68,7 +68,7 @@ credentials in URLs, tool arguments, tracked configuration or audit artifacts.
 
 ## Artifacts
 
-Create a fresh directory `reports/wcag/<timestamp>/` in the project for each
+Create a fresh directory `reports/<timestamp>/` in the project for each
 run. Keep authentication storage separate from this directory. Save:
 
 - `report.md`: scope, target, scanner version, selected sample, omissions,
@@ -78,11 +78,11 @@ run. Keep authentication storage separate from this directory. Save:
 - `screenshots/`: relevant page and defect evidence.
 
 Host and container project paths are identical. For explicit MCP `filename`
-values prefer `reports/wcag/<timestamp>/...`; the corresponding absolute host
-path `<project>/reports/wcag/<timestamp>/...` also works. Named relative files
+values prefer `reports/<timestamp>/...`; the corresponding absolute host
+path `<project>/reports/<timestamp>/...` also works. Named relative files
 resolve against the project root advertised through MCP roots, **not** the
 configured output directory. Omitting `filename` uses the configured
-`reports/wcag` output directory. A bare `file.png` targets the read-only project
+`reports/` output directory. A bare `file.png` targets the read-only project
 root and is unsupported. Do not use `/workspace/...` or assume host
 `/tmp/opencode` is available to Playwright. Only the report subtree is writable;
 do not relax filesystem restrictions. The shared adapter supplies the project

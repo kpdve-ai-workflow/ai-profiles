@@ -138,8 +138,8 @@ nie wymaga Dockera i nie buduje ani nie pobiera obrazu.
 Z katalogu głównego projektu, mając działający Docker Engine i plugin Compose:
 
 ```sh
-mkdir -p reports/wcag
-docker build --tag ai-profiles-playwright:0.1.0 .ai-profiles/opencode/mcp/playwright
+mkdir -p reports
+docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
 ```
 
 Następnie zrestartuj klienta AI. Jak dla pozostałych lokalnych MCP, wspólny
@@ -149,7 +149,7 @@ publikacji GHCR, tokenów ani automatycznego buildu/pull obrazu. Nie uruchamiaj
 `compose up -d`: każdy klient ma własny kontener i sesję przeglądarki.
 
 Compose montuje projekt pod jego rzeczywistą bezwzględną ścieżką hosta, tylko
-do odczytu, a `reports/wcag` pod tą samą ścieżką zapisywalnie. Ścieżkę dostarcza
+do odczytu, a `reports/` pod tą samą ścieżką zapisywalnie. Ścieżkę dostarcza
 wspólny adapter przez `AI_PROFILE_PROJECT_DIR`, bez konfiguracji użytkownika.
 Katalog raportów musi wcześniej utworzyć użytkownik projektu;
 kontener dopasowuje do niego UID/GID. Nie montuje Docker socketu. Opcjonalne
@@ -207,13 +207,13 @@ procedura restartu MCP po błędzie uwierzytelnienia są w
 [instrukcji Basic Auth](images/playwright/README.md#http-basic-auth).
 
 Raport, findings JSON, raw scans i screenshoty skill zapisuje w
-`reports/wcag/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
+`reports/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
 zadeklarowane zmienne, nie całe środowisko hosta.
 
-Dla jawnego `filename` preferuj `reports/wcag/<run>/...` albo odpowiadającą
-bezwzględną ścieżkę hosta `<projekt>/reports/wcag/<run>/...`. Nazwy względne
+Dla jawnego `filename` preferuj `reports/<run>/...` albo odpowiadającą
+bezwzględną ścieżkę hosta `<projekt>/reports/<run>/...`. Nazwy względne
 rozwiązują się względem projektu z MCP roots, nie automatycznie względem katalogu
-wyjściowego. Pominięcie `filename` używa skonfigurowanego `reports/wcag`.
+wyjściowego. Pominięcie `filename` używa skonfigurowanego `reports/`.
 Sama nazwa `file.png` próbuje zapisać w projekcie tylko do odczytu i nie jest
 obsługiwana. Nie używaj `/workspace/...` ani hostowego `/tmp/opencode`: nie są
 aliasami projektu ani dodatkowymi mountami. Nie udostępniamy dowolnych katalogów

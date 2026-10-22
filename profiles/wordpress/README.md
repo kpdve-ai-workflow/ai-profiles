@@ -527,8 +527,8 @@ dostarcza Dockerfile i konfigurację Compose do `{{AI_PROFILE_MCP}}/playwright/`
 Z katalogu głównego docelowego projektu wykonaj:
 
 ```sh
-mkdir -p reports/wcag
-docker build --tag ai-profiles-playwright:0.1.0 {{AI_PROFILE_MCP}}/playwright
+mkdir -p reports
+docker build --tag ai-profiles-playwright:0.2.0 {{AI_PROFILE_MCP}}/playwright
 ```
 
 Do użycia potrzebny jest Docker Engine i plugin Compose, bez hostowego
@@ -536,7 +536,7 @@ Node/npm/Chromium. Wspólny adapter MCP uruchamia kontener z lokalnego obrazu;
 nie ma osobnego launchera ani automatycznego buildu/pull. GHCR i publikacja
 obrazu nie są potrzebne. Konfiguracja sieci, zaufanego CA DDEV oraz prywatnego Playwright
 storage state jest opisana w [dokumentacji MCP](../../mcp/README.md).
-Artefakty audytu trafiają do `reports/wcag/<timestamp>/`; auth storage pozostaje
+Artefakty audytu trafiają do `reports/<timestamp>/`; auth storage pozostaje
 poza raportami. Audyt nie zmienia kodu aplikacji i nie powinien wysyłać
 formularzy tworzących trwałe dane bez zgody.
 

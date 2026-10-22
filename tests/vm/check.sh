@@ -13,7 +13,7 @@ expect() {
         echo "Oczekiwano $expected, otrzymano $status: $*" >&2; exit 1
     fi
 }
-for script in host guest provision check; do bash -n "$root/tests/vm/$script.sh"; done
+for script in host guest provision check report-export; do bash -n "$root/tests/vm/$script.sh"; done
 expect 1 bash "$root/tests/vm/host.sh" unknown
 grep -q 'Nieznany tryb' "$scratch/output"
 expect 1 bash "$root/tests/vm/guest.sh" test invalid
@@ -109,6 +109,32 @@ rm -rf -- "$src/core"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$stage/" "$dest/"
 [[ -f $dest/core/rust/target/cache ]]
+
+# Exercise the exact production selector: nested and top-level reports are
+# included, while private files, unsupported extensions and symlinks are not.
+source "$root/tests/vm/report-export.sh"
+report_fixture="$scratch/report fixture"
+mkdir -p "$report_fixture/project/reports/wcag/run" "$report_fixture/project/.private"
+printf 'report\n' > "$report_fixture/project/reports/summary.json"
+printf 'image\n' > "$report_fixture/project/reports/wcag/run/screenshot.png"
+printf 'html\n' > "$report_fixture/project/reports/wcag/run/report.html"
+printf 'private\n' > "$report_fixture/project/.private/secret.json"
+printf 'not exported\n' > "$report_fixture/project/reports/debug.txt"
+ln -s "$report_fixture/project/.private/secret.json" "$report_fixture/project/reports/leak.json"
+mapfile -d '' selected_reports < <(report_files "$report_fixture")
+[[ ${#selected_reports[@]} == 3 ]]
+for expected_report in \
+    "$report_fixture/project/reports/summary.json" \
+    "$report_fixture/project/reports/wcag/run/screenshot.png" \
+    "$report_fixture/project/reports/wcag/run/report.html"; do
+    [[ " ${selected_reports[*]} " == *" $expected_report "* ]]
+done
+for excluded_report in \
+    "$report_fixture/project/.private/secret.json" \
+    "$report_fixture/project/reports/debug.txt" \
+    "$report_fixture/project/reports/leak.json"; do
+    [[ " ${selected_reports[*]} " != *" $excluded_report "* ]]
+done
 
 if [[ -r /dev/kvm && -w /dev/kvm ]]; then
     MOCK_RESULT=37 MOCK_EXPORT=0 expect 37 bash "$checkout/tests/vm/host.sh" test

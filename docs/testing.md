@@ -5,6 +5,83 @@ VM QEMU/KVM Debian 13 Trixie amd64. Host nie uruchamia Cargo, Node ani Dockera.
 Wymagania te dotyczą testowania, nie lokalnego `make install CLIENT=opencode PROFILE=… PROJECT=…`.
 Instalator nadal wymaga Rust/Cargo 1.85+, Git i Make.
 
+## Projektowanie i jakość testów
+
+Metodyka `test-gap-discovery` obowiązuje przy projektowaniu, dodawaniu,
+modyfikowaniu i ocenie testów, także bez Brain. Przed taką pracą przeczytaj ten
+dokument i wczytaj skill, jeśli jest dostępny. Jeśli go brakuje, zgłoś
+niedostępność; poniższe zasady nadal obowiązują i nie mogą być zastąpione
+dowolnym podejściem.
+
+1. Ustal obserwowalne wymaganie i niezależne źródło oczekiwanego wyniku:
+   wymagania, kontrakt, standard, sprawdzony przykład lub niezmiennik.
+2. Wyprowadź scenariusze przed kopiowaniem oczekiwań z implementacji. Czytanie
+   kodu może pomóc znaleźć punkty testowania, ale aktualny wynik programu nie
+   jest sam w sobie dowodem poprawności.
+3. Dobieraj przypadki według ryzyka: granice, błędne dane, sekwencje, ponowienia,
+   częściowe awarie, izolacja i integracje — tylko tam, gdzie mają znaczenie.
+4. Wybierz właściwy poziom testu, dane, izolację i granice mockowania. Nie
+   zastępuj mockiem zachowania, którego poprawność test ma potwierdzić.
+5. Wskaż wiarygodny błędny wariant zachowania, który test powinien wykryć,
+   oraz asercję, która go ujawni.
+6. Uruchom testy zgodnie z polityką repozytorium i oceń rzeczywisty wynik.
+7. Przy niepowodzeniu rozróżnij błąd produktu, błędne oczekiwanie, wadliwe dane
+   testowe, niedeterministyczność i problem infrastruktury, zamiast automatycznie
+   dopasowywać test do implementacji.
+
+Dla nowego lub naprawianego zachowania stosuj **test-first**: niezależne
+oczekiwanie → test → uzasadnione **RED** przed zmianą implementacji → minimalna
+implementacja → **GREEN** → wymagane kontrole regresji. RED ma wynikać
+z brakującego lub błędnego zachowania, nie z błędu środowiska. Test istniejącego,
+poprawnego zachowania może być od razu GREEN; sprawdź jego zdolność wykrywania
+realistycznej regresji, ale nie psuj kodu, aby wymusić RED. Nierozstrzygnięta
+sprzeczność oczekiwań z kontraktem wymaga zatrzymania i zgłoszenia.
+
+Nie wymagamy odkrycia błędu przez każdy test, minimalnej liczby przypadków ani
+eksperymentów mutacyjnych. Mutacje są opcjonalne; wymagają bezpiecznej izolacji
+(jednorazowej kopii lub odrębnego worktree), odpowiedniej wyraźnej zgody i kontroli
+sprzątania. Nie wolno zmieniać wymagań, usuwać zasadnych asercji ani dodawać
+skipów tylko po to, by uzyskać GREEN.
+
+Mockowane wywołanie procesu nie dowodzi działania prawdziwego programu.
+Kontrola orkiestracji nie zastępuje rzeczywistej integracji. W Rust samo dodanie
+pliku do `core/rust/tests/` nie gwarantuje wykonania: `core/rust/Cargo.toml`
+ustawia `autotests = false`, a pliki są jawnie dołączane jako moduły testowe
+w `core/rust/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
+uruchomienie nowych testów, nie tylko sukces całego polecenia.
+
+### Wymagana weryfikacja przed akceptacją
+
+Zmiana zachowania wymaga adekwatnej ochrony testowej oraz poniższej bramki.
+Polecenia Make uruchamiaj z katalogu głównego repozytorium; orkiestrują testy
+Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
+`bash tests/vm/check.sh` można wykonać na hoście; nie testuje ona aplikacji w VM.
+
+| Zakres zmiany | Weryfikacja przed akceptacją |
+| --- | --- |
+| Zachowanie `core/rust` | `make validate-rust-migration` |
+| Integracja/obraz Playwright | `make test-playwright` |
+| Wspólne zmiany obejmujące oba obszary | `make test-all` |
+| Orkiestracja VM | `bash tests/vm/check.sh` oraz `make test-all` |
+| Wyłącznie dokumentacja/instrukcje | Kontrola treści, odnośników i spójności; bez udawania weryfikacji aplikacji |
+
+`make test` służy również iteracyjnej weryfikacji Rust. Szersza bramka może już
+obejmować wymagane testy (`make test-all` obejmuje bramkę Rust i Playwright,
+a `make validate-rust-migration` obejmuje `make test`); nie uruchamiaj ich
+ponownie wyłącznie dla formalności. Dla nowych obszarów ustal kontrakt
+weryfikacji na podstawie rzeczywistych narzędzi projektu; nie wymyślaj komend.
+
+Zapisuj rzeczywiście wykonane polecenia, ich rezultaty i ograniczenia
+w istniejącym planie lub podsumowaniu, wraz z uzasadnionymi scenariuszami.
+Nie twórz obowiązkowych osobnych raportów dla każdego testu. Oddzielaj status
+implementacji od weryfikacji: „kod zmieniony” nie znaczy „zachowanie zweryfikowane”.
+Brak środowiska, uprawnień lub możliwości wymaganej weryfikacji oznacza blokadę,
+nie sukces ani nieadekwatność testów. Zatrzymaj pracę, zachowaj zmiany i zgłoś
+dokładny bloker oraz faktyczne wyniki; nie akceptuj zadania (checkbox pozostaje
+niezaznaczony, jeśli jest używany). Nie osłabiaj testów, nie pomijaj wymaganych
+kontroli ani nie obchodź izolacji. Zakaz lokalnych testów Rust i Playwright nie
+dotyczy lokalnych operacji produkcyjnych opisanych dalej.
+
 ## Przygotowanie hosta
 
 Pierwsza implementacja obsługuje tylko Linux x86_64/amd64. Użytkownik musi
@@ -295,7 +372,7 @@ budowany przy każdym żądaniu (Docker może wykorzystać warstwy).
 
 Każde wywołanie drukuje unikalną ścieżkę `.test-vm/artifacts/<run>/`.
 Zawiera log hosta, log operacji gościa i wyłącznie raporty JSON/HTML oraz PNG
-z `reports/wcag`, także po niepowodzeniu. Nie eksportujemy `.private`, kluczy,
+z `reports/`, także po niepowodzeniu. Nie eksportujemy `.private`, kluczy,
 auth storage ani całego tymczasowego projektu. TMPDIR i syntetyczne dane są
 świeże dla każdego przebiegu w `/home/tester/test-runs/<run>/tmp`.
 Scratch pozostaje w gościu do świadomej diagnostyki/usunięcia; może zawierać

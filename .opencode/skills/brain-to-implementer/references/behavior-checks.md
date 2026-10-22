@@ -46,3 +46,17 @@ All eleven scenarios have explicit instruction coverage in the updated documents
 | 11 | Skill “Role and authority” and final self-check explicitly honor analyze/discuss/wait without file creation or implementation. |
 
 Publication/fallback review also found explicit rules for actual project-relative paths, resolving generated links/references, replacing template fields, language, narrow Brain write authority, and truthful reporting of denied or partial writes. Template placeholders are intentional in this reference; generated packages must replace them. Static review does not verify that a model will perform those substitutions or honor the stop rules.
+
+## Testing-policy extension — separate static review (2026-10-22)
+
+The baseline and eleven-scenario review above are historical records and remain unchanged. The scenarios below come from the subsequent request for a mandatory `test-gap-discovery` testing policy. They check written instructions and templates only, not model behavior. No Brain/Implementer session or application test was executed for this review.
+
+| Scenario | Required static contract | Reviewed instruction / template coverage |
+| --- | --- | --- |
+| Planning and execution design or review tests | Both apply the same independent-oracle, risk-based methodology and read the target project's testing policy. | Skill “Workflow” and “Task and verification quality”; layout testing-policy guidance, shared contract, task verification fields and reusable prompt step 3/methodology. |
+| Companion skill unavailable | Report absence; methodology and project rules still apply, without requiring an installed skill. | Skill authority/workflow and prompt requirements; layout pre-scenario guidance, shared contract and reusable prompt step 3. |
+| Test of existing correct behavior is GREEN immediately | No artificial RED or broken production code; distinguish this from test-first for new/repaired behavior. | Skill verification sequence; layout task-sequence adaptation and reusable prompt GREEN exception. |
+| Required verification unavailable after edits | Task remains unaccepted and unchecked; record blocker and actual results while preserving implementation progress, with no queue advance. | Skill persistence rules; layout status contract and reusable prompt unavailable-verification gate. |
+| Handoff targets another project | Discover its own policy, environment, commands and isolation; no mandatory ai-profiles VM, Make commands or documentation path. | Skill workflow/project-policy rule; layout placement/testing guidance and project-specific policy fields. |
+
+Static review found explicit coverage for these five scenarios in the locations above, while retaining the one-task-per-invocation rule and separate implementation/verification statuses. This establishes textual consistency only; it does not demonstrate agent compliance or application correctness.

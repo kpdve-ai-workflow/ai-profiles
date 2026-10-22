@@ -14,7 +14,7 @@ const uid = adapter ? process.getuid() : 1000;
 const gid = adapter ? process.getgid() : 1000;
 // Optional legacy layout is solely for demonstrating the old roots regression.
 const mountedProject = process.env.SMOKE_MOUNT_PROJECT || project;
-const report = `${mountedProject}/reports/wcag`;
+const report = `${mountedProject}/reports`;
 const pending = new Map();
 let nextId = 0;
 let child;
@@ -137,7 +137,7 @@ async function main() {
   });
   send({ method: 'notifications/initialized' });
   const discovery = await request('tools/list', {});
-  fs.writeFileSync(`${report}/mcp-discovery.json`, JSON.stringify({ initialized, ...discovery }, null, 2));
+  fs.writeFileSync('/tmp/mcp-discovery.json', JSON.stringify({ initialized, ...discovery }, null, 2));
   for (const [name, fields] of Object.entries({
     browser_navigate: ['url'], browser_evaluate: ['function', 'filename'], browser_take_screenshot: ['filename'],
   })) {
@@ -171,16 +171,16 @@ async function main() {
   await tool('browser_navigate', { url });
   assert.ok(rootsRequests > 0, 'server never requested MCP roots');
   assert.equal(evaluated(await tool('browser_evaluate', { function: '() => window.axe.version' })), '4.14.0');
-  await tool('browser_take_screenshot', { filename: 'reports/wcag/relative.png', type: 'png' });
+  await tool('browser_take_screenshot', { filename: 'reports/relative.png', type: 'png' });
   assert.ok(fs.existsSync(`${report}/relative.png`),
     `MCP relative screenshot did not reach the host report bind (advertised root: ${project})`);
-  await tool('browser_evaluate', { function: 'async () => await window.axe.run(document)', filename: 'reports/wcag/axe-raw.json' });
+  await tool('browser_evaluate', { function: 'async () => await window.axe.run(document)', filename: 'reports/axe-raw.json' });
   const scan = JSON.parse(fs.readFileSync(`${report}/axe-raw.json`, 'utf8'));
   assert.equal(scan.testEngine.version, '4.14.0');
   const violations = new Set(scan.violations.map(item => item.id));
   assert.ok(violations.has('button-name'), 'axe missed the unlabeled button');
   assert.ok(violations.has('image-alt'), 'axe missed the image without alt text');
-  await tool('browser_take_screenshot', { filename: `${project}/reports/wcag/absolute.png`, type: 'png' });
+  await tool('browser_take_screenshot', { filename: `${project}/reports/absolute.png`, type: 'png' });
   const before = new Set(fs.readdirSync(report));
   await tool('browser_take_screenshot', { type: 'png' });
   const automatic = fs.readdirSync(report).filter(name => !before.has(name) && name.endsWith('.png'));

@@ -8,8 +8,8 @@ kopiuje konfigurację; nie uruchamia Dockera, npm ani budowy obrazu.
 Z katalogu głównego **docelowego projektu**, mając działający Docker i Compose:
 
 ```sh
-mkdir -p reports/wcag
-docker build --tag ai-profiles-playwright:0.1.0 .opencode/mcp/playwright
+mkdir -p reports
+docker build --tag ai-profiles-playwright:0.2.0 .opencode/mcp/playwright
 ```
 
 Build pobiera publiczne zależności i instaluje Node, Playwright MCP, Chromium,
@@ -23,7 +23,7 @@ Nie wykonuj `compose up -d`: każdy klient otrzymuje własny kontener i sesję.
 Konfiguracja nie buduje ani nie pobiera brakującego obrazu automatycznie.
 
 Projekt jest montowany pod tą samą bezwzględną ścieżką co na hoście, tylko do
-odczytu; jedynie `reports/wcag` jest zapisywalne. Wspólny adapter ustawia
+odczytu; jedynie `reports/` jest zapisywalne. Wspólny adapter ustawia
 `AI_PROFILE_PROJECT_DIR` na kanoniczną ścieżkę zainstalowanego projektu przy
 każdym uruchomieniu. Użytkownik nie konfiguruje tej zastrzeżonej zmiennej;
 środowisko, dotenv ani lokalne mapowanie nie mogą jej zastąpić.
@@ -33,12 +33,12 @@ i `HOST_GID` przez lokalne `environment` lub `env_file` adaptera.
 
 ### Ścieżki artefaktów
 
-- Dla jawnych nazw używaj `reports/wcag/<run>/...`, np.
-  `reports/wcag/2026-10-21/screenshot.png`. Względna nazwa jest rozwiązywana
+- Dla jawnych nazw używaj `reports/<run>/...`, np.
+  `reports/2026-10-21/screenshot.png`. Względna nazwa jest rozwiązywana
   względem katalogu projektu z MCP roots, **nie** katalogu wyjściowego.
 - Odpowiadająca bezwzględna ścieżka hosta
-  `<projekt>/reports/wcag/<run>/...` działa identycznie w kontenerze.
-- Pominięcie `filename` korzysta ze skonfigurowanego katalogu `reports/wcag`.
+  `<projekt>/reports/<run>/...` działa identycznie w kontenerze.
+- Pominięcie `filename` korzysta ze skonfigurowanego katalogu `reports/`.
 - Sama nazwa `file.png` wskazuje główny katalog projektu, który jest tylko do
   odczytu: taki zapis nie jest obsługiwany. Nie używaj `/workspace/...` ani nie
   zakładaj, że hostowe `/tmp/opencode` jest dostępne dla Playwright.
@@ -121,7 +121,7 @@ Przed zapisaniem prawdziwych danych dodaj `.private/` oraz
 `0700` i pusty plik z prawami `0600`, następnie uzupełnij go w lokalnym edytorze.
 Nie przekazuj hasła w poleceniu terminala, URL, czacie ani argumentach narzędzi.
 Plik może też leżeć poza projektem; wtedy podaj jego bezwzględną ścieżkę.
-Musi być czytelny dla UID/GID kontenera, zwykle właściciela `reports/wcag`.
+Musi być czytelny dla UID/GID kontenera, zwykle właściciela `reports/`.
 
 Do istniejącego `.opencode/ai-profile.local.json` dodaj rozszerzenie i ścieżkę:
 
@@ -161,7 +161,7 @@ Dokumentacja: [HTTP authentication](https://playwright.dev/docs/network#http-aut
 ## Diagnostyka
 
 - Brak obrazu: wykonaj powyższy `docker build` w projekcie.
-- Brak `reports/wcag`: utwórz katalog poleceniem `mkdir -p reports/wcag`.
+- Brak `reports`: dla ręcznego uruchomienia przygotuj katalog poleceniem `mkdir -p reports`.
 - Błąd `docker compose`: zainstaluj plugin Compose i uruchom Docker Engine.
 - Błąd zapisu: sprawdź właściciela i uprawnienia katalogu raportów.
 

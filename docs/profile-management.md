@@ -206,8 +206,8 @@ do `.ai-profiles/<klient>/mcp/playwright/`, bez uruchamiania Dockera lub npm. Pr
 wykonuje użytkownik w katalogu głównym docelowego repozytorium:
 
 ```sh
-mkdir -p reports/wcag
-docker build --tag ai-profiles-playwright:0.1.0 .ai-profiles/opencode/mcp/playwright
+mkdir -p reports
+docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
 ```
 
 Do korzystania potrzebny jest Docker Engine i plugin Compose. Adapter MCP wybranego klienta

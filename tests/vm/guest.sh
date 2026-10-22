@@ -30,7 +30,7 @@ collect() {
             echo "Nie udało się zebrać raportu: $relative" >&2
             if (( result == 0 )); then result=1; fi
         fi
-    done < <(find "$directory/tmp" -type f -path '*/reports/wcag/*' \( -name '*.json' -o -name '*.png' -o -name '*.html' \) -print0)
+    done < <(report_files "$directory/tmp")
     rm -f "$directory/pid"
     rm -f /home/tester/test-runs/.cancel-"$run"
     # Zamknij pipe i dokończ log przed powrotem exec/eksportem hosta.
@@ -42,6 +42,7 @@ collect() {
     exec 3>&- 4>&-
     exit "$result"
 }
+source /home/tester/ai-profiles/tests/vm/report-export.sh
 trap collect EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP

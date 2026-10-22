@@ -1,7 +1,7 @@
 FROM node:22.16.0-bookworm-slim
 ARG TARGETARCH
 LABEL org.opencontainers.image.title="ai-profiles Playwright MCP" \
-      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.version="0.2.0" \
       org.opencontainers.image.source="https://github.com/kpdve-ai-workflow/ai-profiles"
 WORKDIR /opt/playwright
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
