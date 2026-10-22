@@ -10,6 +10,7 @@ mod layout;
 pub mod mariadb;
 pub mod mcp;
 mod model;
+pub mod playwright;
 mod process;
 pub mod profile_management;
 mod project;
@@ -31,6 +32,9 @@ mod mcp_config_tests;
 #[cfg(test)]
 #[path = "../tests/mcp_runtime.rs"]
 mod mcp_runtime_tests;
+#[cfg(test)]
+#[path = "../tests/playwright.rs"]
+mod playwright_tests;
 #[cfg(test)]
 #[path = "../tests/profiles.rs"]
 mod profiles_tests;

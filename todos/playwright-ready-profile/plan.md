@@ -4,9 +4,9 @@
 
 Plan readiness: READY
 
-Postęp: T-01 ukończone i zweryfikowane. READY oznacza gotowe kontrakty zadań, nie zweryfikowane działanie pozostałych zmian planu.
+Postęp: T-01 i T-02 ukończone i zweryfikowane. READY oznacza gotowe kontrakty zadań, nie zweryfikowane działanie pozostałych zmian planu.
 
-Next action: Wykonaj wyłącznie [T-02](tasks/T-02.md).
+Next action: Wykonaj wyłącznie [T-03](tasks/T-03.md).
 
 ## Cel i granice
 
@@ -124,11 +124,11 @@ Ustalenia pochodzą z odczytu plików i dokumentacji. Historyczne logi nie są d
   - Verification: PASSED
   - Depends on: brak
   - Evidence: uzasadnione RED w `make test-playwright`: rzeczywisty MCP/Chromium zwrócił `EROFS` dla `reports/relative.png` przy starym mountcie `reports/wcag`; po implementacji `make test-all` PASSED (48 testów Rust oraz bezpośredni i instalowany Playwright adapter w VM), `bash tests/vm/check.sh` PASSED, `git diff --check` PASSED. Kontrola eksportera sprawdza top-level/nested JSON/PNG/HTML oraz wyklucza `.private`, rozszerzenie poza whitelistą i symlink.
-- [ ] [T-02 — Dostarczany launcher i opcjonalny Basic Auth bez local.json](tasks/T-02.md)
-  - Execution: TODO
-  - Verification: NOT RUN
+- [x] [T-02 — Dostarczany launcher i opcjonalny Basic Auth bez local.json](tasks/T-02.md)
+  - Execution: IMPLEMENTED
+  - Verification: PASSED
   - Depends on: T-01
-  - Evidence: brak
+  - Evidence: `make test-all` PASSED (59 testów Rust, walidacja/Clippy/build oraz testy Playwright), nowy launcher uruchomił MCP z `cwd=/`; czysty projekt bez `reports` i `local.json` przeszedł publiczną nawigację, Basic Auth 401/200, zły port/hasło i izolację nagłówka Authorization od drugiego origin/redirectu. `git check-ignore --no-index` sprawdził domyślny plik. T-03 pozostaje osobnym zadaniem.
 - [ ] [T-03 — Istniejące nazwy hostów i DNS dostępne w kontenerze](tasks/T-03.md)
   - Execution: TODO
   - Verification: NOT RUN
@@ -149,9 +149,13 @@ Ustalenia pochodzą z odczytu plików i dokumentacji. Historyczne logi nie są d
 
 T-01: Compose/output przełączone na `reports/`; obraz i instrukcje zaktualizowane do 0.2.0; smoke test sprawdza względny i bezwzględny zapis, automatyczny filename i zachowane granice RO; eksporter używa wspólnego `report_files ROOT`, a test selekcji korzysta z tej samej funkcji.
 
+T-02: Dodano natywny launcher Rust i jego binarium do payloadu wyłącznie klientów wybierających Playwright; instalacja tworzy `reports/` przy starcie, automatycznie dołącza bezpieczne pliki Basic Auth/storage state i zachowuje ręczną listę Compose. Dla Playwright instalacja dopisuje do `.gitignore` brakującą regułę bez zarządzania jej hashem; uninstall jej nie usuwa. Domyślny Compose używa host network.
+
 2026-10-22 — Brain: odczytowy skrypt `python3` sprawdził 7 plików handoffu: komplet plików, lokalne linki i kotwice, pięć niezaznaczonych zadań, dokładnie jeden `Next action`, brak drugiego rejestru statusów w zadaniach, końcowe nowe linie, whitespace i domknięcie bloków kodu. Wynik: exit 0. To kontrola dokumentów, nie test zachowania aplikacji lub agentów.
 
 2026-10-22 — Implementer, T-01: test-first RED potwierdził `EROFS` przy próbie zapisu rzeczywistym Chromium przez MCP do `reports/relative.png` ze starym układem mountów. Wczesne iteracje fixture kończyły się błędami samej asercji mountu, `chown` lub diagnostycznego zapisu; nie zostały uznane za RED produktu i poprawiono je przed uzyskaniem powyższego wyniku. Po zmianach `make test-all` zakończone powodzeniem: format, release build, Clippy, walidacja oraz 48 testów Rust; bezpośredni smoke kontenera i test MCP przez zainstalowany adapter przeszły. `bash tests/vm/check.sh` zakończone kodem 0 z kontrolą składni i fixture filtra; wyświetliło ostrzeżenia `cannot delete non-empty directory` w sprzątaniu istniejącej scratch kopii, ale finalny wynik to `OK`. `git diff --check` zakończone bez błędów. Ostatnia bramka `make test-all` uruchomiona ponownie po korekcie formatowania również PASSED.
+
+2026-10-22 — Implementer, T-02: test-first RED w VM wykazał brak zarządzanego `playwright-launcher` w instalowanym payloadzie oraz `InvalidLauncher` w nowych kontraktach Rust. Pierwsze błędy kompilacji i fixture testowych poprawiono; nie zaliczono ich jako RED produktu. Po implementacji końcowe `make test-all` PASSED: format, release build, Clippy, `make validate`, 59 testów Rust oraz integracja Playwright w VM (bezpośredni kontener, istniejący adapter oraz czysty projekt uruchamiający dystrybuowany launcher). E2E sprawdziło prawdziwe HTTP 401 bez/ze złym hasłem i złym portem, 200 przy poprawnych danych, oraz brak Authorization na drugim origin po redirect. `git check-ignore --no-index` potwierdził regułę dla standardowego pliku Basic Auth. Wczesne iteracje auth-smoke miały błąd synchronizacji fixture i błędne założenie o wyniku `browser_navigate` przy 401; poprawiono je tak, by asercja opierała się na rzeczywistym statusie/nagłówku odebranym przez serwer HTTP.
 
 Zastane modyfikacje użytkownika, których nie wolno nadpisywać: `.opencode/skills/brain-to-implementer/SKILL.md`, `.opencode/skills/brain-to-implementer/references/behavior-checks.md`, `.opencode/skills/brain-to-implementer/references/handoff-layout.md`, `AGENTS.md`, `docs/testing.md`. Przed każdym zadaniem porównać ten zapis z rzeczywistym working tree. W `docs/testing.md` wolno zmienić tylko wymagane opisy ścieżek raportów/nowego scenariusza, zachowując politykę i pozostałe zmiany użytkownika.
 
@@ -159,4 +163,4 @@ Zastane modyfikacje użytkownika, których nie wolno nadpisywać: `.opencode/ski
 
 Brak znanych blokad projektowych. Pytanie o dodatkowe pole `origin` rozstrzygnął użytkownik: zaakceptował jeden plik z loginem, hasłem i origin.
 
-Gotowość środowiska testowego nie została sprawdzona przez Brain. Implementer potwierdził działanie wymaganej VM dla T-01. Kolejne zadania nadal muszą zatrzymać się z dokładnym błędem i statusem BLOCKED/NOT RUN albo BLOCKED/FAILED, jeśli wymagane Make nie wykona testów w VM; nie przesuwać kolejki.
+Gotowość środowiska testowego nie została sprawdzona przez Brain. Implementer potwierdził działanie wymaganej VM dla T-01 i T-02. Kolejne zadania nadal muszą zatrzymać się z dokładnym błędem i statusem BLOCKED/NOT RUN albo BLOCKED/FAILED, jeśli wymagane Make nie wykona testów w VM; nie przesuwać kolejki.

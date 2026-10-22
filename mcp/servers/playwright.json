@@ -1,9 +1,6 @@
 {
   "type": "local",
-  "command": [
-    "docker", "compose", "--project-directory", ".",
-    "run", "--rm", "--no-deps", "--pull", "never", "-T", "playwright"
-  ],
+  "command": [".opencode/mcp/playwright/playwright-launcher"],
   "enabled": true,
   "environment": {
     "COMPOSE_FILE": ".opencode/mcp/playwright/compose.yaml"

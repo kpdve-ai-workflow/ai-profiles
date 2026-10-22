@@ -302,7 +302,7 @@ pub(crate) fn apply_profile(
         project.display()
     );
     if base_mcp.contains_key("playwright") {
-        println!("Playwright setup (from the target project): mkdir -p reports && docker build --tag ai-profiles-playwright:0.2.0 .opencode/mcp/playwright");
+        println!("Playwright setup (from the target project): docker build --tag ai-profiles-playwright:0.2.0 .opencode/mcp/playwright");
         println!("Playwright setup guide: .opencode/mcp/playwright/README.md (requires Docker Engine and Compose; no automatic build or pull).");
     }
     println!(

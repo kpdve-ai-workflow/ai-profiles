@@ -6,7 +6,7 @@ services:
     stdin_open: true
     tty: false
     working_dir: "${AI_PROFILE_PROJECT_DIR:?AI_PROFILE_PROJECT_DIR must be the absolute project path; launch through the installed ai-profile-mcp adapter}"
-    network_mode: "${AI_PROFILE_PLAYWRIGHT_NETWORK:-bridge}"
+    network_mode: "${AI_PROFILE_PLAYWRIGHT_NETWORK:-host}"
     environment:
       HOST_UID: "${HOST_UID:-}"
       HOST_GID: "${HOST_GID:-}"

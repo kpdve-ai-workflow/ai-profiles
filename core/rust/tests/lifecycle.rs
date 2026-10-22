@@ -110,6 +110,7 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     for binary in [
         "ai-profile-mcp",
         "mariadb-launcher",
+        "playwright-launcher",
         "restore-updraft",
         "test-inventory",
     ] {
@@ -804,7 +805,7 @@ fn playwright_distributes_build_config_only_to_selected_profiles() {
         fs::read_dir(project.path().join(".opencode/mcp/playwright"))
             .unwrap()
             .count(),
-        PLAYWRIGHT_FILES.len()
+        PLAYWRIGHT_FILES.len() + 1
     );
     assert!(!project.path().join("reports").exists());
     assert!(!project.path().join("node_modules").exists());
@@ -813,7 +814,18 @@ fn playwright_distributes_build_config_only_to_selected_profiles() {
         .join(".opencode/mcp/playwright/tests")
         .exists());
     let opencode = read_json(&project.path().join("opencode.json")).unwrap();
-    assert_eq!(opencode["mcp"]["playwright"]["command"][1], "playwright");
+    assert_eq!(
+        opencode["mcp"]["playwright"]["command"][0],
+        project
+            .path()
+            .join(".opencode/ai-profile-mcp")
+            .to_str()
+            .unwrap()
+    );
+    assert_eq!(
+        state["mcp_base"]["playwright"]["command"][0],
+        ".opencode/mcp/playwright/playwright-launcher"
+    );
     assert_eq!(
         read_json(&project.path().join(".mcp.json")).unwrap()["mcpServers"]["playwright"]["args"],
         json!(["playwright"])
@@ -823,6 +835,165 @@ fn playwright_distributes_build_config_only_to_selected_profiles() {
     assert_eq!(
         read_json(&project.path().join(".opencode/ai-profile-state.json")).unwrap(),
         before
+    );
+}
+
+#[test]
+fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() {
+    use crate::model::{Client, ProfileAction as A};
+
+    let (_source, context) = playwright_source();
+    let project = tempfile::tempdir().unwrap();
+    disable_native_activation(project.path());
+    let original_ignore = b"# user bytes\r\n/private-data\r\n";
+    put(project.path(), ".gitignore", original_ignore);
+    for client in Client::ALL {
+        scoped_action(
+            &context,
+            project.path(),
+            A::Install,
+            client,
+            Some("wordpress"),
+        );
+    }
+
+    let manifest_path = project.path().join(".ai-profiles/state.json");
+    let installed = read_json(&manifest_path).unwrap();
+    let mut records_before_update = serde_json::Map::new();
+    for client in Client::ALL {
+        let record = &installed["clients"][client.as_str()];
+        let relative = format!(
+            ".ai-profiles/{}/mcp/playwright/playwright-launcher",
+            client.as_str()
+        );
+        let launcher = project.path().join(&relative);
+        let bytes = fs::read(&launcher).unwrap();
+        assert_eq!(record["files"][&relative], sha(&bytes));
+        assert!(fs::metadata(&launcher).unwrap().permissions().mode() & 0o111 != 0);
+        assert_eq!(record["mcp_base"]["playwright"]["command"][0], relative);
+        assert!(!record["files"]
+            .as_object()
+            .unwrap()
+            .contains_key(".gitignore"));
+        records_before_update.insert(client.as_str().to_owned(), record.clone());
+    }
+    let ignore = fs::read(project.path().join(".gitignore")).unwrap();
+    assert!(ignore.starts_with(original_ignore));
+    assert_eq!(
+        ignore
+            .windows(b"/.private/playwright-basic-auth.json".len())
+            .filter(|window| *window == b"/.private/playwright-basic-auth.json")
+            .count(),
+        1
+    );
+
+    scoped_action(&context, project.path(), A::Update, Client::OpenCode, None);
+    let updated = read_json(&manifest_path).unwrap();
+    for client in [Client::Claude, Client::Codex] {
+        assert_eq!(
+            updated["clients"][client.as_str()],
+            records_before_update[client.as_str()]
+        );
+    }
+    assert_eq!(
+        fs::read(project.path().join(".gitignore")).unwrap(),
+        ignore,
+        "repeat update must not rewrite or duplicate the ignore rule"
+    );
+
+    put(
+        project.path(),
+        "reports/keep.json",
+        b"report survives uninstall",
+    );
+    put(
+        project.path(),
+        ".private/playwright-basic-auth.json",
+        b"synthetic secret",
+    );
+    scoped_action(
+        &context,
+        project.path(),
+        A::Uninstall,
+        Client::OpenCode,
+        None,
+    );
+    assert!(!project
+        .path()
+        .join(".ai-profiles/opencode/mcp/playwright/playwright-launcher")
+        .exists());
+    assert_eq!(fs::read(project.path().join(".gitignore")).unwrap(), ignore);
+    assert_eq!(
+        fs::read(project.path().join("reports/keep.json")).unwrap(),
+        b"report survives uninstall"
+    );
+    assert_eq!(
+        fs::read(project.path().join(".private/playwright-basic-auth.json")).unwrap(),
+        b"synthetic secret"
+    );
+}
+
+#[test]
+fn playwright_ignore_preflight_preserves_unrelated_profile_and_rejects_bad_destination() {
+    use crate::model::{Client, ClientSelection, ProfileAction as A};
+
+    let (_source, context) = native_source();
+    let unrelated = tempfile::tempdir().unwrap();
+    let original = b"# unrelated profile\r\nkeep\r\n";
+    put(unrelated.path(), ".gitignore", original);
+    scoped_action(
+        &context,
+        unrelated.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    assert_eq!(
+        fs::read(unrelated.path().join(".gitignore")).unwrap(),
+        original
+    );
+
+    let (_source, context) = playwright_source();
+    let blocked = tempfile::tempdir().unwrap();
+    disable_native_activation(blocked.path());
+    fs::create_dir(blocked.path().join(".gitignore")).unwrap();
+    assert!(crate::profile_management::scoped::run(
+        &context,
+        blocked.path(),
+        A::Install,
+        ClientSelection::One(Client::OpenCode),
+        Some("wordpress"),
+    )
+    .is_err());
+    assert!(!blocked
+        .path()
+        .join(".ai-profiles/opencode/mcp/playwright/Dockerfile")
+        .exists());
+    assert!(!blocked.path().join(".ai-profiles/state.json").exists());
+
+    let linked = tempfile::tempdir().unwrap();
+    disable_native_activation(linked.path());
+    put(linked.path(), ".gitignore-target", b"user-owned\n");
+    std::os::unix::fs::symlink(
+        linked.path().join(".gitignore-target"),
+        linked.path().join(".gitignore"),
+    )
+    .unwrap();
+    assert!(crate::profile_management::scoped::run(
+        &context,
+        linked.path(),
+        A::Install,
+        ClientSelection::One(Client::OpenCode),
+        Some("wordpress"),
+    )
+    .is_err());
+    assert!(!linked
+        .path()
+        .join(".ai-profiles/opencode/mcp/playwright/Dockerfile")
+        .exists());
+    assert_eq!(
+        fs::read(linked.path().join(".gitignore-target")).unwrap(),
+        b"user-owned\n"
     );
 }
 
@@ -843,7 +1014,7 @@ fn missing_playwright_build_sources_fail_before_project_writes() {
 }
 
 #[test]
-fn playwright_update_retires_owned_launcher_and_preserves_project_data() {
+fn playwright_update_manages_launcher_and_preserves_project_data() {
     let (_source, context) = playwright_source();
     let project = tempfile::tempdir().unwrap();
     disable_native_activation(project.path());
@@ -866,12 +1037,14 @@ fn playwright_update_retires_owned_launcher_and_preserves_project_data() {
     put(project.path(), ".private/auth.json", b"keep authentication");
 
     apply_profile(&context, project.path(), "wordpress").unwrap();
-    for filename in ["playwright-launcher", "image.json"] {
-        assert!(!project
-            .path()
-            .join(format!(".opencode/mcp/playwright/{filename}"))
-            .exists());
-    }
+    assert!(project
+        .path()
+        .join(".opencode/mcp/playwright/playwright-launcher")
+        .is_file());
+    assert!(!project
+        .path()
+        .join(".opencode/mcp/playwright/image.json")
+        .exists());
     crate::profile_management::uninstall::uninstall(&context, project.path()).unwrap();
     assert!(!project
         .path()

@@ -90,3 +90,19 @@ find "$project/reports" -maxdepth 1 -type f -exec mv {} "$project/reports/direct
 SMOKE_PROJECT_DIR="$project" SMOKE_ADAPTER="$project/.ai-profiles/opencode/ai-profile-mcp" \
   AI_PROFILE_SMOKE_IMAGE="$image" \
   timeout --signal=TERM --kill-after=10s 180s node "$tests/smoke.cjs"
+
+# The production workflow must work without reports, local.json or an environment
+# override, after only a manual image build. This fresh scratch project tests it.
+auth_project="$run/clean project"
+mkdir -p "$auth_project"
+cp "$tests/fixture.html" "$auth_project/fixture.html"
+repo=$(CDPATH= cd -- "$tests/../../../.." && pwd)
+make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$auth_project"
+test ! -e "$auth_project/reports"
+test ! -e "$auth_project/.ai-profiles/opencode/local.json"
+git -C "$auth_project" init -q
+docker image tag "$image" ai-profiles-playwright:0.2.0
+SMOKE_AUTH_PROJECT="$auth_project" \
+  SMOKE_AUTH_ADAPTER="$auth_project/.ai-profiles/opencode/ai-profile-mcp" \
+  timeout --signal=TERM --kill-after=10s 240s node "$tests/auth-smoke.cjs"
+git -C "$auth_project" check-ignore --no-index -q .private/playwright-basic-auth.json

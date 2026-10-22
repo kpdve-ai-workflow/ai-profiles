@@ -90,8 +90,10 @@ fn playwright_uses_the_shared_adapter_and_keeps_runtime_overrides() {
     let base = json!({"playwright":definition});
     let base = base.as_object().unwrap();
     let resolved = resolve(project.path(), base).unwrap();
-    assert_eq!(resolved.servers["playwright"]["command"][0], "docker");
-    assert_eq!(resolved.servers["playwright"]["command"][1], "compose");
+    assert_eq!(
+        resolved.servers["playwright"]["command"][0],
+        ".opencode/mcp/playwright/playwright-launcher"
+    );
     assert_eq!(
         resolved.servers["playwright"]["env_file"],
         ".env.playwright"

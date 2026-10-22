@@ -96,6 +96,8 @@ pub(crate) enum ProjectError {
     UnsupportedState(PathBuf),
     #[error("Found opencode.jsonc. Merge it into opencode.json first to preserve comments and avoid combining two configurations.")]
     JsoncPresent,
+    #[error(".gitignore exists but is not a regular file")]
+    GitignoreNotFile,
     #[error("opencode.json must contain a JSON object")]
     ConfigMustBeObject,
     #[error("opencode.json: mcp must be an object")]

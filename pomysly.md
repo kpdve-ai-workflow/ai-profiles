@@ -32,3 +32,6 @@ Docelowo trzeba też odizolować konfigurację Codexa w teście Playwright, żeb
 ✗playwright.browser_take_screenshot [filename=google-check.png, scale=css]
 ↳ ### Error
   Error: EROFS: read-only file system, open '/var/home/kpdve/it/personal/react/google-check.png'
+
+# Skille do naprawy
+- brain-to-implementer -> obecnie skill wymaga poprawy, niepotrzebnie tworzy implementer-prompt.md ( do usuniecia ), kolejna rzecza jest fakt, ze od razu wypisuje todo do zrobienia bez konkretnych ustalen, moja wizja na to jest taka, ze najpierw prostymi slowami mowi mi co ta implementacja nam da abym dokladnie zrozumial flow ale slowami do czlowieka ( ai za bardzo pisze ogolnikowo i ciezko to zrozumie ), gdy implementacj dotyczy refactoru robi porownanie w tabelce przed i po co daje nam implementacja przed jakie sa jej braki, implementacja po co nam daje i co naprawia wzgledem pierwszej implementacji oraz co nam daje.

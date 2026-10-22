@@ -202,6 +202,11 @@ fn prepare(
     let mut base = config::definitions_to_map(&config::desired_mcp(context, profile)?);
     render_mcp(&mut base, target);
     let mut writes = BTreeMap::new();
+    if base.contains_key("playwright") {
+        if let Some(updated) = crate::project::playwright_gitignore_update(project)? {
+            writes.insert(".gitignore".to_owned(), updated);
+        }
+    }
     let legacy = old.is_some_and(|s| layout(client, s) == Layout::Legacy);
     let local = target.local();
     let effective_local = if legacy {

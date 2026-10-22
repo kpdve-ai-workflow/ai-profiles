@@ -15,6 +15,7 @@ use crate::{
 
 const STATE: &str = crate::layout::LEGACY_STATE;
 const IGNORE_LINE: &str = ".opencode/workflow-approval.json";
+const PLAYWRIGHT_AUTH_IGNORE: &[u8] = b"/.private/playwright-basic-auth.json";
 const SCHEMA: &str = "https://opencode.ai/config.json";
 
 /// Format 2 is authoritative, even when its client map is empty. Legacy import
@@ -283,6 +284,50 @@ pub(crate) fn remove_gitignore_line(project: &Path, old_state: &Value) -> Result
     updated.push_str(&contents[..start]);
     updated.push_str(&contents[end..]);
     fs::write(&path, updated).map_err(|source| ProjectError::Io { path, source })
+}
+
+/// Return an append-only .gitignore update when Playwright's default credentials
+/// path is not already ignored. The caller preflights this during preparation
+/// and commits it without recording ownership, so uninstall never removes it.
+pub(crate) fn playwright_gitignore_update(project: &Path) -> Result<Option<Vec<u8>>, ProjectError> {
+    let path = file_path(project, ".gitignore")?;
+    let contents = match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => fs::read(&path)
+            .map_err(|source| ProjectError::Io {
+                path: path.clone(),
+                source,
+            })?,
+        Ok(_) => return Err(ProjectError::GitignoreNotFile),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(source) => {
+            return Err(ProjectError::Io { path, source });
+        }
+    };
+    if contents
+        .split(|byte| *byte == b'\r' || *byte == b'\n')
+        .any(|line| line == PLAYWRIGHT_AUTH_IGNORE)
+    {
+        return Ok(None);
+    }
+
+    let newline: &[u8] = if contents.windows(2).any(|bytes| bytes == b"\r\n") {
+        b"\r\n"
+    } else if contents.contains(&b'\n') {
+        b"\n"
+    } else if contents.contains(&b'\r') {
+        b"\r"
+    } else {
+        b"\n"
+    };
+    let needs_separator =
+        !contents.is_empty() && !contents.ends_with(b"\n") && !contents.ends_with(b"\r");
+    let mut updated = contents;
+    if needs_separator {
+        updated.extend_from_slice(newline);
+    }
+    updated.extend_from_slice(PLAYWRIGHT_AUTH_IGNORE);
+    updated.extend_from_slice(newline);
+    Ok(Some(updated))
 }
 
 fn matching_ignore_line(contents: &str) -> Option<(usize, usize)> {
