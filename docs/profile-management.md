@@ -136,7 +136,7 @@ Instaluj przez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> P
 Aliasy: `install-opencode`, `install-claude`, `install-codex` z tymi samymi PROFILE
 i PROJECT; sprzeczny CLIENT jest błędem. Make buduje
 manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
-launcher MariaDB i restore WordPress trafiają do projektu jako samodzielne
+launchery MariaDB/Playwright i restore WordPress trafiają do projektu jako samodzielne
 pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
 referencyjny. Współdzielone zasoby legacy (również dawne `.py`) pozostają zamrożone;
 obce i lokalnie zmienione pliki zachowują dotychczasową ochronę.
@@ -201,18 +201,29 @@ uruchom przez `make validate`; szczegóły walidacji MCP są w dokumentacji MCP.
 Starsze instalacje aktualizuj osobno przez `make update CLIENT=<klient> PROJECT=<projekt>`.
 Brakującą integrację dodaj przez `make install CLIENT=<klient> PROFILE=<profil> PROJECT=<projekt>`.
 Przygotowanie konfiguracji nie wymaga obecności
-CLI tych klientów. Dla Playwright WCAG instalator dostarcza Dockerfile i Compose
+CLI tych klientów. Dla Playwright instalator dostarcza launcher, Dockerfile i Compose
 do `.ai-profiles/<klient>/mcp/playwright/`, bez uruchamiania Dockera lub npm. Przygotowanie
-wykonuje użytkownik w katalogu głównym docelowego repozytorium:
+obrazu wykonuje użytkownik w katalogu głównym docelowego repozytorium:
 
 ```sh
-mkdir -p reports
 docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
 ```
 
-Do korzystania potrzebny jest Docker Engine i plugin Compose. Adapter MCP wybranego klienta
-uruchamia standardową komendę z konfiguracji. Nie ma osobnego launchera Playwright,
-automatycznego buildu/pull ani zależności od publikacji GHCR. Wszystkie zależności
-Playwright są instalowane w obrazie, nie na hoście. Po zmianie receptury wykonaj
-ponownie build. Instrukcja dostarczana do projektu jest w
-`.ai-profiles/<klient>/mcp/playwright/README.md`; szczegóły wspólne są w `mcp/README.md`.
+Dla Claude Code/Codex użyj w ścieżce odpowiednio `claude`/`codex`.
+Do korzystania potrzebny jest lokalny Linux Docker Engine i plugin Compose.
+Adapter uruchamia dostarczony `playwright-launcher`, który automatycznie tworzy
+`reports/` i przygotowuje kontener, bez konfiguracji VPN lub hosta.
+Nie ma automatycznego buildu/pull ani zależności od publikacji GHCR.
+Zależności Playwright są w obrazie, bez hostowego Node. Opcjonalny Basic Auth
+wymaga tylko prywatnego `.private/playwright-basic-auth.json` z `username`,
+`password`, `origin` i prawami `0600`; Compose/local.json nie wymagają edycji.
+Po przygotowaniu zrestartuj klienta i zatwierdź wymagane natywne zgody projektu/MCP.
+
+React 3.0.0 i WordPress 2.0.0 zmieniają domyślne raporty na `reports/` i sieć
+na `host`. Migracja: update wybranego klienta, build 0.2.0 w projekcie i restart.
+Stare obrazy/raporty oraz frozen legacy pozostają. `local.json` nie jest usuwany:
+stare nadpisanie komendy, sieci lub Compose może utrzymać dawne zachowanie.
+Uninstall nie usuwa credentials ani reguły `.gitignore`, którą instalator dodaje
+dla domyślnego pliku Basic Auth. Instrukcja i wyjątki (CA, uprawnienia, HTTP 401)
+są w `.ai-profiles/<klient>/mcp/playwright/README.md`;
+[szczegóły wspólne](../mcp/README.md#playwright-i-audyty-wcag).

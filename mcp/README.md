@@ -138,11 +138,13 @@ nie wymaga Dockera i nie buduje ani nie pobiera obrazu.
 Z katalogu głównego projektu, mając działający Docker Engine i plugin Compose:
 
 ```sh
-mkdir -p reports
 docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
 ```
 
-Następnie zrestartuj klienta AI. Jak dla pozostałych lokalnych MCP, wspólny
+Dla Claude Code lub Codex zastąp `opencode` odpowiednio `claude` lub `codex`.
+Opcjonalnie przygotuj [plik Basic Auth](images/playwright/README.md#http-basic-auth).
+Następnie zrestartuj klienta AI i zatwierdź jego natywne zgody projektu/MCP,
+jeśli wymagane. Jak dla pozostałych lokalnych MCP, wspólny
 adapter `ai-profile-mcp` odczytuje konfigurację i uruchamia jej komendę — tutaj
 natywny `playwright-launcher`, który przygotowuje runtime i wykonuje standardowe
 `docker compose run` bez TTY. Nie ma publikacji GHCR, tokenów ani automatycznego
@@ -152,8 +154,9 @@ buildu/pull obrazu. Nie uruchamiaj
 Compose montuje projekt pod jego rzeczywistą bezwzględną ścieżką hosta, tylko
 do odczytu, a `reports/` pod tą samą ścieżką zapisywalnie. Ścieżkę dostarcza
 wspólny adapter przez `AI_PROFILE_PROJECT_DIR`, bez konfiguracji użytkownika.
-Katalog raportów musi wcześniej utworzyć użytkownik projektu;
-kontener dopasowuje do niego UID/GID. Nie montuje Docker socketu. Opcjonalne
+Launcher automatycznie tworzy brakujące `reports/` jako bieżący użytkownik przy
+starcie (nie podczas builda); kontener dopasowuje do niego UID/GID.
+Nie montuje Docker socketu. Opcjonalne
 `HOST_UID` i `HOST_GID` pozwalają jawnie wybrać użytkownika.
 
 Dockerfile deklaruje dokładne wersje `@playwright/mcp` i `axe-core`, bez npm
@@ -165,6 +168,11 @@ zależności przechodnich w przyszłych rebuildach.
 
 Po aktualizacji dostarczonej receptury użytkownik jawnie ponawia build w projekcie.
 Aktualizacja i uninstall nie zarządzają lokalnymi obrazami ani raportami.
+React 3.0.0 i WordPress 2.0.0 publikują zmianę raportów na `reports/` i sieci na
+`host`: wykonaj update wybranego klienta, build 0.2.0 i restart. Stare obrazy,
+raporty oraz zamrożony payload legacy pozostają. Lokalne nadpisania komendy,
+sieci lub Compose zachowują priorytet i mogą utrzymać poprzednie zachowanie;
+nie są automatycznie usuwane.
 Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwright/README.md).
 
 ### Sieć, certyfikaty i artefakty
@@ -232,13 +240,19 @@ prywatny plik storage state o prawach `0600`. Launcher sam włącza `compose.aut
 Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
 nie należy do raportów ani stanu instalacji.
 
-HTTP Basic Auth włączaj oddzielnie przez `compose.basic-auth.yaml` oraz
-`AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE` w lokalnym `environment`. Prywatny JSON
-z wymaganymi `username`, `password` i `origin` ma prawa `0600` i jest montowany
+HTTP Basic Auth jest opcjonalny: utwórz lokalnie
+`.private/playwright-basic-auth.json` z wymaganymi `username`, `password` i
+`origin`, o prawach `0600` lub bardziej restrykcyjnych, bez symlinków.
+Launcher automatycznie dołącza rozszerzenie; bez pliku nie włącza Basic Auth.
+Instalacja/update/switch dodaje tylko regułę `/.private/playwright-basic-auth.json`
+do `.gitignore`; nie odśledza już wersjonowanego sekretu. Reguła i prywatny plik
+pozostają po uninstall. JSON jest montowany
 tylko do odczytu. Entrypoint przekazuje dane do
 `browser.contextOptions.httpCredentials`; origin ogranicza ich użycie do
 wskazanego serwisu. Nie zapisuj sekretów w Git ani raportach. Rozszerzenie działa
-razem z CA i storage state. Format pliku, przykład lokalnej konfiguracji i
+razem z CA i storage state. Jawny `AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE` ma
+pierwszeństwo; brak jawnie wskazanego pliku zatrzymuje start. Format pliku,
+opcjonalne nadpisanie lokalizacji i
 procedura restartu MCP po błędzie uwierzytelnienia są w
 [instrukcji Basic Auth](images/playwright/README.md#http-basic-auth).
 

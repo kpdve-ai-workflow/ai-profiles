@@ -1,8 +1,8 @@
-# Profil WordPress: Novamira + Figma + MariaDB
+# Profil WordPress: Novamira + Figma + MariaDB + Playwright
 
 Jedna instalacja profilu, następnie konfiguracja połączeń dla Twojego projektu.
 Nie używamy Pi. Novamira korzysta z loginu i **hasła aplikacyjnego WordPressa**, bez OAuth.
-Profil wybiera `novamira`, `figma` i `mariadb` w swoim `mcp.json`; ich jedyne definicje
+Profil wybiera `novamira`, `figma`, `mariadb` i `playwright` w swoim `mcp.json`; ich jedyne definicje
 znajdują się w `mcp/servers/`. Figma jest współdzielona z profilem React,
 ale każdy projekt zachowuje własne lokalne ustawienia i połączenie.
 
@@ -21,10 +21,11 @@ użyj `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=...` dla zainstalowanego
 Instalacja dostarcza:
 
 - wspólne i wordpressowe skille do `{{AI_PROFILE_ROOT}}/plugin/skills/`, niezależnie dla wskazanego klienta;
-- definicje MCP `novamira`, `figma` i `mariadb` w zarządzanej konfiguracji wskazanego klienta;
+- definicje MCP `novamira`, `figma`, `mariadb` i `playwright` w zarządzanej konfiguracji wskazanego klienta;
 - adapter Rust `{{AI_PROFILE_ROOT}}/ai-profile-mcp`, który uruchamia most Novamira;
 - launcher Rust `{{AI_PROFILE_MCP}}/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
+- launcher Rust i kontekst ręcznego buildu Playwright w `{{AI_PROFILE_MCP}}/playwright/`;
 - tę instrukcję wraz z przykładami konfiguracji w `{{AI_PROFILE_ROOT}}/README.md`;
 - skill SQL w `{{AI_PROFILE_ROOT}}/plugin/skills/mcp-mariadb/`;
 - skrypt importu UpdraftPlus i jego pliki pomocnicze w `{{AI_PROFILE_ROOT}}/scripts/`.
@@ -522,23 +523,57 @@ z backupami i zapisami ograniczonymi do zleconego zadania.
 
 ## Audyt WCAG przez Playwright
 
-Profil udostępnia serwer MCP `playwright` i skill `wcag-audit`. Instalator tylko
-dostarcza Dockerfile i konfigurację Compose do `{{AI_PROFILE_MCP}}/playwright/`.
+Profil udostępnia serwer MCP `playwright` i skill `wcag-audit`. Instalacja z kroku 1
+dostarcza launcher, Dockerfile i Compose do `{{AI_PROFILE_MCP}}/playwright/`.
 Z katalogu głównego docelowego projektu wykonaj:
 
 ```sh
-mkdir -p reports
 docker build --tag ai-profiles-playwright:0.2.0 {{AI_PROFILE_MCP}}/playwright
 ```
 
 Do użycia potrzebny jest Docker Engine i plugin Compose, bez hostowego
-Node/npm/Chromium. Wspólny adapter MCP uruchamia kontener z lokalnego obrazu;
-nie ma osobnego launchera ani automatycznego buildu/pull. GHCR i publikacja
-obrazu nie są potrzebne. Konfiguracja sieci, zaufanego CA DDEV oraz prywatnego Playwright
-storage state jest opisana w [dokumentacji MCP](../../mcp/README.md).
+Node/npm/Chromium na potrzeby Playwright (Novamira ma osobne wymagania).
+Nie ma automatycznego buildu/pull ani publikacji GHCR.
+Opcjonalnie zapisz lokalnym edytorem `.private/playwright-basic-auth.json`
+o prawach `0600` lub bardziej restrykcyjnych, bez symlinków:
+
+```json
+{
+  "username": "LOGIN",
+  "password": "HASLO",
+  "origin": "https://serwis.example:8443"
+}
+```
+
+Wszystkie trzy pola są wymagane; origin to schemat/host/port bez ścieżki i ogranicza
+wysyłanie credentials do tego serwisu. Instalator dopisuje regułę
+`/.private/playwright-basic-auth.json` do `.gitignore`, ale nie odśledza już
+wersjonowanych plików. Nie podawaj sekretów agentowi ani nie zapisuj ich w raportach.
+Brak pliku oznacza brak Basic Auth. Zrestartuj klienta i zatwierdź jego natywne
+zgody projektu/MCP, jeśli wymagane.
+
+Launcher automatycznie tworzy `reports/`, dołącza opcjonalny Basic Auth i dostępny
+publiczny CA mkcert oraz używa gotowej sieci hosta Linux; nie konfiguruje VPN ani
+hosta. Docker build nie tworzy katalogu raportów. Zwykłe użycie nie wymaga edycji
+Compose ani `{{AI_PROFILE_LOCAL}}`.
+Szczegóły znajdują się w dostarczonej instrukcji `{{AI_PROFILE_MCP}}/playwright/README.md`.
 Artefakty audytu trafiają do `reports/<timestamp>/`; auth storage pozostaje
 poza raportami. Audyt nie zmienia kodu aplikacji i nie powinien wysyłać
 formularzy tworzących trwałe dane bez zgody.
+
+Wyjątki: niestandardowy CA wskaż przez `AI_PROFILE_PLAYWRIGHT_CA_CERT` w
+`{{AI_PROFILE_LOCAL}}`, nigdy przez wyłączenie TLS. Przy braku obrazu wykonaj build;
+przy braku uprawnień sprawdź dostęp klienta do Dockera/projektu. HTTP 401 wymaga
+lokalnego sprawdzenia loginu, hasła, origin (także portu) i praw pliku oraz restartu MCP.
+Jawne nazwy screenshotów to `reports/...`; `screenshot.png` w korzeniu RO nie działa.
+
+Migracja do WordPress 2.0.0: z repozytorium instalatora wykonaj
+`make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu`, potem build
+0.2.0 w projekcie i restart klienta. Domyślne ustawienia zmieniają się na
+`reports/` i sieć `host`. Stare obrazy, raporty i frozen legacy pozostają.
+Istniejące nadpisania komendy/sieci/Compose w `{{AI_PROFILE_LOCAL}}` zachowują
+priorytet i mogą utrzymać stare zachowanie; nie są automatycznie usuwane.
+Uninstall zachowuje raporty, credentials oraz chroniącą je regułę `.gitignore`.
 
 Źródła: [Novamira quick start](https://novamira.ai/quickstart/),
 [most WordPress 0.4.0](https://github.com/Automattic/mcp-wordpress-remote/tree/7190a4ccf9a16b909433133ecf90c52c9bb04da4),

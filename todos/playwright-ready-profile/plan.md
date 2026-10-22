@@ -4,9 +4,9 @@
 
 Plan readiness: READY
 
-Postęp: T-01, T-02, T-03 i T-04 ukończone i zweryfikowane. READY oznacza gotowe kontrakty zadań, nie zweryfikowane działanie pozostałych zmian planu.
+Postęp: T-01–T-05 ukończone i zweryfikowane. READY oznacza gotowe kontrakty; dowody ukończenia i zakres weryfikacji znajdują się poniżej.
 
-Next action: Wykonaj wyłącznie [T-05](tasks/T-05.md).
+Next action: Brak — wszystkie zadania planu ukończone i zweryfikowane.
 
 ## Cel i granice
 
@@ -139,11 +139,11 @@ Ustalenia pochodzą z odczytu plików i dokumentacji. Historyczne logi nie są d
   - Verification: PASSED
   - Depends on: T-03
   - Evidence: RED `make test` (60 PASSED / 3 FAILED) wykazał brak wyboru CA; RED `make test-playwright` wykazał `ERR_CERT_AUTHORITY_INVALID` na poprawnej fixture podpisanej CA z CAROOT. Końcowe `make test-all` PASSED: 69 testów Rust, format/build/Clippy/walidacja, rzeczywiste Chromium HTTPS z automatycznym CA, odrzucenie obcego CA, CA + Basic Auth + storage state, inspect pojedynczego mountu publicznego pliku RO oraz brak sentinel/credentials w protokole/logach/stanie/raportach. `git diff --check` PASSED.
-- [ ] [T-05 — Publikacja profili i krótka instrukcja użytkownika](tasks/T-05.md)
-  - Execution: TODO
-  - Verification: NOT RUN
+- [x] [T-05 — Publikacja profili i krótka instrukcja użytkownika](tasks/T-05.md)
+  - Execution: IMPLEMENTED
+  - Verification: PASSED
   - Depends on: T-04
-  - Evidence: brak
+  - Evidence: React 3.0.0 / WordPress 2.0.0; ujednolicone instrukcje builda 0.2.0, automatycznego przygotowania reports i opcjonalnego Basic Auth. Kontrola treści/lokalnych linków/kotwic PASSED; instalacja dwóch profili dla trzech klientów w scratch VM potwierdziła wersje i rozwinięte README/WCAG. `make test-all` PASSED (69 testów Rust, format/build/Clippy/walidacja i pełny Playwright w VM). `git diff --check` PASSED.
 
 ## Dowody wykonania
 
@@ -165,8 +165,10 @@ Zastane modyfikacje użytkownika, których nie wolno nadpisywać: `.opencode/ski
 
 2026-10-22 — Implementer, T-04: zachowano zastane, niezacommitowane zmiany T-03; nie zmieniano `AGENTS.md`, `docs/testing.md` ani skillów użytkownika. Launcher wybiera jawny CA, następnie istniejący `CAROOT/rootCA.pem`, następnie wynik odczytowego `mkcert -CAROOT` (tylko gdy program jest na PATH). Wybór pliku opiera się na metadanych; parser/import certyfikatu pozostaje w kontenerze. Ręczne CA/Compose zachowują priorytet i nie są dublowane; zachowano jawne symlinki do publicznego CA, montując docelowy plik, z odrzuceniem znanej ścieżki klucza. Dodano ograniczony capture 8192 + 1 bajt wykrycia overflow, środowisko mkcert ograniczone do PATH/HOME/XDG_DATA_HOME, brak stdin i stderr procesu oraz deadline 5 s. Dodatkowy zasadny RED runnera pokazał przekroczenie deadline przez odziedziczony stdout przy nadal działającym potomku i przy już zakończonym procesie głównym; poprawiono obsługę błędów/oczekiwania na ograniczony capture, bez zmiany oczekiwań. Testy obejmują spec procesu, spacje w CAROOT/PATH, priorytet i brak fallbacku dla ustawionego CAROOT, brak programu/pliku, timeout/błąd, błędny UTF-8/wieloliniowy/względny/NUL/nadmierny wynik, typ pliku oraz brak dostępu do klucza. Wczesne bramki wykryły formatowanie i zapis praw 0 zamiast 0o0 w teście (Clippy); poprawiono je. Pierwsza iteracja GREEN integracji ujawniła wyścig fixture po celowej nawigacji na stronę z obcym CA: screenshot przeniesiono przed tę nawigację, bez osłabienia asercji błędu certyfikatu; dalsze scenariusze używają świeżego kontekstu. Końcowe `make test-all` PASSED: `.test-vm/artifacts/20261022T153653Z-0dfad998-0733-46f8-90c8-82fa7613f4a6/` (69 testów Rust i pełny Playwright w wymaganej VM). CAROOT fixture leży poza projektem; syntetyczny klucz ma sentinel i prawa 000. HTTPS z wykrytym CA i Basic Auth/storage state działa, obcy CA daje `ERR_CERT_AUTHORITY_INVALID`, inspect nie zawiera mountu całego CAROOT/klucza, sentinel i credentials nie występują w protokole/logach/stanie/raportach. Brak automatycznego pliku CA nie blokuje inicjalizacji i zwykłego HTTP; wadliwy istniejący certyfikat zatrzymuje start z bezpieczną diagnostyką. Zachowano wcześniejszy test jawnego CA. Nie instalowano mkcert, nie zmieniano zaufania/sieci hosta ani provisioningu VM; nie wykonywano T-05. `git diff --check` PASSED.
 
+2026-10-22 — Implementer, T-05: working tree przed zadaniem był czysty. Zmieniono wyłącznie dokumentację/instrukcje oraz wersje React 3.0.0 i WordPress 2.0.0; bez nowych funkcji, zmian kodu Rust, testów, orkiestracji lub zależności. Zachowano `AGENTS.md`, `docs/testing.md` i skille repozytorium. Niezależną checklistę treści wyprowadzono z R-01–R-06 i kontraktu T-05: instalacja, ręczny build 0.2.0, opcjonalny plik username/password/origin, restart i natywne zgody; brak ręcznego tworzenia reports lub edycji Compose/local.json w standardowym workflow; ochrona sekretów, TLS i granice VPN/hosta; migracja i priorytet starych nadpisań. Poprawiono nieaktualne instrukcje Basic Auth i wzmianki o braku launchera, dodano opis zachowania danych po uninstall. Nie wymuszano RED dla dokumentacji/metadanych. Odczytowe kontrole Python na hoście potwierdziły treść, lokalne linki/kotwice i bloki kodu siedmiu dokumentów oraz bump wyłącznie dwóch wskazanych profili. Dodatkowa kontrola instalacji w VM przez `incus exec` jako UID/GID 1000:1000 (Node jako harness, istniejący release manager, syntetyczny HOME, natywna aktywacja Claude/Codex jawnie wyłączona) sprawdziła React i WordPress dla wszystkich trzech klientów: wersje w stanie, README/WCAG bez nierozwiniętych placeholderów, ścieżki build/local.json i brak reports/credentials tworzonych podczas instalacji. Scratch: `/home/tester/test-runs/20261022T154315Z-41d063cd-1374-4006-b5ea-8f1f7d6d60de/t05-docs-v6kDvJ/`. Dwie bramki `make test-all` PASSED; ostatnia po uzupełnieniu listy Playwright w instrukcji WordPress: `.test-vm/artifacts/20261022T154453Z-1beab462-c6d6-4009-b800-f30029daab5b/` — 69 testów Rust (w tym lifecycle wszystkich klientów), format/release/Clippy/walidacja, rzeczywisty Playwright/Chromium z adapterem i launcherem, Basic Auth, syntetyczny DNS oraz CA/TLS. Po bramce poprawiono wyłącznie wcięcie kontynuacji punktu w skillu WCAG i zapis dowodów w planie. `git diff --check` PASSED. Eksportera ani orkiestracji nie zmieniano; zachowano istniejący dowód `bash tests/vm/check.sh` z T-01, bez formalnego powtarzania. Nie sprawdzano prawdziwego firmowego VPN, Docker Desktop, arm64 ani sesji rzeczywistych aplikacji klientów. Publikacja oznacza przygotowane metadane i instrukcje w checkoutcie, nie commit/tag/push ani instalację do projektu użytkownika.
+
 ## Blokady
 
 Brak znanych blokad projektowych. Pytanie o dodatkowe pole `origin` rozstrzygnął użytkownik: zaakceptował jeden plik z loginem, hasłem i origin.
 
-Gotowość środowiska testowego nie została sprawdzona przez Brain. Implementer potwierdził działanie wymaganej VM dla T-01, T-02, T-03 i T-04. Kolejne zadania nadal muszą zatrzymać się z dokładnym błędem i statusem BLOCKED/NOT RUN albo BLOCKED/FAILED, jeśli wymagane Make nie wykona testów w VM; nie przesuwać kolejki.
+Gotowość środowiska testowego nie została sprawdzona przez Brain. Implementer potwierdził działanie wymaganej VM dla T-01–T-05. Brak znanych blokad końcowej weryfikacji; ograniczenia zakresu dowodów opisano powyżej.

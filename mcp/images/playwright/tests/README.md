@@ -27,6 +27,19 @@ względne/bezwzględne/automatyczne, trwałość init script po nawigacji,
 HTTPS i cookie uwierzytelnienia. Następnie rzeczywiste `make install CLIENT=opencode PROFILE=react`
 i zainstalowany adapter wykonują pełny drugi etap. Nie ma mockowania adaptera.
 
+Czysty projekt bez `reports/` i `local.json` uruchamia dystrybuowany launcher
+z cwd `/`, w ścieżce ze spacjami i przecinkiem. Test sprawdza automatyczne
+przygotowanie raportów, HTTP Basic Auth (401/200, błędne hasło/port, brak
+Authorization na drugim origin i po redirect), hostowy localhost oraz mounty
+RO hosts/resolv. Syntetyczny resolver obsługuje `app.corp.test` przez testowy
+overlay, bez zmian sieci i plików hosta VM — nie dowodzi działania firmowego VPN.
+Automatyczny CA z syntetycznego CAROOT poza projektem umożliwia HTTPS także z
+Basic Auth/storage state; obcy CA jest odrzucany. Inspect sprawdza pojedynczy
+mount publicznego CA RO, a kontrola prywatności wyklucza credentials i sentinel
+klucza z protokołu, logów, stanu i raportów. Są scenariusze braku i wadliwego CA.
+Konfigurację wszystkich trzech klientów sprawdzają testy lifecycle Rust w
+`make test-all`; integracja Chromium nie uruchamia rzeczywistych aplikacji klientów.
+
 Kontener wnioskuje UID/GID 1000:1000 z właściciela świeżego katalogu raportów.
 Mount projektu jest read-only, zagnieżdżony mount raportów zapisywalny; tylko
 tymczasowy katalog raportów otrzymuje testowe uprawnienia. Socket Docker nigdy

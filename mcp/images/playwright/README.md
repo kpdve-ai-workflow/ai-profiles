@@ -2,14 +2,17 @@
 
 Ten katalog jest dostarczany przez profil React lub WordPress. `make install`
 kopiuje konfigurację; nie uruchamia Dockera, npm ani budowy obrazu.
+Z repozytorium instalatora użyj
+`make install CLIENT={{AI_PROFILE_CLIENT}} PROFILE=react PROJECT=/sciezka/do/projektu`
+(lub `PROFILE=wordpress`). Znaczniki `{{AI_PROFILE_CLIENT}}`, `{{AI_PROFILE_MCP}}`
+i `{{AI_PROFILE_LOCAL}}` są rozwijane podczas instalacji dla wybranego klienta.
 
 ## Pierwsze uruchomienie
 
 Z katalogu głównego **docelowego projektu**, mając działający Docker i Compose:
 
 ```sh
-mkdir -p reports
-docker build --tag ai-profiles-playwright:0.2.0 .opencode/mcp/playwright
+docker build --tag ai-profiles-playwright:0.2.0 {{AI_PROFILE_MCP}}/playwright
 ```
 
 Build pobiera publiczne zależności i instaluje Node, Playwright MCP, Chromium,
@@ -17,7 +20,9 @@ axe-core i biblioteki systemowe wyłącznie w obrazie. Nie potrzebujesz Node/npm
 na hoście, tokena GHCR ani publikacji obrazu. Obraz jest współdzielony lokalnie
 przez projekty korzystające z tej samej wersji.
 
-Następnie zrestartuj klienta AI. Wspólny adapter `ai-profile-mcp` uruchamia
+Opcjonalnie przygotuj plik [Basic Auth](#http-basic-auth), następnie zrestartuj
+klienta AI i zatwierdź jego natywne zgody projektu/MCP, jeśli wymagane.
+Wspólny adapter `ai-profile-mcp` uruchamia
 natywny `playwright-launcher`, który przygotowuje runtime i wykonuje
 standardowe `docker compose run` przez stdio.
 Nie wykonuj `compose up -d`: każdy klient otrzymuje własny kontener i sesję.
@@ -28,9 +33,11 @@ odczytu; jedynie `reports/` jest zapisywalne. Wspólny adapter ustawia
 `AI_PROFILE_PROJECT_DIR` na kanoniczną ścieżkę zainstalowanego projektu przy
 każdym uruchomieniu. Użytkownik nie konfiguruje tej zastrzeżonej zmiennej;
 środowisko, dotenv ani lokalne mapowanie nie mogą jej zastąpić.
-Katalog raportów utwórz jako swój użytkownik, nie przez `sudo`:
-kontener dopasowuje UID/GID do jego właściciela. W razie potrzeby ustaw `HOST_UID`
-i `HOST_GID` przez lokalne `environment` lub `env_file` adaptera.
+Launcher tworzy brakujące `reports/` jako bieżący użytkownik przy starcie, nie
+podczas Docker build; kontener dopasowuje UID/GID do właściciela tego katalogu.
+Istniejące raporty pozostają nietknięte. Zwykłe użycie nie wymaga edycji Compose
+ani `local.json`; VPN i konfiguracja hosta pozostają poza zakresem narzędzia.
+Jawne `HOST_UID` i `HOST_GID` pozostają opcją dla niestandardowych uprawnień.
 
 ### Ścieżki artefaktów
 
@@ -165,31 +172,36 @@ ani fragmentu. Musi odpowiadać adresowi używanemu przez przeglądarkę w konte
 Ogranicza wysyłanie danych HTTP Auth do tego origin; przekierowanie na inny
 origin nie otrzyma tych danych.
 
-Przed zapisaniem prawdziwych danych dodaj `.private/` oraz
-`.opencode/ai-profile.local.json` do `.gitignore` projektu. Utwórz katalog z prawami
-`0700` i pusty plik z prawami `0600`, następnie uzupełnij go w lokalnym edytorze.
+Instalacja/update/switch profilu z Playwright dopisuje do `.gitignore` wyłącznie
+`/.private/playwright-basic-auth.json`. Przed wpisaniem sekretów potwierdź, że
+plik nie jest już śledzony przez Git — sama reguła nie usuwa go z indeksu.
+Zapisz JSON lokalnym edytorem z prawami `0600` lub bardziej restrykcyjnymi;
+katalog `.private` i plik nie mogą być symlinkami. Nigdy nie zapisuj go w `reports/`.
 Nie przekazuj hasła w poleceniu terminala, URL, czacie ani argumentach narzędzi.
 Plik może też leżeć poza projektem; wtedy podaj jego bezwzględną ścieżkę.
 Musi być czytelny dla UID/GID kontenera, zwykle właściciela `reports/`.
 
-Do istniejącego `.opencode/ai-profile.local.json` dodaj rozszerzenie i ścieżkę:
+Brak pliku oznacza brak Basic Auth. Jeśli plik istnieje, launcher sam dołącza
+`compose.basic-auth.yaml`; nie edytujesz Compose ani `local.json`.
+Tylko dla niestandardowej lokalizacji możesz dodać do istniejącego
+`{{AI_PROFILE_LOCAL}}` (zachowując inne wpisy):
 
 ```json
 {
   "mcp": {
     "playwright": {
       "environment": {
-        "COMPOSE_FILE": ".opencode/mcp/playwright/compose.yaml:.opencode/mcp/playwright/compose.basic-auth.yaml",
-        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE": ".private/playwright-basic-auth.json"
+        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE": ".private/inny-basic-auth.json"
       }
     }
   }
 }
 ```
 
-Jeśli używasz już CA lub storage state, zachowaj ich zmienne oraz dopisz
-`compose.basic-auth.yaml` do istniejącej listy `COMPOSE_FILE`. Rozszerzenia można
-łączyć. Compose montuje prywatny plik tylko do odczytu. Entrypoint sprawdza prawa,
+Jawna niepusta ścieżka ma pierwszeństwo; brak wskazanego pliku jest błędem,
+nie fallbackiem. Względne ścieżki są względem projektu, bez `..` i symlinków.
+CA i storage state można łączyć z Basic Auth bez ręcznej listy Compose.
+Compose montuje prywatny plik tylko do odczytu. Entrypoint sprawdza prawa,
 format i wymagany origin, po czym tworzy konfigurację
 `browser.contextOptions.httpCredentials` w prywatnym katalogu tymczasowym
 kontenera i przekazuje ją do MCP przez `--config`. Sekrety nie trafiają do
@@ -200,7 +212,7 @@ Po aktualizacji profilu przebuduj obraz poleceniem z pierwszej sekcji. Po każde
 zmianie danych lub konfiguracji zrestartuj połączenie Playwright MCP, aby powstał
 nowy kontener i kontekst przeglądarki, następnie ponów nawigację.
 Przy HTTP 401, monicie logowania lub `ERR_INVALID_AUTH_CREDENTIALS` sprawdź
-włączenie rozszerzenia, istnienie pliku, uprawnienia i zgodność origin. Brakujące
+istnienie pliku, uprawnienia, login/hasło i zgodność origin (także portu). Brakujące
 lub odrzucone dane zgłoś użytkownikowi do lokalnego uzupełnienia; nie kopiuj ich
 do raportów, logów ani czatu.
 
@@ -210,9 +222,24 @@ Dokumentacja: [HTTP authentication](https://playwright.dev/docs/network#http-aut
 ## Diagnostyka
 
 - Brak obrazu: wykonaj powyższy `docker build` w projekcie.
-- Brak `reports`: dla ręcznego uruchomienia przygotuj katalog poleceniem `mkdir -p reports`.
+- Brak uprawnień: sprawdź dostęp procesu klienta do lokalnego Dockera i projektu;
+  nie uruchamiaj całego klienta przez `sudo`.
+- Błąd przygotowania `reports/`: launcher tworzy katalog; istniejący plik lub
+  symlink pod tą nazwą blokuje start. Nie usuwa ani nie przenosi danych użytkownika.
 - Błąd `docker compose`: zainstaluj plugin Compose i uruchom Docker Engine.
 - Błąd zapisu: sprawdź właściciela i uprawnienia katalogu raportów.
+- Niestandardowy CA: wskaż publiczny plik przez `AI_PROFILE_PLAYWRIGHT_CA_CERT`
+  w `{{AI_PROFILE_LOCAL}}`; nigdy klucz CA ani wyłączenie TLS.
+- Stare jawne nadpisania: sprawdź komendę, sieć i `COMPOSE_FILE` w
+  `{{AI_PROFILE_LOCAL}}`. Zachowują priorytet; aktualizacja nie usuwa ich automatycznie.
+- Zmiana credentials, środowiska lub konfiguracji wymaga restartu MCP/klienta.
+
+Migracja do React 3.0.0 / WordPress 2.0.0: z repozytorium instalatora wykonaj
+`make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=<projekt>`, potem w projekcie
+build 0.2.0 z pierwszej sekcji i restart klienta. Nowe domyślne ustawienia to
+`reports/` i sieć `host`. Stare obrazy, raporty (także `reports/wcag/`) i frozen
+legacy pozostają; uninstall zachowuje również credentials oraz chroniącą je
+regułę `.gitignore`.
 
 Sama konfiguracja ani pozytywny status profilu nie potwierdzają połączenia MCP.
 
@@ -221,5 +248,5 @@ Wyłącznie do samodzielnej diagnostyki Compose, poza adapterem, jawnie podaj ś
 
 ```sh
 AI_PROFILE_PROJECT_DIR="$(pwd -P)" docker compose --project-directory . \
-  -f .opencode/mcp/playwright/compose.yaml config
+  -f {{AI_PROFILE_MCP}}/playwright/compose.yaml config
 ```

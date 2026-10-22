@@ -59,6 +59,34 @@ aplikacji przez agentów ani obsługi równoległych instalatorów.
 
 ## Dokumentacja
 
+### Playwright w profilach React i WordPress
+
+Z repozytorium instalatora wykonaj
+`make install CLIENT=opencode PROFILE=react PROJECT=/sciezka/do/projektu`
+(możesz wybrać `wordpress` oraz klienta `claude` lub `codex`). Następnie w
+docelowym projekcie, z działającym lokalnym Linux Docker Engine i Compose:
+
+```sh
+docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
+```
+
+Dla innego klienta zastąp `opencode` jego nazwą. Opcjonalny Basic Auth wymaga
+jedynie prywatnego `.private/playwright-basic-auth.json` z `username`, `password`
+i `origin`, o prawach `0600` — [format i ochrona danych](mcp/images/playwright/README.md#http-basic-auth).
+Zrestartuj klienta i zatwierdź jego natywne zgody projektu/MCP, jeśli wymagane.
+Launcher automatycznie tworzy `reports/` i przygotowuje kontener do użycia
+istniejącej sieci oraz dostępnego publicznego CA mkcert; nie konfiguruje VPN ani hosta.
+Zwykłe użycie nie wymaga edycji Compose/local.json ani hostowego Node.
+
+React **3.0.0** i WordPress **2.0.0** zmieniają domyślne raporty na `reports/`
+oraz sieć na `host`. Migracja: `make update CLIENT=<klient> PROJECT=<projekt>`
+z repozytorium instalatora, build **0.2.0** w projekcie i restart klienta.
+Stare obrazy, raporty i zamrożone zasoby legacy pozostają. Lokalne nadpisania
+nie są usuwane: dawna komenda/sieć w `local.json` może zachować stare zachowanie.
+Wyjątki i diagnostyka: [instrukcja Playwright](mcp/images/playwright/README.md).
+
+### Pozostałe instrukcje
+
 - [Zarządzanie profilami, wersjami i instalacjami](docs/profile-management.md)
 - [Testy Rust i Playwright w trwałej VM Debian 13 (Incus)](docs/testing.md)
 - [MCP: rejestr, konfiguracja lokalna, adapter i launchery](mcp/README.md)
