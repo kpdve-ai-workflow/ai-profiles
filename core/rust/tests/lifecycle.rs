@@ -126,15 +126,17 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     (source, context)
 }
 
-const PLAYWRIGHT_FILES: [&str; 8] = [
+const PLAYWRIGHT_FILES: [&str; 10] = [
     "Dockerfile",
     "entrypoint.sh",
+    "basic-auth.cjs",
     "LICENSES.md",
     "README.md",
     ".dockerignore",
     "compose.yaml",
     "compose.ca.yaml",
     "compose.auth.yaml",
+    "compose.basic-auth.yaml",
 ];
 
 fn playwright_source() -> (tempfile::TempDir, RepositoryContext) {

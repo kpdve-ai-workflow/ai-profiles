@@ -1,0 +1,11 @@
+services:
+  playwright:
+    environment:
+      PLAYWRIGHT_BASIC_AUTH_FILE: /run/ai-profile-basic-auth.json
+    volumes:
+      - type: bind
+        source: "${AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE:?Set AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE to your private Basic Auth file}"
+        target: /run/ai-profile-basic-auth.json
+        read_only: true
+        bind:
+          create_host_path: false

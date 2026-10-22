@@ -19,6 +19,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 echo "Smoke artifacts (retained on failure too): $project/reports/wcag"
 docker image inspect --format 'Image architecture: {{.Os}}/{{.Architecture}}' "$image"
+docker run --rm --pull=never --entrypoint node \
+  -e BASIC_AUTH_HELPER=/opt/playwright/basic-auth.cjs \
+  --mount "type=bind,src=$tests,dst=/smoke,readonly" \
+  "$image" --test /smoke/basic-auth.test.cjs
 # Empty adapter metadata must fail during interpolation, before Docker access.
 if AI_PROFILE_PROJECT_DIR= docker compose -f "$tests/../compose.yaml" config > "$run/missing-project.log" 2>&1; then
   echo 'FAIL: Compose accepted an empty project path' >&2

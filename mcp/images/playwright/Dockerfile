@@ -18,6 +18,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends libnss3-tools \
  && rm -rf /var/lib/apt/lists/*
 COPY entrypoint.sh /usr/local/bin/playwright-entrypoint
+COPY basic-auth.cjs /opt/playwright/basic-auth.cjs
 RUN chmod 755 /usr/local/bin/playwright-entrypoint \
  && node -e "const p=require('./node_modules/@playwright/mcp/package.json');const a=require('./node_modules/axe-core/package.json');require('fs').writeFileSync('/opt/playwright/versions.txt', 'Playwright MCP '+p.version+'\\nPlaywright '+require('./node_modules/playwright/package.json').version+'\\naxe-core '+a.version+'\\n');"
 ENTRYPOINT ["/usr/local/bin/playwright-entrypoint"]

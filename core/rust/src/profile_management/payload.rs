@@ -104,12 +104,14 @@ pub(crate) fn desired_files(
             for filename in [
                 "Dockerfile",
                 "entrypoint.sh",
+                "basic-auth.cjs",
                 "LICENSES.md",
                 "README.md",
                 ".dockerignore",
                 "compose.yaml",
                 "compose.ca.yaml",
                 "compose.auth.yaml",
+                "compose.basic-auth.yaml",
             ] {
                 let source = file_path(
                     &context.sources,

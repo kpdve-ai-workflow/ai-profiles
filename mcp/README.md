@@ -195,6 +195,17 @@ Uwierzytelniony audyt może użyć `AI_PROFILE_PLAYWRIGHT_STORAGE_STATE` wskazuj
 prywatny plik storage state o prawach `0600`. Włącz `compose.auth.yaml` przez
 `COMPOSE_FILE`. Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
 nie należy do raportów ani stanu instalacji.
+
+HTTP Basic Auth włączaj oddzielnie przez `compose.basic-auth.yaml` oraz
+`AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE` w lokalnym `environment`. Prywatny JSON
+z wymaganymi `username`, `password` i `origin` ma prawa `0600` i jest montowany
+tylko do odczytu. Entrypoint przekazuje dane do
+`browser.contextOptions.httpCredentials`; origin ogranicza ich użycie do
+wskazanego serwisu. Nie zapisuj sekretów w Git ani raportach. Rozszerzenie działa
+razem z CA i storage state. Format pliku, przykład lokalnej konfiguracji i
+procedura restartu MCP po błędzie uwierzytelnienia są w
+[instrukcji Basic Auth](images/playwright/README.md#http-basic-auth).
+
 Raport, findings JSON, raw scans i screenshoty skill zapisuje w
 `reports/wcag/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
 zadeklarowane zmienne, nie całe środowisko hosta.

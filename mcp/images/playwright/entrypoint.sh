@@ -28,6 +28,19 @@ home=/tmp/playwright-home-$uid
 mkdir -p "$home"
 chown "$uid:$gid" "$home"
 chmod 700 "$home"
+set --
+if [ -n "${PLAYWRIGHT_BASIC_AUTH_FILE:-}" ]; then
+  if [ ! -f "$PLAYWRIGHT_BASIC_AUTH_FILE" ]; then echo "playwright: Basic Auth must be a private file" >&2; exit 2; fi
+  mode=$(stat -c %a "$PLAYWRIGHT_BASIC_AUTH_FILE")
+  if [ "$((0$mode & 077))" -ne 0 ]; then echo "playwright: Basic Auth file must have mode 0600 or stricter" >&2; exit 2; fi
+  # Read as the browser user; keep the derived MCP config in its private home.
+  config_dir=$(mktemp -d "$home/basic-auth-XXXXXX")
+  chown "$uid:$gid" "$config_dir"
+  config="$config_dir/config.json"
+  setpriv --reuid="$uid" --regid="$gid" --clear-groups \
+    node /opt/playwright/basic-auth.cjs "$PLAYWRIGHT_BASIC_AUTH_FILE" "$config"
+  set -- --config "$config"
+fi
 if [ -n "${PLAYWRIGHT_CA_CERT:-}" ]; then
   # Chromium on Linux uses an NSS trust database, not just /etc/ssl/certs.
   mkdir -p "$home/.pki/nssdb"
@@ -38,4 +51,4 @@ if [ -n "${PLAYWRIGHT_CA_CERT:-}" ]; then
 fi
 exec setpriv --reuid="$uid" --regid="$gid" --clear-groups \
   env HOME="$home" XDG_CACHE_HOME="$home/.cache" node /opt/playwright/node_modules/@playwright/mcp/cli.js \
-  --browser chromium --headless --isolated --init-script /opt/playwright/node_modules/axe-core/axe.min.js
+  --browser chromium --headless --isolated --init-script /opt/playwright/node_modules/axe-core/axe.min.js "$@"

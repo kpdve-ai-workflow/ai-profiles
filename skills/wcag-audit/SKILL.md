@@ -33,6 +33,19 @@ that require human judgment. See the [W3C evaluation guidance](https://www.w3.or
 
 ## Test each selected page
 
+On HTTP 401, an HTTP authentication prompt, or `ERR_INVALID_AUTH_CREDENTIALS`,
+check whether Basic Auth is configured through local
+`.opencode/ai-profile.local.json`: `compose.basic-auth.yaml` and
+`AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE`. Refer to the installed Playwright README
+for the private file format, permissions and exact origin. Inspect only setup
+and file metadata; do not read or print credentials through browser tools,
+terminal output, reports or chat. If missing or rejected, report the authentication
+blocker and ask the user to prepare or correct the private file locally. After
+configuration is ready, restart the Playwright MCP connection (or ask the user
+to restart it when unavailable), then retry navigation before resuming the audit.
+Storage state supplies cookies and localStorage, not HTTP Basic Auth. Never put
+credentials in URLs, tool arguments, tracked configuration or audit artifacts.
+
 - Capture and scan the initial state, then navigate and scan relevant
   interactive states in the same browser session. Open menus, dialogs, tabs,
   accordions, and other controls before scanning the resulting state.

@@ -96,6 +96,68 @@ Po zmianach lokalnych ustawień zrestartuj MCP. Po `make update` ponów jawny
 `docker build`, jeśli zmienił się Dockerfile lub entrypoint. Aktualizacja profilu
 nie przebudowuje i nie usuwa obrazów; uninstall zachowuje raporty i prywatne pliki.
 
+### HTTP Basic Auth
+
+Basic Auth skonfiguruj niezależnie od cookies i localStorage ze storage state.
+Utwórz prywatny plik `.private/playwright-basic-auth.json` o prawach `0600`,
+zastępując przykładowe wartości lokalnie:
+
+```json
+{
+  "username": "LOGIN",
+  "password": "HASLO",
+  "origin": "https://serwis.example:8443"
+}
+```
+
+Wszystkie trzy pola są wymagane. `origin` zawiera protokół HTTP/HTTPS, domenę
+i port serwisu (port domyślny można pominąć), bez ścieżki, końcowego `/`, query
+ani fragmentu. Musi odpowiadać adresowi używanemu przez przeglądarkę w kontenerze.
+Ogranicza wysyłanie danych HTTP Auth do tego origin; przekierowanie na inny
+origin nie otrzyma tych danych.
+
+Przed zapisaniem prawdziwych danych dodaj `.private/` oraz
+`.opencode/ai-profile.local.json` do `.gitignore` projektu. Utwórz katalog z prawami
+`0700` i pusty plik z prawami `0600`, następnie uzupełnij go w lokalnym edytorze.
+Nie przekazuj hasła w poleceniu terminala, URL, czacie ani argumentach narzędzi.
+Plik może też leżeć poza projektem; wtedy podaj jego bezwzględną ścieżkę.
+Musi być czytelny dla UID/GID kontenera, zwykle właściciela `reports/wcag`.
+
+Do istniejącego `.opencode/ai-profile.local.json` dodaj rozszerzenie i ścieżkę:
+
+```json
+{
+  "mcp": {
+    "playwright": {
+      "environment": {
+        "COMPOSE_FILE": ".opencode/mcp/playwright/compose.yaml:.opencode/mcp/playwright/compose.basic-auth.yaml",
+        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE": ".private/playwright-basic-auth.json"
+      }
+    }
+  }
+}
+```
+
+Jeśli używasz już CA lub storage state, zachowaj ich zmienne oraz dopisz
+`compose.basic-auth.yaml` do istniejącej listy `COMPOSE_FILE`. Rozszerzenia można
+łączyć. Compose montuje prywatny plik tylko do odczytu. Entrypoint sprawdza prawa,
+format i wymagany origin, po czym tworzy konfigurację
+`browser.contextOptions.httpCredentials` w prywatnym katalogu tymczasowym
+kontenera i przekazuje ją do MCP przez `--config`. Sekrety nie trafiają do
+środowiska procesu ani argumentów CLI. Nie zapisuj pliku ani wygenerowanej
+konfiguracji w raportach lub Git; nie odczytuj ich narzędziami agenta.
+
+Po aktualizacji profilu przebuduj obraz poleceniem z pierwszej sekcji. Po każdej
+zmianie danych lub konfiguracji zrestartuj połączenie Playwright MCP, aby powstał
+nowy kontener i kontekst przeglądarki, następnie ponów nawigację.
+Przy HTTP 401, monicie logowania lub `ERR_INVALID_AUTH_CREDENTIALS` sprawdź
+włączenie rozszerzenia, istnienie pliku, uprawnienia i zgodność origin. Brakujące
+lub odrzucone dane zgłoś użytkownikowi do lokalnego uzupełnienia; nie kopiuj ich
+do raportów, logów ani czatu.
+
+Dokumentacja: [HTTP authentication](https://playwright.dev/docs/network#http-authentication),
+[httpCredentials i origin](https://playwright.dev/docs/api/class-browser#browser-new-context-option-http-credentials).
+
 ## Diagnostyka
 
 - Brak obrazu: wykonaj powyższy `docker build` w projekcie.
