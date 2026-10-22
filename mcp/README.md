@@ -243,6 +243,16 @@ nie należy do raportów ani stanu instalacji.
 HTTP Basic Auth jest opcjonalny: utwórz lokalnie
 `.private/playwright-basic-auth.json` z wymaganymi `username`, `password` i
 `origin`, o prawach `0600` lub bardziej restrykcyjnych, bez symlinków.
+
+Po utworzeniu pliku ustaw uprawnienia, uruchamiając w docelowym projekcie:
+
+```sh
+chmod 600 .private/playwright-basic-auth.json
+```
+
+W `origin` podaj protokół, host i opcjonalny port, bez ścieżki ani końcowego `/`,
+np. `https://serwis.example:8443`.
+
 Launcher automatycznie dołącza rozszerzenie; bez pliku nie włącza Basic Auth.
 Instalacja/update/switch dodaje tylko regułę `/.private/playwright-basic-auth.json`
 do `.gitignore`; nie odśledza już wersjonowanego sekretu. Reguła i prywatny plik
