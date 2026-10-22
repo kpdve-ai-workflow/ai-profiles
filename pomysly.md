@@ -24,3 +24,11 @@ Zachowaj wpis ai-profiles-b84ecae0ddbe — wskazuje na rzeczywisty projekt react
 Następnie uruchom z repozytorium ai-profiles:
 make update PROJECT=/var/home/kpdve/it/personal/wfosigw-ssh/WFOSiGW
 Docelowo trzeba też odizolować konfigurację Codexa w teście Playwright, żeby sytuacja nie wracała. Nic jeszcze nie zmieniałem.
+
+## Playwright
+- za 1 razem gdy mowie agentowi aby uzyl mcp playwright i zrobil screenshot
+✗execute
+›playwright.browser_navigate [url=https://www.google.com]
+✗playwright.browser_take_screenshot [filename=google-check.png, scale=css]
+↳ ### Error
+  Error: EROFS: read-only file system, open '/var/home/kpdve/it/personal/react/google-check.png'
