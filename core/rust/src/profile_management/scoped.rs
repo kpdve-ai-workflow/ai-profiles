@@ -363,7 +363,6 @@ impl Prepared {
     ) -> Result<()> {
         if self.record["mcp_base"].get("novamira").is_some() {
             super::credentials::prepare(project)?;
-            println!("Novamira: uzupełnij .env.novamira (nowy szablon ma prawa 0600), potem zrestartuj klienta/MCP. Istniejący plik zachowano. Samodzielnie zabezpiecz go przed commitowaniem i dostępem przez HTTP; instalator nie dodaje reguły .gitignore.");
         }
         if let Some(old) = &self.old {
             if let Some(files) = old.get("files").and_then(Value::as_object) {
@@ -452,7 +451,6 @@ impl Prepared {
         if project.join(&guide).is_file() {
             println!("Instrukcja konfiguracji: {guide}");
         }
-        println!("OK: {key}: pliki przygotowane; aktywacja: {}. Załadowanie umiejętności w sesji nie zostało sprawdzone.", activation["activation"].as_str().unwrap_or("pending"));
         if activation["activation"] == "pending" || activation["activation"] == "failed" {
             println!(
                 "Ponów: make update CLIENT={key} PROJECT=\"{}\"",
