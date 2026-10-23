@@ -105,6 +105,43 @@ nie zastępują jej końcowej wartości. Użytkownik nie musi jej konfigurować.
 
 ## Launchery
 
+### Novamira
+
+Novamira ma centralnie `disabled: false` i `env_file: .env.novamira`.
+Instalacja/update/switch profilu wybierającego ten serwer tworzy brakujący pusty
+szablon w projekcie atomowo z prawami `0600`, bez nadpisywania istniejącego
+zwykłego pliku i bez podążania za symlinkami. To plik użytkownika: nie jest
+hashowany w stanie ani usuwany po zmianie profilu lub uninstall. Nie kopiujemy
+poświadczeń z innych projektów. **Nie dodajemy reguły `.gitignore`**: użytkownik
+musi sam zabezpieczyć plik przed commitem i udostępnieniem przez HTTP.
+Instalacja nie wymaga działającego WordPressa. Puste dane zatrzymują start MCP
+przed uruchomieniem mostu. Login to login konta WordPressa; hasło ma być
+wygenerowanym hasłem aplikacyjnym, nie zwykłym hasłem do wp-admin.
+
+Przebieg: instalacja → uzupełnienie env → restart klienta/MCP. Nie ma polecenia
+aktywacji ani obowiązkowego `local.json`. Świadome lokalne `disabled: true`,
+niestandardowy `env_file` i inne nadpisania zachowują pierwszeństwo; zmiany tych
+ustawień renderuj standardowym update wybranego klienta.
+
+Osłona Novamiry w adapterze Rust odrzuca zastępczą inicjalizację mostu
+`@automattic/mcp-wordpress-remote@0.4.0`, gdy obecne jest
+`capabilities.experimental.connectionFailed` (także `{}`). Sam znacznik nie
+potwierdza HTTP 401. Osłona odczytuje zachowaną przyczynę przez wewnętrzne
+`tools/list` — upstream po nieudanej inicjalizacji obsługuje je lokalnie, bez
+ponownego HTTP. Tylko potwierdzony status 401 daje wskazówki o haśle aplikacyjnym;
+brak szczegółów, TLS, DNS, timeout i 403 dają komunikat ogólny. Odpowiedź błędu
+JSON-RPC trafia do istniejącej obsługi MCP klienta (w OpenCode do panelu MCP/TUI),
+bez osobnej wtyczki. Surowe logi i plikowy sink logów mostu są wyłączone, stdout
+zawiera tylko MCP. Poprawne odpowiedzi i narzędzia są przekazywane; zero narzędzi
+nie oznacza błędnego hasła. Pozostałe serwery nadal działają przez zwykłe exec.
+
+WordPress 2.1.0 dostarcza te zmiany przez `make update CLIENT=<klient>
+PROJECT=<projekt>`, osobno dla każdego klienta, z zachowaniem kontroli własności
+zarządzanych wpisów. Następnie uzupełnij env i zrestartuj klienta/MCP.
+Szczegóły: [instrukcja WordPress](../profiles/wordpress/README.md).
+
+### Zarządzane pliki launcherów
+
 Opcjonalne zarządzane pliki runtime umieszczaj w `mcp/launchers/<nazwa>/`.
 Instalowane są do `.ai-profiles/<klient>/mcp/<nazwa>/` wyłącznie projektom profili wybierających
 serwer i podlegają kontroli hashy, konfliktów oraz usuwaniu jak inne zarządzane

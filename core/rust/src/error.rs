@@ -616,6 +616,8 @@ pub(crate) enum EnvironmentError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum McpRuntimeError {
+    #[error("Novamira initialization rejected (safe MCP error already sent)")]
+    NovamiraRejected,
     #[error("MCP startup failed: check working directory and executable availability.")]
     ProjectLocation,
     #[error("Cannot read valid JSON: ai-profile-state.json")]

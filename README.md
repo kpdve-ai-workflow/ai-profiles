@@ -42,6 +42,12 @@ Każdy klient może mieć inny profil i wersję; operacja dla jednego nie zmieni
 plików ani rekordu pozostałych. Stan formatu 2: `.ai-profiles/state.json`;
 lokalne nadpisania MCP: `.ai-profiles/<klient>/local.json` (plik użytkownika).
 
+Profil WordPress domyślnie włącza Novamirę i przygotowuje pusty szablon
+`.env.novamira` z prawami `0600`, bez nadpisywania istniejącego pliku.
+Uzupełnij endpoint, login WordPressa i **hasło aplikacyjne** (nie hasło wp-admin),
+potem zrestartuj klienta/MCP. Instalator nie dodaje reguły `.gitignore`:
+samodzielnie zabezpiecz plik przed commitem i dostępem przez HTTP.
+
 `install CLIENT=all` dodaje brakujących klientów, pomija zgodne profile i odrzuca
 konflikt profilu przed zapisem. Pozostałe operacje `all` dotyczą tylko
 zainstalowanych klientów; brak instalacji jest błędem. Kolejność: OpenCode,

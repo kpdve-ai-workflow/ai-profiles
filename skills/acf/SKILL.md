@@ -18,6 +18,10 @@ blog ID. Do not assume DDEV, multisite, a blog ID or a previous project's domain
 Inspect WordPress/PHP/ACF versions, available ACF APIs and environment type.
 Multisite blogs have separate data; select a different site only when explicitly
 requested. Ask if the intended target cannot be established safely.
+The target-mismatch hard stop in `mcp-novamira` also applies to ACF options,
+menus and PHP execution: an unrecognized requested domain or a different
+discovered host/blog ID blocks writes until the user explicitly clarifies the
+authorized target and it is verified read-only. Never fall back to blog `1`.
 
 ## Repository architecture
 
@@ -233,7 +237,8 @@ Before using Novamira:
 1. Select the correct site and MCP server.
 2. Call `mcp_adapter_discover_abilities`.
 3. Call `mcp_adapter_get_ability_info` for every ability you intend to use.
-4. Only then execute the operation.
+4. Verify the actual site against the authorized target using read-only abilities, following `mcp-novamira`. A site listing is not authorization to switch targets.
+5. Only then execute the requested operation. Stop before any mutation if the host/blog or target object remains uncertain, including when using `execute-php`.
 
 There is no dedicated ACF ability in the verified Novamira installation. Use
 the ACF/WordPress APIs through `novamira/execute-php` after inspecting its

@@ -145,6 +145,160 @@ fn scoped_action(
 }
 
 #[test]
+fn novamira_credentials_are_private_unmanaged_and_survive_client_lifecycle() {
+    use crate::model::{Client, ProfileAction as A};
+    let (source, context) = native_source();
+    put(
+        source.path(),
+        "profiles/wordpress/mcp.json",
+        br#"{"servers":["novamira"]}"#,
+    );
+    // The production definition is the oracle for distribution, not a fixture default.
+    put(
+        source.path(),
+        "mcp/servers/novamira.json",
+        include_bytes!("../../../mcp/servers/novamira.json"),
+    );
+    let project = tempfile::tempdir().unwrap();
+    put(project.path(), ".gitignore", b"# user rules\nkeep\n");
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    let env = project.path().join(".env.novamira");
+    assert_eq!(fs::read_to_string(&env).unwrap(), "# Adres endpointu Novamiry, np. https://twoja-witryna/wp-json/mcp/novamira\nWP_API_URL=\n# Login konta WordPress, które wygenerowało hasło aplikacyjne\nWP_API_USERNAME=\n# Hasło aplikacyjne WordPressa — NIE hasło do panelu wp-admin\nWP_API_PASSWORD=\"\"\n");
+    assert_eq!(
+        fs::metadata(&env).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    let config = read_json(&project.path().join("opencode.json")).unwrap();
+    assert_eq!(config["mcp"]["novamira"]["disabled"], false);
+    let secret = b"WP_API_PASSWORD=synthetic-never-store-this\n";
+    fs::write(&env, secret).unwrap();
+    let before = fs::read(project.path().join("opencode.json")).unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Claude,
+        Some("wordpress"),
+    );
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Codex,
+        Some("wordpress"),
+    );
+    assert_eq!(
+        fs::read(project.path().join("opencode.json")).unwrap(),
+        before
+    );
+    put(
+        project.path(),
+        ".ai-profiles/opencode/local.json",
+        br#"{"mcp":{"novamira":{"disabled":true,"env_file":"private.env","timeout":45000}}}"#,
+    );
+    scoped_action(&context, project.path(), A::Update, Client::OpenCode, None);
+    let config = read_json(&project.path().join("opencode.json")).unwrap();
+    assert_eq!(config["mcp"]["novamira"]["disabled"], true);
+    let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert_eq!(
+        state["clients"]["opencode"]["mcp_base"]["novamira"]["env_file"],
+        ".env.novamira"
+    );
+    assert!(!state.to_string().contains("synthetic-never-store-this"));
+    assert!(!state["clients"]["opencode"]["files"]
+        .as_object()
+        .unwrap()
+        .contains_key(".env.novamira"));
+    // Moving away from Novamira must leave this user-owned file untouched.
+    put(
+        source.path(),
+        "profiles/empty/profile.json",
+        br#"{"name":"empty","version":"1.0.0","description":"Empty"}"#,
+    );
+    put(
+        source.path(),
+        "profiles/empty/skills.json",
+        br#"{"skills":[]}"#,
+    );
+    put(
+        source.path(),
+        "profiles/empty/mcp.json",
+        br#"{"servers":[]}"#,
+    );
+    fs::remove_file(project.path().join(".ai-profiles/opencode/local.json")).unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Switch,
+        Client::OpenCode,
+        Some("empty"),
+    );
+    assert_eq!(fs::read(&env).unwrap(), secret);
+    for client in [Client::OpenCode, Client::Claude, Client::Codex] {
+        scoped_action(&context, project.path(), A::Uninstall, client, None);
+    }
+    assert_eq!(fs::read(&env).unwrap(), secret);
+    assert_eq!(
+        fs::read(project.path().join(".gitignore")).unwrap(),
+        b"# user rules\nkeep\n"
+    );
+}
+
+#[test]
+fn novamira_env_collisions_fail_without_following_links_or_changing_project() {
+    use crate::model::{Client, ClientSelection, ProfileAction as A};
+    let (source, context) = native_source();
+    put(
+        source.path(),
+        "profiles/wordpress/mcp.json",
+        br#"{"servers":["novamira"]}"#,
+    );
+    put(
+        source.path(),
+        "mcp/servers/novamira.json",
+        include_bytes!("../../../mcp/servers/novamira.json"),
+    );
+    for kind in ["symlink", "dangling", "directory", "fifo"] {
+        let project = tempfile::tempdir().unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        fs::write(outside.path(), b"unchanged").unwrap();
+        let path = project.path().join(".env.novamira");
+        match kind {
+            "symlink" => std::os::unix::fs::symlink(outside.path(), &path).unwrap(),
+            "dangling" => {
+                std::os::unix::fs::symlink(project.path().join("missing"), &path).unwrap()
+            }
+            "directory" => fs::create_dir(&path).unwrap(),
+            "fifo" => {
+                assert!(std::process::Command::new("mkfifo")
+                    .arg(&path)
+                    .status()
+                    .unwrap()
+                    .success());
+            }
+            _ => unreachable!(),
+        }
+        let result = crate::profile_management::scoped::run(
+            &context,
+            project.path(),
+            A::Install,
+            ClientSelection::One(Client::OpenCode),
+            Some("wordpress"),
+        );
+        assert!(result.is_err(), "collision {kind} must fail");
+        assert!(!project.path().join("opencode.json").exists());
+        assert!(!project.path().join(".ai-profiles/state.json").exists());
+        assert_eq!(fs::read(outside.path()).unwrap(), b"unchanged");
+    }
+}
+
+#[test]
 fn activation_is_scoped_failed_state_is_saved_and_retry_keeps_success_history() {
     use crate::{
         model::{Client, ClientSelection as S, ProfileAction as A},

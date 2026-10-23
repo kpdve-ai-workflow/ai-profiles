@@ -1,5 +1,6 @@
 pub(crate) mod config;
 pub(crate) mod environment;
+mod novamira;
 pub mod runtime;
 
 use std::collections::BTreeMap;

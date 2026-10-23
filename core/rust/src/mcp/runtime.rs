@@ -36,6 +36,7 @@ pub fn main() -> i32 {
 
     match launch(&server) {
         Ok(()) => 0,
+        Err(McpRuntimeError::NovamiraRejected) => 1,
         Err(error @ McpRuntimeError::Exec) | Err(error @ McpRuntimeError::ProjectLocation) => {
             eprintln!("{error}");
             1
@@ -103,7 +104,30 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
     }
 
     let inherited = inherited_environment();
-    let environment = environment_for(&project, entry, &inherited)?;
+    let env_file = entry
+        .get("env_file")
+        .and_then(Value::as_str)
+        .unwrap_or("środowisku procesu (bez env_file)");
+    let environment = match environment_for(&project, entry, &inherited) {
+        Ok(environment) => environment,
+        Err(_) if server_name == "novamira" => {
+            super::novamira::configuration_failure(env_file);
+            return Err(McpRuntimeError::NovamiraRejected);
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if server_name == "novamira"
+        && ["WP_API_URL", "WP_API_USERNAME", "WP_API_PASSWORD"]
+            .iter()
+            .any(|key| {
+                environment
+                    .get(*key)
+                    .is_none_or(|value| value.trim().is_empty())
+            })
+    {
+        super::novamira::configuration_failure(env_file);
+        return Err(McpRuntimeError::NovamiraRejected);
+    }
     let command = entry
         .get("command")
         .and_then(Value::as_array)
@@ -141,6 +165,13 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
     let mut process = Command::new(program);
     process.args(args).current_dir(cwd);
     apply_environment(&mut process, &project, environment);
+    if server_name == "novamira" {
+        return if super::novamira::run(&mut process, env_file) {
+            Ok(())
+        } else {
+            Err(McpRuntimeError::NovamiraRejected)
+        };
+    }
     let _exec_error = process.exec();
     Err(McpRuntimeError::Exec)
 }

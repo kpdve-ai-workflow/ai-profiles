@@ -201,6 +201,9 @@ fn prepare(
         files.iter().map(|file| file.relative_path.as_str()),
     )?;
     let mut base = config::definitions_to_map(&config::desired_mcp(context, profile)?);
+    if base.contains_key("novamira") {
+        super::credentials::check(project)?;
+    }
     render_mcp(&mut base, target);
     let mut writes = BTreeMap::new();
     if base.contains_key("playwright") {
@@ -358,6 +361,10 @@ impl Prepared {
         manifest: &mut Manifest,
         runner: &impl crate::process::ProcessRunner,
     ) -> Result<()> {
+        if self.record["mcp_base"].get("novamira").is_some() {
+            super::credentials::prepare(project)?;
+            println!("Novamira: uzupełnij .env.novamira (nowy szablon ma prawa 0600), potem zrestartuj klienta/MCP. Istniejący plik zachowano. Samodzielnie zabezpiecz go przed commitowaniem i dostępem przez HTTP; instalator nie dodaje reguły .gitignore.");
+        }
         if let Some(old) = &self.old {
             if let Some(files) = old.get("files").and_then(Value::as_object) {
                 let removed: Vec<String> = files

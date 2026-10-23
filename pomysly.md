@@ -24,6 +24,10 @@ Zachowaj wpis ai-profiles-b84ecae0ddbe — wskazuje na rzeczywisty projekt react
 Następnie uruchom z repozytorium ai-profiles:
 make update PROJECT=/var/home/kpdve/it/personal/wfosigw-ssh/WFOSiGW
 Docelowo trzeba też odizolować konfigurację Codexa w teście Playwright, żeby sytuacja nie wracała. Nic jeszcze nie zmieniałem.
+- VM już działała, ale make test-vm-up zwróciło błąd „The instance is already running”. To wskazuje na problem obsługi uruchomionej VM przez skrypt lub niespójność jej stanu - prawdopodobnie instancja nie jest automatycznie usuwana po wykonaniu testow
+
+
+# MCP
 
 ## Playwright
 - za 1 razem gdy mowie agentowi aby uzyl mcp playwright i zrobil screenshot
@@ -32,6 +36,10 @@ Docelowo trzeba też odizolować konfigurację Codexa w teście Playwright, żeb
 ✗playwright.browser_take_screenshot [filename=google-check.png, scale=css]
 ↳ ### Error
   Error: EROFS: read-only file system, open '/var/home/kpdve/it/personal/react/google-check.png'
+- po instalacji i uruchomieniu swiezej instancji harness jest connection jako failed ( problem z initial polaczeniem ) zeby zadzialalo musze recznie zrobic disconnect i connect
+
+## Novamira
+- .env.novamira w folderze .ai-profiles blisko mcp novamira nie w root projektu
 
 # Skille do naprawy
 - brain-to-implementer -> obecnie skill wymaga poprawy, niepotrzebnie tworzy implementer-prompt.md ( do usuniecia ), kolejna rzecza jest fakt, ze od razu wypisuje todo do zrobienia bez konkretnych ustalen, moja wizja na to jest taka, ze najpierw prostymi slowami mowi mi co ta implementacja nam da abym dokladnie zrozumial flow ale slowami do czlowieka ( ai za bardzo pisze ogolnikowo i ciezko to zrozumie ), gdy implementacj dotyczy refactoru robi porownanie w tabelce przed i po co daje nam implementacja przed jakie sa jej braki, implementacja po co nam daje i co naprawia wzgledem pierwszej implementacji oraz co nam daje.

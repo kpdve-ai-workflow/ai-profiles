@@ -21,5 +21,5 @@ tar = "0.4"
 ureq = "3"
 fs2 = "0.4"
 url = "2"
-ctrlc = "3"
+ctrlc = { version = "3", features = ["termination"] }
 toml_edit = "0.22"

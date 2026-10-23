@@ -35,8 +35,11 @@ W źródłowej instrukcji `{{AI_PROFILE_ROOT}}`, `{{AI_PROFILE_MCP}}`,
 podczas instalacji dla wybranego klienta. Dla nowych instalacji root to
 `.ai-profiles/<klient>`. Możesz wybrać CLIENT=claude lub CLIENT=codex bez OpenCode.
 
-**Novamira i MariaDB są początkowo wyłączone**, aby instalacja działała bez sekretów
-i uruchomionego WordPressa. Figma jest skonfigurowana, ale wymaga autoryzacji.
+**Novamira jest domyślnie włączona**, a MariaDB początkowo wyłączona.
+Instalacja nie łączy się z WordPressem i działa bez sekretów. Przygotowuje pusty
+szablon `.env.novamira` od razu z prawami `0600`; istniejącego pliku nie zmienia.
+Do czasu uzupełnienia danych start MCP zwróci czytelny błąd, bez próby logowania
+pustymi wartościami. Figma jest skonfigurowana, ale wymaga autoryzacji.
 Instalator nie pobiera ani nie instaluje pluginów WordPressa, Node czy npm.
 Skille dotyczące Sage/ACF stosuj tylko do pasującej architektury projektu;
 zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfiguracji motywu.
@@ -103,7 +106,8 @@ mają czasowego wygaśnięcia, ale mogą zostać unieważnione lub zablokowane p
 
 ## 5. Zapisz lokalne połączenie
 
-W katalogu **projektu WordPressa**, przed wpisaniem sekretów, dodaj do `.gitignore`:
+W katalogu **projektu WordPressa**, przed wpisaniem sekretów, samodzielnie zabezpiecz
+plik przed przypadkowym commitem, np. dodając do `.gitignore`:
 
 ```gitignore
 /.env.novamira
@@ -113,14 +117,13 @@ Jeśli plik z sekretami był już śledzony przez Git, samo `.gitignore` nie wys
 Usuń go z indeksu i unieważnij ujawnione hasło. Nie zapisuj sekretów w przykładach
 wewnątrz `{{AI_PROFILE_ROOT}}/plugin/skills/`: są to zarządzane pliki profilu.
 
-Utwórz `.env.novamira` w katalogu głównym projektu i ustaw prawa **przed** wpisaniem hasła:
-
-```bash
-touch .env.novamira
-chmod 600 .env.novamira
-```
-
-Uzupełnij go w edytorze:
+Instalator **nie dodaje** tej reguły ani innego mechanizmu ignorowania.
+Szablon `.env.novamira` jest już przygotowany w katalogu głównym projektu.
+To plik użytkownika, nie zarządzany payload: update, switch, instalacja kolejnego
+klienta i uninstall go nie nadpisują ani nie usuwają. Symlink lub kolizja
+z katalogiem/innym typem pliku blokuje przygotowanie profilu.
+Sprawdź prawa istniejącego pliku przed wpisaniem sekretów (nowy ma `0600`).
+Uzupełnij go lokalnie w edytorze:
 
 ```dotenv
 WP_API_URL=https://moj-projekt.ddev.site/wp-json/mcp/novamira
@@ -132,14 +135,15 @@ Podaj pełny adres z `/wp-json/mcp/novamira`, **nie `/novamira-oauth`**,
 oraz login konta, na którym wygenerowano hasło. Cudzysłowy pozwalają zachować spacje.
 Plik nie jest skryptem powłoki — nie wpisuj do niego komend ani interpolacji `$VAR`.
 
-Następnie utwórz `{{AI_PROFILE_LOCAL}}`:
+Nie musisz tworzyć `{{AI_PROFILE_LOCAL}}` ani aktywować MCP: domyślna definicja
+wskazuje `.env.novamira` i `disabled: false`.
+Opcjonalnie, dla innej ścieżki, dodaj do `{{AI_PROFILE_LOCAL}}`:
 
 ```json
 {
   "mcp": {
     "novamira": {
-      "disabled": false,
-      "env_file": ".env.novamira"
+      "env_file": "private/wordpress.env"
     }
   }
 }
@@ -150,18 +154,18 @@ zachowując inne ustawienia. Nie zastępuj całego pliku przykładem.
 Plik jest własnością projektu, a nie generowaną konfiguracją OpenCode.
 `env_file` jest ścieżką względem projektu, bez `..` i symlinków.
 
-Nazwę pliku env możesz zmienić: zmień jednocześnie `env_file` i wpis `.gitignore`.
+Niestandardowy plik przygotowujesz sam; instalator tworzy tylko domyślny szablon.
+Przy zmianie ścieżki samodzielnie dostosuj ochronę Git i HTTP.
 Nie potrzebujesz ręcznego eksportowania zmiennych do sesji OpenCode.
 Upewnij się, że serwer WWW blokuje dostęp HTTP do plików `.env*`, `.ai-profiles/` i `.opencode/`.
 Uprawnienia `600` i `.gitignore` nie zastępują konfiguracji serwera WWW.
 
-## 6. Włącz połączenie w wybranym kliencie
+## 6. Uruchom połączenie w wybranym kliencie
 
-Z katalogu `ai-profiles` zsynchronizuj ustawienie `disabled`:
-
-```bash
-make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu
-```
+Przebieg: **instalacja profilu → uzupełnienie `.env.novamira` → restart klienta/MCP**.
+Nie ma dodatkowego polecenia aktywacji. Tylko po zmianie lokalnej konfiguracji
+(np. `env_file` lub jawnego `disabled: true`) wykonaj standardowe
+`make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu`, potem restart.
 
 Zrestartuj wybranego klienta i sprawdź jego listę MCP (dla OpenCode: `opencode mcp list` lub `/mcps`).
 Novamira powinna się połączyć bez przeglądarki i bez autoryzacji OAuth:
@@ -179,6 +183,18 @@ Nie dodawaj `JWT_TOKEN`, alternatywnych nagłówków uwierzytelniania ani nadpis
 Poproś agenta o **discovery, odczyt schematu i odczyt ID bloga oraz adresu witryny**.
 Potwierdź właściwy cel. Nie trzeba tworzyć strony testowej ani zmieniać ustawień.
 Samo otwarcie endpointu w przeglądarce nie jest testem MCP: GET może zwracać `405`.
+
+**Rozbieżność celu blokuje zapis.** Jeśli instrukcje projektu wskazują inną domenę
+niż odczytana przez Novamirę albo Novamira nie rozpoznaje wskazanej domeny, agent
+ma zgłosić oczekiwany host oraz faktyczny host/blog ID i poprosić użytkownika
+o wyjaśnienie. Lista witryn, blog ID `1`, przekierowanie czy podobny tytuł strony
+nie upoważniają do wybrania innej witryny. Nie wolno samodzielnie uznać domen
+za aliasy ani zmieniać konfiguracji WordPressa lub omijać blokady przez SQL/WP-CLI.
+Po wyjaśnieniu trzeba ponownie potwierdzić cel odczytem. Przed każdym zapisem
+agent sprawdza też obiekt na tej witrynie; ID treści nie jest globalne między
+blogami. Przeniesienie strony do kosza jest operacją destrukcyjną i podlega tym
+samym zasadom. Reguły są dystrybuowane w skillach `mcp-novamira` i `acf`;
+to instrukcje dla agenta, nie techniczna blokada operacji po stronie MCP.
 
 Po zmianie samego hasła/pliku env zrestartuj MCP. Po zmianie `disabled` lub innych
 ustawień OpenCode wykonaj `make update` i restart sesji. Nie edytuj ręcznie
@@ -501,13 +517,14 @@ Po zakończeniu korzystania z integracji możesz samodzielnie unieważnić jej h
 
 | Objaw | Sprawdź |
 | --- | --- |
-| Novamira wyłączona | `disabled: false` w lokalnym pliku, potem update i restart |
+| Novamira wyłączona | świadome lokalne `disabled: true` / `enabled: false`; zmień tylko jeśli chcesz ją włączyć, potem update i restart |
 | Brak zmiennej/pliku env | nazwę pliku, trzy wymagane zmienne i niepuste wartości |
 | `npx` niedostępne / błąd opcji Node | Node 24, npm i PATH procesu OpenCode |
 | Błąd TLS | zaufanie do CA DDEV na hoście; nigdy `NODE_TLS_REJECT_UNAUTHORIZED=0` |
 | `404` / błąd zależności | pełną paczkę pluginu, aktywację, AI Abilities i domenę |
 | `401` | login, aktywne hasło aplikacyjne, endpoint bez `-oauth`, przekazanie Authorization do PHP |
 | `403` przy ability | uprawnienia konta, superadmin multisite i reguły pluginu |
+| Błąd inicjalizacji Novamiry | panel MCP klienta pokazuje bezpieczny błąd; HTTP 401 oznacza potwierdzone odrzucenie danych, pozostałe awarie dostają komunikat ogólny |
 | Niewłaściwa witryna | host w `WP_API_URL`, faktyczny blog ID i URL z odczytu |
 | Figma wymaga logowania | autoryzację `figma` w `/mcps`, niezależnie od Novamiry |
 | MariaDB wyłączona | lokalne `disabled: false`, update i restart OpenCode |
@@ -518,6 +535,9 @@ Po zakończeniu korzystania z integracji możesz samodzielnie unieważnić jej h
 | MariaDB access denied | konto, hasło, dozwolony host i pełne granty do zamierzonej bazy |
 
 Nie wklejaj sekretów ani pełnych zrzutów środowiska do logów/czatu.
+Adapter nie uznaje `connectionFailed` mostu (również `{}`) za udane połączenie.
+Nie diagnozuje hasła na podstawie braku narzędzi. Nie przekazuje surowych logów
+mostu ani odpowiedzi błędów inicjalizacji, które mogą zawierać sekrety.
 Novamira daje szeroki dostęp do WordPressa; używaj jej na local/dev/staging,
 z backupami i zapisami ograniczonymi do zleconego zadania.
 
@@ -567,13 +587,23 @@ przy braku uprawnień sprawdź dostęp klienta do Dockera/projektu. HTTP 401 wym
 lokalnego sprawdzenia loginu, hasła, origin (także portu) i praw pliku oraz restartu MCP.
 Jawne nazwy screenshotów to `reports/...`; `screenshot.png` w korzeniu RO nie działa.
 
-Migracja do WordPress 2.0.0: z repozytorium instalatora wykonaj
+Migracja ustawień Playwright w WordPress 2.0.0: z repozytorium instalatora wykonaj
 `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu`, potem build
 0.2.0 w projekcie i restart klienta. Domyślne ustawienia zmieniają się na
 `reports/` i sieć `host`. Stare obrazy, raporty i frozen legacy pozostają.
 Istniejące nadpisania komendy/sieci/Compose w `{{AI_PROFILE_LOCAL}}` zachowują
 priorytet i mogą utrzymać stare zachowanie; nie są automatycznie usuwane.
 Uninstall zachowuje raporty, credentials oraz chroniącą je regułę `.gitignore`.
+
+Aktualizacja do WordPress **2.1.0**: wykonaj
+`make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu`, uzupełnij
+zachowany lub nowo przygotowany `.env.novamira` i zrestartuj klienta/MCP.
+Aktualizacja dostarcza nowy adapter i domyślne włączenie Novamiry.
+Jawne lokalne wyłączenie, własny `env_file` i inne nadpisania pozostają w mocy;
+nie są automatycznie usuwane. Ręczne zmiany zarządzanych wpisów nadal blokują
+update — przenieś ustawienia do lokalnego pliku zgodnie z zasadami instalatora,
+nie obchodź kontroli własności. **Dla Novamiry nie powstaje reguła `.gitignore`**;
+samodzielnie zabezpiecz plik przed commitem i udostępnieniem przez HTTP.
 
 Źródła: [Novamira quick start](https://novamira.ai/quickstart/),
 [most WordPress 0.4.0](https://github.com/Automattic/mcp-wordpress-remote/tree/7190a4ccf9a16b909433133ecf90c52c9bb04da4),
