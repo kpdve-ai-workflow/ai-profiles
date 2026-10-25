@@ -1,0 +1,128 @@
+# Propozycja docelowego logowania diagnostycznego
+
+## Cel i zasady
+
+Wspólna warstwa oparta na `tracing` ma wspierać development zarówno użytkownika, jak i agenta. Priorytetem jest odtworzenie przepływu wykonania, danych rzeczywiście użytych lub przetworzonych w operacji oraz konkretnej przyczyny awarii. Diagnostyka obejmuje poprawne i niepoprawne przebiegi; domyślne ustawienia developerskie mają zapewniać pełną użyteczną diagnostykę, bez konieczności ponownego uruchamiania z `DEBUG`.
+
+Logowanie ogranicza się do danych związanych z wykonywaną operacją: nie skanuje niepowiązanych plików ani nie zbiera danych spoza jej zakresu. Nie stosuje domyślnego maskowania, pomijania payloadów ani cichego obcinania treści. Logi pozostają lokalnie w repozytorium, w katalogu przeznaczonym do ignorowania przez Git. Obecny zakres nie obejmuje wysyłki sieciowej. Grafana Alloy/Loki mogą być osobnym, przyszłym etapem, po odrębnej decyzji o eksporcie.
+
+## Obecny kontekst i architektura
+
+| Obszar | Obecna sytuacja |
+| --- | --- |
+| `core/rust/src/error.rs` | Typowane błędy `thiserror` — warto zachować strukturę i łańcuch przyczyn. |
+| `core/rust/src/profile_management/cli.rs:427` | Błędy są zamieniane na tekst; traci się strukturę i dostęp do przyczyn. |
+| `core/rust/src/process.rs` | Wspólny runner procesów — naturalny punkt korelacji, przechwytywania strumieni, czasu, timeoutów i kodów wyjścia. |
+| `core/rust/src/profile_management/scoped.rs` | Operacje mogą zakończyć się częściowym sukcesem; trzeba zapisywać wynik każdego klienta i wynik całości. |
+| `core/rust/src/mcp/novamira.rs:110` | Obecnie wycisza szczegółowe logi mostu; docelowo potrzebna jest ich diagnostyczna integracja opisana niżej. |
+
+Logger nie przechwytuje automatycznie każdego `Result::Err`. Potrzebne są jawne punkty zapisu błędów oraz zdarzeń poprzedzających awarię. Błąd należy rejestrować przy ostatecznej obsłudze, a etapy wzbogacać kontekstem bez wielokrotnego powielania tego samego błędu. Przy `CLIENT=all` wynik poszczególnych klientów i podsumowanie operacji są odrębnymi zdarzeniami.
+
+```text
+CLI / MCP / restore / launcher / runner procesów
+                    │
+          spans i zdarzenia tracing
+                    │
+       wspólny schemat i konfiguracja
+                    │
+     lokalne JSONL i pliki payloadów
+```
+
+Proponowane zależności: `tracing` (zdarzenia i spans), `tracing-subscriber` (format JSON i konfiguracja), `tracing-appender` lub równoważny writer (zapis/rotacja). Wersje muszą zachować Rust 1.85. Wspólny moduł, np. `core/rust/src/logging.rs`, odpowiada za inicjalizację raz na poziomie binarium, schemat, korelację i obsługę writerów; nie należy inicjalizować go w funkcjach bibliotecznych ani tworzyć osobnego frameworka. Nie dodawać Tokio wyłącznie do logowania.
+
+## Kontrakt diagnostyczny
+
+Każdy rekord powinien pozwalać ustalić czas UTC, poziom, nazwę i wersję binarium, `run_id`, operację, klienta/profil/projekt (gdy rozpoznane), etap, wynik, czas trwania oraz stabilny `event` i `error_code`. Dla błędu zachować typ, pełny łańcuch przyczyn i dostępne szczegóły diagnostyczne, nie tylko bezpieczne podsumowanie. Pola strukturalne JSON są preferowane dla indeksowalnego kontekstu; pełne treści mogą być powiązanymi fragmentami lub plikami payloadów.
+
+Zapisywać przebieg poprawnych operacji, w tym:
+
+- wejścia i wyjścia etapów, rozpoczęcia/zakończenia, kolejność i czasy;
+- dane przekazane etapom i uzyskane z nich, gdy rzeczywiście użyte lub przetworzone;
+- decyzje, warunki, pominięcia, ponowienia, fallbacki i ich przyczyny;
+- zmiany konfiguracji/stanu i pozostawiony stan po częściowym sukcesie;
+- uruchomienie procesów, argumenty i środowisko przekazane, wejścia/wyjścia strumieni, sygnały, timeouty, anulowanie i status zakończenia;
+- konflikty, zapisy, wyniki poszczególnych klientów i końcowy rezultat.
+
+Nie wykluczać domyślnie środowiska procesów ani odczytanych plików `.env`, pełnych argumentów, stdin/stdout/stderr podprocesów, SQL, przetwarzanych dumpów, komunikatów MCP, żądań/odpowiedzi HTTP ani struktur diagnostycznych wypisywanych przez `Debug`. Pełne dane logować bez cichego filtrowania lub obcięcia; binaria i dane niebędące tekstem muszą mieć reprezentację odtwarzalną. Diagnostyka nie może zmieniać danych przekazywanych właściwej operacji ani jej wyniku.
+
+Przykładowy rekord zdarzenia (pola przykładowe, a nie pełny schemat):
+
+```json
+{"timestamp":"2026-10-25T12:00:00Z","level":"ERROR","event":"activation.failed","run_id":"…","binary":"ai-profile","operation":"update","client":"codex","stage":"plugin_add","error_code":"process.timeout","duration_ms":30000,"prepared_state_retained":true,"cause":"…"}
+```
+
+Użytkowe komunikaty CLI pozostają niezależne; nie zamieniać mechanicznie `println!` na logi. Logowanie diagnostyczne nie może zanieczyszczać stdout protokołu MCP, wyników JSON ani interaktywnego wyjścia CLI.
+
+## Novamira i granice obserwowalności
+
+Zastąpić wyciszanie szczegółów mostu przechwytywaniem dostępnej diagnostyki: surowych komunikatów, błędów i danych żądań/odpowiedzi, które rzeczywiście są dostępne. Sam sklasyfikowany komunikat typu „uwierzytelnienie odrzucone” nie wystarcza.
+
+Rozróżnić dwa poziomy:
+
+1. **Wrapper Rust:** może rejestrować dane, które sam tworzy, odbiera lub przekazuje — argumenty, konfigurację wejściową, komunikaty/odpowiedzi widoczne na granicy wrappera, błędy mostu oraz kody zakończenia.
+2. **Most/kontener:** wewnętrzna komunikacja HTTP, surowe żądania/odpowiedzi lub błędy niewystawiane wrapperowi wymagają punktu integracji w moście (np. hooka/interceptora transportu lub jawnego kanału diagnostycznego) albo zbierania logów kontenera. Dodanie `tracing` w Rust samo nie zapewni dostępu do całego ruchu HTTP. Należy udokumentować, które dane są faktycznie dostępne, a które wymagają zmian w moście lub środowisku uruchomieniowym.
+
+Szczegółowe logi mostu i kontenera kierować do lokalnego pliku/kanału zbierającego, nie do stdout protokołu MCP. Kanały diagnostyczne nie mogą przejmować ani zmieniać standardowych strumieni protokołu.
+
+## Lokalizacja, retencja i kompletność
+
+Logi przechowywać wewnątrz repozytorium, w dedykowanym katalogu (nazwa do ustalenia, np. `.ai-profiles-logs/`). Dodanie reguły ignorującej ten katalog w `.gitignore` jest częścią przyszłej implementacji, nie tej propozycji. `.gitignore` zapobiega przypadkowemu śledzeniu przez Git, ale nie jest ochroną przed odczytem ani dostępem HTTP. Zachować uprawnienia katalogu `0700` i plików `0600`, bez podążania za symlinkami.
+
+Sposób wyznaczenia katalogu zależy od sposobu uruchomienia:
+
+- menedżer uruchomiony z checkoutu może wyznaczyć katalog względem rozpoznanego katalogu repozytorium;
+- zainstalowany runtime w projekcie docelowym powinien ustalić, czy operacja ma wiarygodnie rozpoznany checkout projektu, a następnie zapisywać w jego ignorowanym katalogu;
+- przed rozpoznaniem projektu nie ma jeszcze bezpiecznej podstawy do wyboru katalogu docelowego. Nie stosować cichego fallbacku poza repozytorium; jawnie ustalić zachowanie (np. odroczenie logowania trwałego do ustalenia repozytorium albo zgłoszenie braku lokalizacji) i zapewnić widoczny sygnał niekompletności.
+
+**Decyzje do ustalenia:** nazwa i reguła lokalnego katalogu; algorytm wykrywania checkoutu (w tym podkatalogi, worktree, projekty bez Git); zachowanie przed wykryciem projektu; czy w takim stanie operacja jest kontynuowana z oznaczoną niekompletnością, czy zatrzymywana; granice współdzielenia katalogu między równoległymi uruchomieniami.
+
+Pełne payloady zmieniają profil zasobów. Writer ma przechwytywać strumieniowo, z ograniczonym zużyciem RAM i backpressure albo kontrolowanym zapisem bezpośrednim; nie gromadzić dowolnie dużych wejść/wyjść w pamięci. JSONL zawiera uporządkowane rekordy/chunki z identyfikatorem payloadu, kolejnością, kodowaniem i informacją o kompletności. Duże dane mogą być w powiązanych plikach w tym samym ignorowanym katalogu, z długością i skrótem kontrolnym pozwalającym zweryfikować odtworzenie. Dane binarne i niepoprawne UTF-8 przechowywać bezstratnie (np. jako bajty/base64 lub plik binarny), nie zastępować ich stratną konwersją tekstową.
+
+Zaprojektować rotację i retencję z jawnym limitem zajętości/wieku oraz sprzątaniem wyłącznie rozpoznanych, nieaktywnych plików loggera. Rotacja nie może po cichu obcinać ani porzucać aktywnego payloadu: kontynuować w nowym segmencie lub powiązanym pliku i zapisać relację między fragmentami. Gdy limit, miejsce na dysku lub błąd I/O uniemożliwi kompletne logowanie, jawnie zarejestrować/zgłosić niekompletność, o ile kanał raportowania jest dostępny. Nie obiecywać gwarantowanego zapisu przy `SIGKILL`, awarii systemu lub pełnym dysku.
+
+Wynik operacji i kompletność logów to osobne wyniki. Awaria loggera domyślnie nie zmienia semantyki instalacji/importu ani pierwotnego błędu operacji, ale musi dawać widoczny sygnał niekompletności, bez podszywania się pod sukces diagnostyczny. Sposób sygnalizacji, gdy stderr jest stdoutem protokołu lub niedostępny, wymaga jawnego projektu; diagnostyka MCP ma trafiać do pliku, nie do stdout protokołu.
+
+## Procesy i przekazanie sterowania
+
+Obecne `std::process::exit` pomija zwykły cleanup, a `exec()` zastępuje proces Rust programem docelowym. Nie można więc zakładać, że bieżący logger zobaczy dalsze wykonanie. Preferować wspólny mechanizm nadzorowania procesów tam, gdzie kontrola procesu jest potrzebna: zachować semantykę stdio (bez przejmowania protokołu lub interaktywnego wejścia), sygnałów, kodów wyjścia, timeoutów, anulowania i cleanupu kontenerów; korelować zdarzenie uruchomienia z wyjściem i zakończeniem. Jeśli interaktywne lub protokołowe stdio musi pozostać bezpośrednie, zastosować osobny kanał diagnostyczny/collector, który nie modyfikuje bajtów przepływu.
+
+Tam, gdzie `exec()` jest wymagany, rozważyć osobny nadzorujący launcher lub niezależny collector, który zapisuje diagnostykę procesu potomnego i jego zakończenia, zachowując przekazywanie sygnałów, kodu wyjścia i cleanup. Każde przekazanie musi mieć korelacyjny identyfikator dostępny po obu stronach. Nie pozostawiać awarii po `exec()` poza zakresem docelowym. Zapis przed przekazaniem jest użyteczny, ale nie gwarantuje przechwycenia późniejszej awarii. `panic` hook może uzupełniać diagnostykę, nie zastępuje nadzorowania i nie chroni przed `SIGKILL`, awarią systemu ani brakiem miejsca.
+
+Kolejkę/buforowanie dobrać po pomiarze przy pełnych payloadach. Rozważyć ograniczony bufor/asynchroniczny writer z backpressure i jawnie kontrolowanym flush przy normalnym zakończeniu; unikać nieograniczonej pamięci i utraty końcowych rekordów. Granice `exit()`/`exec()` wymagają flush/acknowledgement lub zewnętrznego nadzorcy; nawet wtedy nie gwarantuje się trwałości przy nagłej awarii.
+
+## Etapy realizacji
+
+1. Ustalić kontrakt lokalizacji, zachowania przed wykryciem projektu, retencji i obsługi niekompletności; dodać wspólną konfigurację, schemat JSONL, korelację, ograniczony strumieniowy writer oraz ignorowanie katalogu w `.gitignore`.
+2. Pokryć operacje, etapy, zmiany stanu, błędy typowane, procesy, restore i przypadki częściowego sukcesu; osobno uwzględnić binaria kończące przez `exit()`.
+3. Dodać wymagane punkty diagnostyczne Novamiry po stronie Rust oraz mostu/kontenera; zweryfikować zakres widoczności i brak zakłócenia MCP.
+4. Domknąć obserwowalność po granicach `exec()` przez nadzorowanie lub osobne zbieranie, po wyborze zachowania zachowującego semantykę uruchamianych programów.
+5. Grafana Alloy/Loki pozostawić jako opcjonalny etap przyszły. Wysyłka poza środowisko lokalne wymaga osobnej decyzji i nie jest częścią domyślnej konfiguracji.
+
+Jeśli później zatwierdzony zostanie eksport do Loki, używać etykiet o małej liczbie wartości (np. binarium, poziom); `run_id`, ścieżki i identyfikatory projektów pozostawić w JSON, nie jako etykiety o wysokiej kardynalności.
+
+## Kryteria akceptacji przyszłej implementacji
+
+Testy projektować test-first, z niezależnym kontraktem, scenariuszami przed dopasowaniem do implementacji i asercjami wykrywającymi wiarygodne błędne zachowanie. Nie pisać ani nie uruchamiać testów w ramach tej propozycji. Przyszłe kryteria powinny potwierdzić co najmniej:
+
+- na kontrolowanych danych pełne argumenty i środowisko procesu oraz stdin/stdout/stderr są odtwarzalne, a logowanie nie zmienia przekazanych bajtów;
+- poprawne przebiegi rejestrują wejścia/wyjścia etapów, decyzje, pominięcia, retry, fallbacki, zmiany stanu, kolejność i czasy;
+- duże payloady, fragmenty rotowane, dane binarne i niepoprawne UTF-8 dają się odtworzyć dokładnie; sprawdzane są kolejność i kompletność, bez cichego obcięcia;
+- przekazywanie danych MCP/CLI/podprocesów i ich stdio, sygnały, kody wyjścia, timeouty i cleanup zachowują dotychczasową semantykę;
+- przepływ jest skorelowany między procesami, także przez przekazanie sterowania/nadzorcę;
+- kontrolowany błąd Novamiry zawiera surowe dostępne komunikaty, szczegóły błędu i dane żądania/odpowiedzi; oddzielnie weryfikuje się granicę widoczności wrappera oraz integrację mostu/kontenera;
+- błąd zapisu, limit miejsca/retencji lub brak lokalizacji jawnie oznacza niekompletność logów i nie jest mylony z wynikiem operacji;
+- syntetyczne dane diagnostyczne, w tym wartości umyślnie wrażliwe, są kompletne i odtwarzalne zgodnie z kontraktem, również w konfiguracji domyślnej — nie oczekuje się ich maskowania ani pominięcia;
+- logi trafiają wyłącznie do lokalnego ignorowanego katalogu, a żadna domyślna ścieżka nie eksportuje danych przez sieć;
+- awaria logowania nie maskuje pierwotnego błędu operacji, a częściowy sukces nie jest raportowany jako pełny sukces ani rollback.
+
+Weryfikacja zachowania Rust i integracji Playwright wymaga test-first oraz właściwej bramki w VM, zgodnie z `docs/testing.md` (m.in. `make validate-rust-migration` dla Rust). Brak wymaganej VM lub innego środowiska blokuje weryfikację; nie jest sukcesem ani powodem do lokalnego obejścia.
+
+## Decyzje wymagające doprecyzowania
+
+- nazwa/konstrukcja katalogu repozytorium i detekcja checkoutu, w tym worktree oraz projektów bez Git;
+- polityka dla logowania przed rozpoznaniem projektu i operacji uruchamianych poza checkoutem;
+- konkretne limity retencji, rotacji, rozmiaru payloadów i reguły sprzątania;
+- wybór formatu fragmentów/binarnych plików oraz mechanizm backpressure i sygnalizacji błędu writerowi;
+- punkty integracji Novamiry i zakres danych dostępnych w moście/kontenerze;
+- wybór nadzorcy/collectora dla ścieżek `exec()`, wymagania interaktywnego stdio i lifecycle kontenerów;
+- przyszła decyzja, czy w ogóle dopuścić eksport poza lokalne repozytorium (np. Alloy/Loki).
