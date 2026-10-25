@@ -94,9 +94,18 @@ Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
 w skillach. Są instalowane bez automatycznego wykonywania.
 
 Skille przeznaczone wyłącznie dla tego repozytorium umieszczaj w
-`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `skills/`
-ani żadnego profilu i nie są dostarczane do projektów. Workflow tego checkoutu
-jest oddzielony od zawartości profili.
+`.opencode/skills/`; OpenCode wykrywa je natywnie. Każdy katalog skilla jest
+udostępniany Codexowi przez odpowiadający mu symlink w `.agents/skills/`.
+Codex wykrywa repozytoryjne skille z `.agents/skills/` i obsługuje symlinkowane
+katalogi skilli. Dzięki temu treść ma jedno źródło i zachowuje pliki pomocnicze.
+Przy dodawaniu lub usuwaniu skilla utrzymuj symlink w zgodzie ze źródłem;
+sprawdza to `bash tests/check-codex-skills.sh`. Te skille nie są częścią
+`skills/` ani żadnego profilu i nie są dostarczane do projektów. Workflow tego
+checkoutu jest oddzielony od zawartości profili.
+
+Źródło: [OpenAI Codex — Build skills](https://developers.openai.com/codex/build-skills/).
+Codex wymaga w `SKILL.md` pól `name` i `description`; obecne skille OpenCode
+spełniają ten format.
 
 ## Wersje i publikowanie
 

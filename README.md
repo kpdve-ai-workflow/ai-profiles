@@ -26,9 +26,10 @@ Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
 Po instalacji, aktualizacji lub zmianie profilu uruchom ponownie narzędzie,
 w którym korzystasz z profilu.
 
-Wybrane skille są kopiowane niezależnie do
-`.ai-profiles/<klient>/plugin/skills/`. OpenCode otrzymuje jawne źródło skills;
-repozytorium nie instaluje kopii pod `.agents/skills/` ani `.claude/skills/`.
+Wybrane skille profilu są kopiowane niezależnie do
+`.ai-profiles/<klient>/plugin/skills/`. Repozytoryjne skille OpenCode z
+`.opencode/skills/` są równocześnie udostępnione Codexowi przez
+`.agents/skills/` (symlinki; źródłem pozostaje `.opencode/skills/`).
 Wtyczki Claude Code i Codex wymagają natywnej rejestracji i zaufania projektu.
 Profile przygotowują wybrane MCP tylko dla wskazanego klienta
 na poziomie projektu. Klienci mogą wymagać restartu, zaufania projektu,
