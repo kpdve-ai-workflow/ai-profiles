@@ -1,0 +1,617 @@
+# Roadmapa migracji: Universal Agent Workflow
+
+**Strategia:** OpenCode V2 first, multi-harness by design — docelowo OpenCode V2, Codex CLI i Claude Code.  
+**Data aktualizacji:** 25.10.2026.  
+**Zakres:** modernizacja istniejących skilli i środowiska z wykorzystaniem najmniejszej potrzebnej liczby nowych elementów.  
+**Orkiestracja sesji:** Herdr.  
+**Status dokumentu:** plan po przeglądzie architektury; nie stanowi potwierdzenia istnienia adapterów, zakończenia testów ani bezpieczeństwa zainstalowanego środowiska.
+
+## 0. Co robimy najpierw — główne założenie planu
+
+**Pierwszym rezultatem ma być działający, minimalny przepływ w OpenCode V2: Brain wyjaśnia wynik i uzyskuje akceptację → generuje jeden kompletny HANDOFF → deterministyczny Writer zapisuje pliki → Implementer wykonuje dokładnie jedno zadanie → weryfikacja, evidence i STOP.**
+
+Najpierw realizujemy główną zmianę w sposobie pracy i sprawdzamy jej wartość. Pełną infrastrukturę ocen, dodatkowe adaptery i mieszane sesje rozwijamy po uzyskaniu tego rezultatu. Krótki audyt i eksperyment techniczny z etapu 0 są koniecznym przygotowaniem; nie mają przekształcić się w budowę całego frameworku przed pierwszą próbą.
+
+### 0.1. Hipoteza do sprawdzenia
+
+Oddzielenie planowania od mechanicznego zapisu oraz wykonania jednego zadania powinno ograniczyć operacje narzędziowe Braina i usprawnić kontrolę zakresu. **Obniżenie całkowitego kosztu i czasu jest hipotezą, którą mierzymy, a nie gwarancją wynikającą z podziału ról.**
+
+Brain nadal przygotowuje kompletne treści plików. Przeniesienie zapisu nie usuwa kosztu ich wymyślenia i wygenerowania. W pomiarze uwzględniamy dodatkowe konteksty, uruchomienia sesji, Judge, poprawki, wznowienia oraz czas człowieka.
+
+### 0.2. Pierwsze prace
+
+1. Zinwentaryzować istniejące skille, konfiguracje, aktywne plany i wersje; zabezpieczyć niezapisane zmiany.
+2. Zmierzyć obecny workflow na reprezentatywnym feature i refaktorze, z zachowaniem tych samych wymagań i kryteriów odbioru.
+3. W izolowanym repo sprawdzić rzeczywiste read-only Braina, pełny transport HANDOFF i zatrzymanie niedozwolonego działania przed skutkiem.
+4. Uruchomić minimalny przepływ z deterministycznym Writerem i jednym zadaniem Implementera.
+5. Porównać jakość, pełny koszt, czas oraz obciążenie człowieka. Wykonać powtórzenia adekwatne do zmienności wyników; pojedynczy udany przebieg nie dowodzi przewagi.
+6. Uprościć lub poprawić rozwiązanie, jeśli korzyść nie została wykazana. Nie rozpoczynać wtedy automatycznie budowy kolejnych adapterów.
+
+**Pierwszy rezultat jest prototypem w izolowanym środowisku.** Niezweryfikowane narzędzia i kanały skutków ubocznych pozostają wyłączone. Jeśli kompletna ścieżka REVIEW nie jest jeszcze dostępna, operacja pozostaje zablokowana; nie stosujemy tymczasowego auto-approval.
+
+Wstępny benchmark prototypu nie obejmuje kosztu niezaimplementowanych elementów. Pomiar pełnego rozwiązania powtarzamy w pilocie OpenCode przed dopuszczeniem produkcyjnym i przed etapami Codex/Claude.
+
+## 1. Cel i docelowy efekt
+
+Brain najpierw przedstawia człowiekowi zrozumiały opis rezultatu. Przy refaktorze pokazuje również porównanie „przed → braki → po → korzyści”. Po zatwierdzeniu zakresu i istotnych decyzji przygotowuje jeden kompletny HANDOFF.
+
+Writer zapisuje dokładne treści plików bez planowania i parafrazowania. Implementer wykonuje jedno T-xx zgodnie z kontraktem. Guard kontroluje dopuszczone kanały działania, a rzeczywiste niejasności kieruje przez LLM Judge do Human Judge.
+
+Wspólne kontrakty mają działać w trzech harnessach. **Pierwsze wdrożenie produkcyjne obejmuje wyłącznie sprawdzoną konfigurację OpenCode V2.** Codex CLI i Claude Code dołączają po pozytywnym pilocie i benchmarku.
+
+| Obszar | Punkt wyjścia do potwierdzenia w audycie | Stan docelowy |
+| --- | --- | --- |
+| Kontakt Brain z człowiekiem | Plan bywa prezentowany od razu jako techniczne todo | Najpierw opis efektu i istotnych decyzji, akceptacja, następnie HANDOFF |
+| Zapis planu | Brain zarządza folderami i wieloma plikami | Brain emituje pełne treści; program zapisuje je 1:1 |
+| Podział decyzji | Granice wynikają głównie z promptów | Jawna delegacja decyzji, chroniony kontrakt i egzekwowane uprawnienia |
+| Wykonanie | Jedno zadanie na wywołanie | Zachowana zasada oraz blokada równoczesnego przejęcia zadania |
+| Nadzór | Stan zależny od sesji | Herdr obserwuje sesje; ukończenie zadania wynika z evidence |
+| Koszt i jakość | Brak porównywalnego pomiaru albo pomiar częściowy | Pomiar całego procesu na tych samych wymaganiach |
+| Przenośność | Rozwiązanie dopasowane do OpenCode | Mały wspólny rdzeń i adaptery testowane osobno |
+
+## 2. Niezmienne zasady i granice architektury
+
+1. **Wspólne:** merytoryczne reguły Brain → HANDOFF → Writer → Implementer, Markdown planu i zadań, walidacja, Guard Core, wymagania evidence oraz scenariusze akceptacyjne.
+2. **Zależne od harnessu:** profile, rzeczywisty model i effort, konfiguracja uprawnień, hooki, sesje, narzędzia, UI zatwierdzania i integracja z Herdr.
+3. **Herdr nadzoruje sesje.** Nie zastępuje sandboxów, polityk, Guard ani autoryzacji człowieka.
+4. **Guard Core pozostaje mały i niezależny od API harnessu.** Preferowany TypeScript, ostateczny wybór po audycie istniejącego kodu i runtime. Interfejs stabilizujemy na podstawie działającego OpenCode.
+5. **Fast Rules:** jednoznacznie zgodne działania otrzymują ALLOW; twarde naruszenia DENY; zależne od interpretacji REVIEW. Brak obowiązkowego kontekstu nie oznacza ALLOW.
+6. **Każde REVIEW:** LLM Judge → Human Judge. LLM przedstawia analizę i dowody, ale sam nie udziela zgody.
+7. **Twardy DENY ma pierwszeństwo.** Zmiana twardej polityki wymaga osobnej, autoryzowanej zmiany konfiguracji; nie jest dostępna jako jednorazowe zatwierdzenie operacji.
+8. **Awaria przed autoryzacją lub uruchomieniem nie otwiera dostępu.** Brak UI, niedostępny Judge, nieprawidłowa odpowiedź, błąd adaptera lub timeout muszą skutecznie zatrzymywać operację na dopuszczonych ścieżkach.
+9. **Awaria po przekazaniu operacji do wykonania może oznaczać wynik nieustalony.** Brak odpowiedzi nie jest dowodem braku skutku; przed ponowieniem sprawdzamy stan.
+10. **Brain jest read-only.** Zakaz skutków ubocznych obejmuje także shell, MCP, własne narzędzia, delegowanie i operacje zewnętrzne, a nie tylko edycję plików repo.
+11. **Writer jest domyślnie programem.** Nie potrzebuje modelu ani sesji LLM. Nie uzupełnia braków i nie poprawia merytorycznej treści Braina.
+12. **Implementer wykonuje jedno zadanie na wywołanie.** Dodatkowo na plan i checkout przypada najwyżej jeden aktywny wykonawca w pierwszym wdrożeniu.
+13. **Kontrakt i polityki są chronione przed wykonawcą.** Raportowanie stanu nie daje prawa do zmiany wymagań, kryteriów odbioru ani uprawnień.
+14. **Bez nowej bazy i osobnego systemu wersjonowania handoffów.** Zachowujemy istniejące ID, statusy i historię. Dopuszczamy niewielkie metadane techniczne, blokady i hashe potrzebne do identyfikacji treści oraz uruchomień.
+15. **Nie deklarujemy uniwersalności na podstawie samego interfejsu.** Każdy wspierany adapter, tryb klienta i kanał działania musi mieć dowód działania lub dowód skutecznego wyłączenia.
+16. **Dowody ograniczają deklaracje.** Przejście zestawu testów potwierdza zachowanie w zbadanym zakresie; nie jest dowodem odporności na wszystkie możliwe błędy i prompt injection.
+
+## 3. Role, modele i uprawnienia
+
+| Rola | Ustawienie domyślne | Zakres odpowiedzialności i ograniczenia |
+| --- | --- | --- |
+| Migration Orchestrator | HIGH | Audyt, dozwolona migracja, konfiguracja Herdr, utrwalanie wyniku Brain i koordynacja; bez nieuzgodnionych zmian globalnych |
+| Brain | HIGH | Analiza repo, wymagania, istotne decyzje, pełny HANDOFF; brak zapisu i innych skutków ubocznych |
+| Writer / materializer | Bez modelu | Parsowanie, walidacja, bezpieczny zapis i atomowa publikacja dokładnych treści |
+| Implementer | LOW dla odpowiednio wydzielonych zadań | Wykonanie jednego T-xx, testy i raport; lokalne decyzje w zatwierdzonych granicach |
+| LLM Judge | FAST / LOW | Ocena operacji bez narzędzi powodujących skutki uboczne; analiza ma ustrukturyzowany wynik |
+| Agent Judge, opcjonalny | LOW / MEDIUM | Tylko dozwolona inspekcja konieczna do oceny; read-only, bez autonomicznej autoryzacji |
+| Human Judge | Człowiek | Approve once, Reject/Stop albo Escalate to Brain |
+| Mechanizm zapisu stanu | Deterministyczny handler, bez modelu | Walidowane przejęcie zadania, aktualizacja dozwolonych pól i evidence; może być częścią orkiestratora |
+
+Ostatni wiersz opisuje odpowiedzialność małego fragmentu kodu, nie nowego agenta ani osobnego serwisu.
+
+### 3.1. Rzeczywiste modele i eskalacja
+
+- HIGH/LOW w prompcie nie konfigurują modelu. Audyt ustala dostępne modele, wspierane warianty i efektywne ustawienia aktywnej sesji.
+- Nie przypisywać `#low` lub `#high` modelowi bez potwierdzonego wsparcia. Zapisać provider, model, effort/variant i sposób potwierdzenia.
+- Dla Writera nie wykonuje się kontroli modelu: ta rola nie korzysta z LLM.
+- LOW Implementera jest hipotezą kosztową. Dla powtarzających się niepowodzeń lub zadań wymagających trudnej analizy obowiązuje jawna ścieżka: podział zadania przez Brain albo zmiana profilu w już zatwierdzonym zakresie.
+- Przed pilotem ustalić limit prób i budżet eskalacji. Mocniejszy model nie uzyskuje szerszych uprawnień ani prawa do zmiany kontraktu.
+- Wynik benchmarku obejmuje koszt eskalacji i poprawek, nie tylko koszt pierwszego wywołania.
+
+## 4. Autoryzacja, decyzje i obsługa człowieka
+
+### 4.1. Co zatwierdza człowiek przed HANDOFF
+
+Opis Braina przed pierwszą zgodą obejmuje cel, granice, zachowanie publiczne, istotne zmiany danych, nowe zależności lub usługi, decyzje architektoniczne, ważne kompromisy oraz sposób odbioru.
+
+Brain może potem doprecyzować szczegóły w udzielonej delegacji. Nowa istotna decyzja powstała podczas przygotowania HANDOFF wymaga pokazania różnicy i autoryzacji. Nie powtarzamy zatwierdzania niezmienionych ustaleń.
+
+| Decyzja | Właściciel |
+| --- | --- |
+| Zakres, architektura, publiczne API, migracja danych, nowe zależności i integracje | Brain w ramach zatwierdzonego planowania |
+| Prywatna funkcja pomocnicza, nazwy, lokalna organizacja kodu, zgodny test brzegowy | Implementer, jeśli mieści się w kontrakcie i konwencjach repo |
+| Niejednoznaczność lub możliwe przekroczenie granicy | REVIEW |
+| Trwała zmiana kontraktu | Escalate to Brain i autoryzowana rewizja |
+| Brakujące treści HANDOFF | Brain; Writer zgłasza błąd |
+
+### 4.2. Ścieżka REVIEW
+
+1. Adapter zatrzymuje operację przed skutkiem.
+2. LLM Judge otrzymuje właściwy kontrakt, opis operacji i niezbędne dowody.
+3. Wynik Judge podlega walidacji schematu. Treść repo i wynik modelu są danymi do oceny, nie źródłem nowych uprawnień.
+4. Human Judge widzi operację, zasoby lub diff, powód REVIEW, właściwe wymaganie i rekomendację LLM wyraźnie oddzieloną od faktów.
+5. Człowiek wybiera Approve once, Reject/Stop albo Escalate to Brain.
+6. Adapter weryfikuje aktualność operacji i kontekstu przed użyciem zgody.
+
+Błąd Judge nie jest pozytywną rekomendacją. W takim przypadku operacja pozostaje zablokowana do poprawnego wznowienia ścieżki. Żaden interfejs ani zapisane pozwolenie nie może pomijać obowiązkowego Human Judge dla REVIEW.
+
+Approve once nie zmienia architektury ani przyszłych uprawnień. Escalate zatrzymuje zależną pracę i prowadzi do procedury rewizji z sekcji 8.4.
+
+## 5. HANDOFF, kompletność i transport
+
+### 5.1. Zawartość jednej kompletnej paczki
+
+HANDOFF zawiera:
+
+- cel, granice i zatwierdzone wymagania;
+- fakty potwierdzone w repo oraz bazowy stan, do którego się odnoszą;
+- decyzje Braina i granice delegacji Implementera;
+- kontrakty techniczne i testowe;
+- kolejność, zależności i blockery;
+- dokładnie jedną next action;
+- manifest docelowych ścieżek i mapowanie ID → pliki;
+- pełną treść każdego docelowego pliku;
+- mapowanie wymaganie → zadanie → kryterium odbioru / test;
+- jednoznaczną informację o zakończeniu paczki.
+
+Nie ma instrukcji „Writer uzupełni szczegóły”. Zatwierdzone wymaganie bez pokrycia w zadaniach i sposobie odbioru blokuje publikację READY.
+
+### 5.2. Minimalny kontrakt transportowy
+
+Pozostajemy przy Markdown jako formacie biznesowym. Bloki plików mają jeden jawny, testowany schemat z początkiem, końcem i ścieżką. Manifest i identyfikatory odpowiedzi są metadanymi transportu, nie nowym językiem planowania.
+
+W etapie 1 utrwalić reguły parsowania: kodowanie UTF-8, politykę końców linii, granice bloków, obsługę zagnieżdżonych code fences, odrzucanie kolizji delimiterów i zduplikowanych ścieżek. Nie wykonywać niejawnej normalizacji po ustaleniu treści odniesienia.
+
+Orkiestrator pobiera pełną odpowiedź z konkretnej sesji i wiadomości przez sprawdzone API, eksport lub równoważny kanał zachowujący treść. Potwierdza ukończenie odpowiedzi i utrwala ją pojedynczym zapisem. Nie rekonstruuje braków.
+
+Odczyt terminala przez Herdr służy obserwacji. Sam nie jest dowodem kompletności ani wierności HANDOFF. Dokumentacja opisuje ograniczenia odczytu historii. [S4]
+
+### 5.3. Limity i niepełne odpowiedzi
+
+- Audyt ustala rzeczywiste limity modelu i transportu; przed generowaniem stosujemy limit wielkości pojedynczego planu.
+- Długi plan dzielimy na autoryzowane, sensowne etapy, zachowując uzgodniony scope i zależności.
+- Każdy etap ma własny kompletny HANDOFF; nie publikujemy przypadkowo uciętej części.
+- Brak końca paczki, oczekiwanego pliku, poprawnego ID lub potwierdzenia zakończenia odpowiedzi oznacza błąd.
+- Writer nie dopowiada brakującego fragmentu. Brain przygotowuje poprawną paczkę przed publikacją.
+- Sumy kontrolne i długości oblicza kod. Nie opieramy walidacji na hashu wymyślonym przez model.
+
+### 5.4. Trzy różne walidacje
+
+| Walidacja | Co potwierdza |
+| --- | --- |
+| Kompletność merytoryczna | Zatwierdzone wymagania mają zadania i kryteria odbioru |
+| Wierność materializacji | Pliki odpowiadają dokładnie przyjętej treści HANDOFF |
+| Poprawność wykonania | Końcowy kod realizuje wymagania i przeszedł odpowiednią weryfikację |
+
+Przejście jednej kontroli nie zastępuje pozostałych. Pokrycie wymagań porównujemy z utrwaloną listą zatwierdzoną przed HANDOFF, a nie wyłącznie z wykazem wygenerowanym przez Brain wewnątrz tej samej paczki. Orkiestrator zachowuje tę listę i powiązanie z akceptacją; jej zmiana podlega procedurze rewizji.
+
+## 6. Writer — mechaniczny zapis i publikacja
+
+Writer jest deterministycznym programem o ograniczonym zakresie zapisu.
+
+1. Odbiera kompletną paczkę i sprawdza manifest oraz schemat bloków.
+2. Waliduje ID, mapowanie ID → pliki, linki, zależności i brak nierozwiązanych pól. Wykrywa brakujące zadania, duplikaty i cykle zależności.
+3. Dopuszcza wyłącznie przewidziane ścieżki pod wybranym `todos/<slug>/`. Odrzuca wyjście poza katalog, niedozwolone ścieżki absolutne i próby obejścia przez dowiązania.
+4. Zapisuje zestaw w odizolowanym obszarze roboczym.
+5. Porównuje zapisane treści z treściami odniesienia, w tym liczbę i kompletność plików.
+6. Publikuje gotowy zestaw dopiero po wszystkich walidacjach, z mechanizmem atomowego udostępnienia właściwym dla danego systemu plików.
+7. Przy błędzie pozostawia niekompletny materiał niedostępny dla Implementera i raportuje problem.
+
+Minimalny zestaw docelowy:
+
+- `todos/<slug>/plan.md`;
+- `todos/<slug>/implementer-prompt.md`;
+- `todos/<slug>/tasks/T-xx.md` dla wszystkich zadań.
+
+Istniejący aktywny plan nie jest nadpisywany w trybie tworzenia. Autoryzowana rewizja ma osobny, kontrolowany tryb opisany w sekcji 8.4. Ponowne uruchomienie Writera dla tej samej treści nie duplikuje zadań ani nie zeruje statusów.
+
+## 7. Guard Core, zaufany kontekst i zgody
+
+### 7.1. Granica kontroli
+
+Guard ocenia zgodność operacji z kontraktem. Sandbox i uprawnienia egzekwują granice skutków ubocznych. Sama zgodność nazwy komendy lub ścieżki nie dowodzi zgodności całego zachowania programu.
+
+Dla każdego dopuszczonego kanału określić: punkt przechwycenia przed skutkiem, dostępny kontekst, sposób blokowania, zachowanie przy awarii oraz wynik testu.
+
+Macierz obejmuje edycję i patch, shell, własne narzędzia, MCP, Code Mode lub odpowiednik, delegowanie, interaktywne procesy i stdin, procesy w tle, sieć oraz operacje poza repo. Nieobsługiwany kanał jest wyłączony skutecznie na niższym poziomie albo blokuje wdrożenie.
+
+Nie traktować szerokiej listy komend jako sandboxa. Testy i skrypty repo również mogą powodować skutki uboczne. Brain i Judge nie otrzymują kanału zapisu pod pozorem narzędzia do odczytu.
+
+### 7.2. Ujednolicony opis operacji
+
+Adapter przekazuje tylko kontekst, który rzeczywiście zna:
+
+| Pole logiczne | Źródło i zastosowanie |
+| --- | --- |
+| Harness, wersja i tryb klienta | Runtime, do ustalenia możliwości adaptera |
+| Repo / checkout / katalog roboczy | Zweryfikowana lokalizacja działania |
+| Sesja, agent, run ID i aktywne T-xx | Runtime i kontrolowany mechanizm przejęcia zadania, nie deklaracja z promptu |
+| Narzędzie, argumenty, zasoby, proponowany diff | Rzeczywiste dane wywołania, jeśli są dostępne |
+| Tożsamość kontraktu i twarde polityki | Zatwierdzona, chroniona treść |
+| Istotne warunki wstępne | Stan plików, skryptu lub innych wejść koniecznych do oceny |
+| Operation ID | Nadawany przez zaufany mechanizm; pozwala skorelować decyzję z wykonaniem |
+
+Brak danych potrzebnych do danego rozstrzygnięcia oznacza REVIEW albo DENY. Nie tworzymy pozornie kompletnych pól przez zgadywanie.
+
+Core zwraca ALLOW, DENY lub REVIEW, uzasadnienie, powiązane wymaganie oraz tożsamość ocenionej operacji. Adapter mapuje wynik zgodnie z faktyczną semantyką swojego API.
+
+Roboczy kontrakt adaptera: `normalizeAction`, `enforceDecision`, `requestHumanApproval`, `identifyActiveTask`, `recordEvidence`. Nazwy dopasować do istniejącego projektu.
+
+### 7.3. Ochrona polityk
+
+Implementer nie może modyfikować zatwierdzonego kontraktu, Guard, konfiguracji uprawnień, profili, hooków ani mapowania tożsamości zadania w sposób rozszerzający własną władzę.
+
+Aktualizacja stanu przechodzi przez ograniczony handler. Handler odrzuca zmianę wymagań i kryteriów odbioru przy operacji przeznaczonej do zapisu statusu. Repo, logi, output narzędzi i odpowiedź Judge nie są autorytatywnym źródłem uprawnień.
+
+Jeśli przedmiotem migracji jest sam kod ochrony, zmiany wykonuje odpowiednia rola w osobnym, jawnie zatwierdzonym zakresie i izolacji. Test ochrony nie może korzystać wyłącznie z komponentu, który wykonawca właśnie dowolnie zmienia.
+
+### 7.4. Approve once
+
+Zgoda dotyczy dokładnie ocenionej operacji i jest wiązana z:
+
+- operation ID i run ID;
+- właściwym zadaniem, sesją i wykonawcą;
+- narzędziem oraz rzeczywistymi argumentami;
+- repo i katalogiem roboczym;
+- aktualną tożsamością zatwierdzonego kontraktu;
+- ocenionym diffem lub kontrolowanymi wejściami oraz istotnymi warunkami wstępnymi.
+
+Przed wykonaniem sprawdzić, czy warunki nie uległy zmianie. Sama niezmieniona komenda nie wystarcza, gdy podmieniono wywoływany skrypt. Jeśli danego rodzaju operacji nie można wystarczająco powiązać z ocenionymi wejściami, należy zawęzić dopuszczone narzędzie lub zatrzymać działanie.
+
+Zgoda jest konsumowana atomowo dla jednego dopuszczenia operacji do wykonania. Nie przechodzi na retry, nowe argumenty, inny kontrakt, zadanie ani sesję. Po restarcie procesu nie odzyskujemy ważności dawnych zgód; zachowujemy wyłącznie historię decyzji.
+
+To nie jest obietnica dokładnie jednokrotnego skutku w dowolnym systemie zewnętrznym. Niepewny wynik obsługujemy przez uzgodnienie rzeczywistego stanu, a klucze idempotencji wykorzystujemy tylko tam, gdzie dane narzędzie faktycznie je wspiera.
+
+## 8. Stan, współbieżność, rewizje i wznowienie
+
+### 8.1. Źródła prawdy i prawo zapisu
+
+- `plan.md` pozostaje jedyną kolejką i rejestrem statusów, wyników, blockerów oraz evidence.
+- `tasks/T-xx.md` jest niemutowalną specyfikacją poza autoryzowaną rewizją; nie duplikuje statusów.
+- `implementer-prompt.md` pozostaje i zawiera zasady jednego zadania oraz obowiązkowego STOP.
+- Implementer raportuje wynik; kontrolowany mechanizm zapisuje dozwolone pola i weryfikuje przejścia stanu.
+- Zasady READY / PARTIALLY READY / BLOCKED, statusy wykonania i weryfikacji oraz MANUAL PENDING zachowujemy zgodnie z istniejącą polityką repo.
+- Audyt opisuje legalne przejścia i wybór następnego zadania. Nie można rozpocząć zadania z nierozwiązanym blockerem lub niespełnioną zależnością.
+
+### 8.2. Przejęcie zadania i publikacja stanu
+
+Przed uruchomieniem Implementera atomowo przejąć plan/checkout i aktywne T-xx. Zapisać run ID, właściciela, tożsamość kontraktu oraz bazowy stan repo.
+
+Drugie uruchomienie nie może przejąć tej samej pracy. Blokada musi działać także pomiędzy niezależnymi procesami Herdr lub adaptera. Pierwsza wersja świadomie serializuje pracę nad jednym planem i checkoutem.
+
+Po awarii nie usuwać blokady wyłącznie dlatego, że upłynął czas. Najpierw sprawdzić, czy poprzedni wykonawca i jego procesy nadal działają. Jeśli nie można tego ustalić, zatrzymać nowe wykonanie do rozstrzygnięcia.
+
+Zapisy statusów i evidence są atomowe oraz wykrywają zmianę stanu od czasu odczytu. Nie nadpisują cudzych aktualizacji. Dla przyszłych prac równoległych najpierw zaprojektować izolację checkoutów/worktree i konflikty zakresu; nie jest to wymóg pierwszego wdrożenia.
+
+### 8.3. Tożsamość kontraktu i repo
+
+Nie tworzymy katalogów `v1/v2/v3` ani osobnego systemu wersjonowania. Program wylicza identyfikator treści zatwierdzonego kontraktu i zapisuje odniesienie do bazowego repo.
+
+Identyfikator obejmuje kanonicznie zapisane wymagania, specyfikacje i kryteria odbioru. Nie obejmuje bieżących statusów ani dopisywanego evidence, aby zwykłe raportowanie postępu nie zmieniało tożsamości kontraktu. Reguły wyodrębniania i serializacji są deterministyczne i testowane.
+
+Sam Git HEAD nie wystarcza przy dirty working tree. Odnotować także istotne niezacommitowane zmiany oraz wymagane pliki nieśledzone. Nie nadpisywać ich i nie stosować automatycznego resetu.
+
+Przy wznowieniu sprawdzić aktualność kontraktu, bazowego stanu i rzeczywistych rezultatów. Pamięć sesji ani samo ID T-xx nie mają pierwszeństwa przed aktualną, zatwierdzoną specyfikacją.
+
+### 8.4. Autoryzowana rewizja aktywnego planu
+
+1. Zatrzymać zależne działania i rozstrzygnąć operacje już przekazane do wykonania.
+2. Brain przedstawia różnicę, przyczynę i wpływ na zakres, zadania, zależności, testy i wcześniejsze evidence.
+3. Uzyskać wymaganą autoryzację nowych istotnych decyzji.
+4. Brain tworzy kompletny HANDOFF rewizji w ramach istniejącego planu.
+5. Writer działa w trybie rewizji: sprawdza tożsamość stanu bazowego, zachowuje istniejące ID, historię i niepowiązane statusy.
+6. Przeprowadzić walidację i atomowo opublikować autoryzowaną zmianę.
+7. Unieważnić zależne oczekujące zgody. Ocenić aktualność wcześniejszych testów; nie resetować bez potrzeby zadań, na które zmiana nie wpływa.
+8. Wznowić dopiero po sprawdzeniu, że wykonawca czyta nowy kontrakt.
+
+### 8.5. Nieustalony wynik operacji
+
+W evidence odróżniamy fakty: żądanie oceny, uzyskanie zgody, przekazanie do wykonania oraz potwierdzenie wyniku. Można je zapisać w istniejącym rejestrze bez nowej bazy i bez zmiany nazw statusów zadań.
+
+| Sytuacja | Zachowanie |
+| --- | --- |
+| Brak autoryzacji i brak uruchomienia | Operacja zablokowana |
+| Odmowa przed skutkiem | Brak wykonania, powód i blocker |
+| Operacja uruchomiona i wynik potwierdzony | Zapisać rezultat oraz evidence |
+| Operacja uruchomiona, odpowiedź utracona | Wynik nieustalony; inspekcja stanu przed decyzją o dalszej pracy |
+| Restart z oczekującą zgodą | Zgoda nieważna; ponowna ocena |
+
+Nie obiecywać rollbacku dowolnej zewnętrznej operacji. Dla skutków nieodwracalnych sposób weryfikacji wyniku i ewentualnej kompensacji musi być znany przed dopuszczeniem narzędzia.
+
+## 9. Implementer, test-first i evidence
+
+Implementer:
+
+1. Odczytuje `plan.md`, aktywne T-xx, właściwe instrukcje i potrzebne źródła.
+2. Potwierdza przejęcie zadania, aktualność kontraktu, zależności i brak blockerów.
+3. Stosuje test-first oraz `test-gap-discovery` zgodnie z polityką repo.
+4. Wykonuje wyłącznie zadanie i lokalne decyzje objęte delegacją.
+5. Uruchamia obowiązkową weryfikację na końcowym stanie zmian.
+6. Raportuje wyniki, niedostępne kontrole i blockery.
+7. Kończy pracę po aktualizacji stanu; nie rozpoczyna kolejnego T-xx.
+
+Evidence obejmuje rzeczywiste polecenie lub czynność, lokalizację, wynik/exit code, istotny output, run ID oraz stan kodu, którego dotyczy. Mechanizm weryfikacji korzysta z rezultatów narzędzi, a nie wyłącznie z opisowej deklaracji modelu.
+
+Zmiana kodu po teście wymaga oceny, czy test pozostaje aktualny. Brak obowiązkowej weryfikacji nie pozwala uznać zadania za zaakceptowane. MANUAL PENDING pozostaje uczciwym stanem, nie zamiennikiem sukcesu.
+
+Zastane błędy i niespełnione testy zapisać w baseline; nie rozszerzać automatycznie zakresu zadania o ich naprawę. Weryfikacja produktu, zakresu i regresji jest odrębna od testów samego workflow.
+
+## 10. Etapy realizacji i bramki
+
+### Etap 0 — Audyt, baseline i krótki dowód wykonalności
+
+Sprawdzić faktyczny checkout, dirty working tree, aktywne plany, skille `brain-to-implementer`, `make-plan`, `test-gap-discovery`, instrukcje i referencje. Ustalić minimalną listę plików do zmiany, wersje, binaria, profile, modele, polityki, ścieżki pluginów oraz konfiguracje lokalne/globalne.
+
+Zmierzyć obecny workflow i przed próbą określić kryteria porównania. W izolacji wykazać: read-only Brain, przechwycenie pełnej odpowiedzi, blokadę przykładowego zapisu, kontrolę alternatywnego kanału i zatrzymanie przy braku decyzji lub awarii handlera. Sprawdzić dostępność interaktywnego zatwierdzania bez budowania pełnego UI.
+
+**Done:** mapa środowiska, zachowane zmiany i aktywne plany, baseline, wyniki małych eksperymentów oraz jawna lista kanałów dopuszczonych do prototypu. Niewykonalna podstawowa gwarancja jest blockerem, nie problemem odkładanym do pilota.
+
+### Etap 1 — Najpierw główne założenie: minimalny pełny przepływ
+
+Usprawnić istniejący `brain-to-implementer` bez dublowania `make-plan` i `test-gap-discovery`. Wprowadzić wyjaśnienie → akceptację → pełny HANDOFF. Uruchomić deterministycznego Writera oraz Implementera dla jednego zadania, z minimalną blokadą przejęcia i kontrolowanym zapisem stanu.
+
+Skonfigurować niezbędne profile OpenCode i osobne sesje Herdr; potwierdzić rzeczywisty model oraz effort. Writer nie wymaga profilu modelowego. Wykorzystać tylko kanały sprawdzone w etapie 0, w izolowanym repo. Każde nieobsługiwane REVIEW blokuje operację.
+
+Już prototyp nie udostępnia Implementerowi częściowego zestawu plików. Etap 4 rozszerza odporność publikacji na awarie, a nie dopiero wprowadza zakaz użycia niekompletnego planu.
+
+**Done:** feature i refactor przechodzą podstawowy przepływ, pliki są kompletne i zgodne 1:1, Implementer wykonuje tylko T-01, evidence jest zapisane, T-02 nie zostaje rozpoczęte. To pierwszy rezultat użytkowy, jeszcze bez deklaracji gotowości produkcyjnej.
+
+### Etap 2 — Wczesne sprawdzenie głównej hipotezy
+
+Porównać minimalny przepływ z baseline: jakość, pełny czas, czas Braina, tokeny, koszty, tool calls, zapisy, konteksty, poprawki i czas człowieka. Oddzielić zmierzone wartości od nieznanego jeszcze narzutu pełnego Guard/Judge.
+
+**Done:** istnieje decyzja oparta na wynikach: kontynuować, uprościć/poprawić albo zatrzymać rozszerzanie. Nie uznawać oszczędności wyłącznie na podstawie mniejszej liczby zapisów Braina. Propozycja istotnej zmiany celu projektu wymaga uzgodnienia.
+
+### Etap 3 — Wspólne kontrakty i mały Guard Core
+
+Na podstawie działającego przepływu wydzielić wspólne prompty, walidację, opis operacji, wyniki oceny i minimalne funkcje klasyfikacji. Utrwalić delegację decyzji, mapowanie wymagań oraz kontrakt adaptera. Nie importować typów OpenCode do Core.
+
+**Done:** neutralne testy Core działają; brakujący kontekst nie prowadzi do ALLOW; abstrakcja odzwierciedla sprawdzone potrzeby pierwszego adaptera. Nie implementujemy jeszcze pozostałych adapterów.
+
+### Etap 4 — Utwardzenie Writera, kontraktu i stanu
+
+Uzupełnić atomową publikację, ograniczenia ścieżek, identyfikację kontraktu, ochronę polityk, kontrolowany zapis `plan.md`, blokady między procesami, rewizje oraz obsługę nieustalonego wyniku.
+
+**Done:** przechodzą testy częściowego zapisu, podwójnego uruchomienia, próby zmiany reguł przez Implementera, nieaktualnej sesji i autoryzowanej rewizji bez utraty historii. Bez nowej bazy i bez niszczenia aktywnych planów.
+
+### Etap 5 — Pełny adapter Decision Guard dla OpenCode V2
+
+Zweryfikować rzeczywiste `Plugin.define()`, `permission.hook("evaluate")`, `tool.hook("execute.before")` i wymagane mechanizmy przed kodowaniem integracji. Zbudować macierz pokrycia i skutecznie zamknąć wszystkie dopuszczone kanały, w tym plugin tools, Code Mode, shell, MCP, delegowanie oraz procesy interaktywne.
+
+Sprawdzić zachowanie przy błędzie samego pluginu/handlera oraz wynik scalonych konfiguracji. Twarde polityki muszą pozostać skuteczne po uwzględnieniu profilu, zapisanych zgód i innych pluginów.
+
+**Done:** działania zakazane są zatrzymywane przed skutkiem; błędy mechanizmu kontroli nie otwierają dostępu; każda luka oznacza skuteczne wyłączenie kanału albo blocker.
+
+### Etap 6 — LLM Judge → Human Judge i jednorazowe zgody
+
+Zrealizować pełną ścieżkę REVIEW z walidacją wyniku Judge, przejrzystym UI, Approve once / Reject / Escalate, związaniem zgody z aktualną operacją i atomowym jej zużyciem. Agent Judge pozostaje opcjonalny.
+
+Użyć natywnego UI, jeśli potwierdzono wymagane zachowanie; w przeciwnym razie minimalnej aktywnej integracji. Nie pozostawiać możliwości zamiany REVIEW w trwałe „always allow”. Brak UI lub awaria oznacza blokadę przed uruchomieniem.
+
+**Done:** człowiek może odrzucić rekomendację LLM; zgoda nie działa po zmianie wejść lub kontraktu; zapisane zgody i inne mechanizmy autoaccept nie pomijają Human Judge.
+
+### Etap 7 — Niezawodne wykonanie, wznowienie i weryfikacja
+
+Dopracować reusable `implementer-prompt.md`, dobór kontekstu, test-first, blokery, dependencies, eskalację trudności i evidence. Sprawdzić przerwanie przed i po skutku ubocznym, odzyskanie blokady oraz aktualność końcowych testów.
+
+**Done:** jedno zadanie, przerwany task, brak obowiązkowej weryfikacji, nieustalony wynik oraz stary kontrakt mają jednoznaczne zachowanie. Stan Herdr nie jest traktowany jako automatyczne ukończenie T-xx.
+
+### Etap 8 — Pilot end-to-end i benchmark pełnego OpenCode
+
+W izolowanym repo przeprowadzić cały przepływ z pełnym Guard/Judge i reprezentatywnymi zadaniami. Uruchomić scenariusze negatywne z sekcji 13. Zmierzyć rzeczywisty koszt i czas wszystkich ról oraz pracy człowieka.
+
+Przygotować instrukcję operacyjną, ograniczenia i rollback dla pierwszego wdrożenia. Zarejestrować konkretną wersję OpenCode, Herdr, integracji, model i tryb klienta.
+
+**Done:** wszystkie wymagane testy dla dopuszczonej konfiguracji mają dowody; pełny benchmark spełnia ustalone kryteria; brak nierozstrzygniętych luk. **Pierwszy milestone produkcyjny:** OpenCode V2, wyłącznie w granicach przetestowanego pokrycia.
+
+### Etap 9 — Adapter Codex CLI
+
+Dodać adapter zgodny z faktycznymi możliwościami zainstalowanej wersji. Zweryfikować `PreToolUse`, `PermissionRequest`, `apply_patch`, shell, MCP, subagentów i wejście do trwałych procesów. Judge wywoływać przez wspierany handler; nie zakładać działania typów `prompt`/`agent`.
+
+Nie mapować automatycznie REVIEW na `permissionDecision: "ask"`. Wykazać punkt zatrzymania i aktywną ścieżkę Human Judge; błąd hooka, brak MCP czy timeout nie mogą powodować wykonania. Jeśli natywne mechanizmy nie zapewniają wymaganej gwarancji, zastosować skuteczne ograniczenie niżej albo uznać tę konfigurację za niewspieraną.
+
+Potwierdzić modele, effort, tożsamość wykonawcy oraz integrację Herdr `--kind codex`.
+
+**Done:** wspólne testy i testy właściwe dla adaptera przechodzą w runtime; różnice są jawne; brakujące możliwości są skutecznie wyłączone. **Drugi milestone.**
+
+### Etap 10 — Adapter Claude Code
+
+Dodać adapter oparty na rzeczywistych `PreToolUse`/`PermissionRequest` i konfiguracji danej wersji. Dla krytycznej kontroli preferować przewidywalny command handler ze wspólnym Core. Typy modelowe stosować tylko tam, gdzie ich zachowanie zostało potwierdzone.
+
+Jawnie skonfigurować i przetestować blokadę przy błędzie handlera, timeoutcie, nieprawidłowym wyniku oraz braku UI. Zweryfikować znaczenie kodów wyjścia i obiektów decyzji dla każdego eventu; nie przenosić reguł z innego hooka przez analogię.
+
+Potwierdzić efektywny model/effort, ochronę narzędzi i integrację Herdr `--kind claude`.
+
+**Done:** te same wymagania, testy i granice gwarancji są wykazane w runtime. **Trzeci milestone.**
+
+### Etap 11 — Przenośność, końcowy benchmark i dokumentacja
+
+Uruchomić wspólne fixtures na wszystkich adapterach. Sprawdzić praktyczne kombinacje: Brain w jednym harnessie, materializer uruchomiony przez drugi, Implementer w trzecim. Writer pozostaje programem, niezależnie od miejsca uruchomienia.
+
+Porównać wyniki po dodaniu adapterów. Udokumentować instalację, wsparcie wersji i trybów, blockery, zgody, rewizje, recovery, rollback oraz ponowne testy po aktualizacji narzędzi.
+
+**Done:** trzy adaptery przechodzą wspólne wymagania w zadeklarowanych konfiguracjach, zachowują treść i tożsamość zadań oraz mają zmierzone koszty i jawne ograniczenia. **Dopiero tutaj cały projekt multi-harness jest ukończony.**
+
+## 11. Macierz kompatybilności i granice wsparcia
+
+Macierz prowadzić dla kombinacji **harness × wersja × tryb klienta × kanał narzędziowy**. Wiersz z samą nazwą produktu nie jest dowodem zgodności.
+
+| Możliwość | OpenCode V2 | Codex CLI | Claude Code |
+| --- | --- | --- | --- |
+| Start i sesje Herdr | Potwierdzić uruchamiane binarium, integrację i właściwą sesję | `--kind codex` + sprawdzona integracja | `--kind claude` + sprawdzona integracja |
+| Model i effort | Profil, wariant i efektywny model sesji | Konfiguracja/parametry oraz potwierdzenie runtime | Konfiguracja/profil i potwierdzenie runtime |
+| Kontrola przed skutkiem | Permission/tool hooks + kontrola narzędzi własnych | Wspierane hooki i niższe ograniczenia dla luk | Wspierane hooki, poprawna semantyka eventu i failure policy |
+| Human Judge | Natywne UI albo minimalna integracja spełniająca kontrakt | Sprawdzony host/UI i rzeczywisty punkt wstrzymania | Sprawdzony tryb UI/host oraz adapter |
+| Writer | Wspólny program | Ten sam program | Ten sam program |
+| Headless/remote | Osobna weryfikacja; brak UI blokuje REVIEW | Osobna weryfikacja | Osobna weryfikacja |
+| Interaktywne procesy | Kontrola dalszych wejść lub wyłączenie | Szczególnie sprawdzić `write_stdin` | Kontrola dalszych wejść lub wyłączenie |
+| Sandbox i twarde ograniczenia | Wymagane dla dopuszczonego zakresu | Wymagane | Wymagane |
+
+Dla każdej pozycji zapisać: wersję, tryb, datę sprawdzenia, wynik, evidence i ograniczenie. „Nieobsługiwane” oznacza wyłączony kanał z testem blokady, a nie przemilczaną lukę.
+
+### 11.1. Potwierdzone ograniczenia do uwzględnienia
+
+Stan źródeł: 25.10.2026. Przed implementacją ponownie sprawdzić dokumentację i zainstalowany runtime.
+
+| Obszar | Ustalenie ze źródeł | Konsekwencja |
+| --- | --- | --- |
+| OpenCode: plugin tools | Samo `options.permission` nie zapewnia automatycznej kontroli; wskazano jawne `ctx.permission.assert` w executorze, dostępne od v2.0.29, również dla Code Mode. [S3] | Testować narzędzia własne bezpośrednio i przez pośredników |
+| OpenCode: konfiguracja i zgody | Reguły uwzględniają kolejność; natywne odpowiedzi obejmują once, always i reject. [S2] | Sprawdzić efektywną politykę i wykluczyć trwałe zatwierdzenie REVIEW; eskalację obsłużyć jawnie |
+| Herdr: sesja i task | Oczekiwanie nie śledzi indywidualnych tur; timeout nie dowodzi niewysłania promptu. [S4] | Korelować wynik z run ID i taskiem; sprawdzać stan przed retry |
+| Herdr: tryb OpenCode | Raportowanie lifecycle V2 pochodzi z pluginu TUI; Mini/headless nie dostarczają tego raportowania. [S5] | MVP ograniczyć do sprawdzonego trybu, pozostałe badać osobno |
+| Codex: mapowanie i błędy | `PreToolUse` z `permissionDecision: "ask"` jest opisane jako nieobsługiwane z kontynuacją narzędzia; błędy hooków MCP nie blokują operacji. [S6] | Nie używać naiwnego mapowania REVIEW; wykazać skuteczną blokadę także przy awarii |
+| Codex: pokrycie | `write_stdin` nie uruchamia ponownie `PreToolUse`; `command`/`mcp_tool` są wspierane, a `prompt`/`agent` pomijane. [S6] | Kontrolować lub odciąć trwałe procesy; używać wspieranych handlerów |
+| Claude: awaria hooka | Wiele błędów/timeoutów nie blokuje domyślnie działania; `onFailure: "block"` dla command/http wymaga co najmniej v2.1.295 i nie dotyczy hooków w tle. [S7] | Ustawić właściwą politykę i przetestować brak handlera, crash, timeout oraz błędny output |
+
+## 12. Benchmark i kryteria wartości
+
+Wynik porównujemy na tych samych wymaganiach, kryteriach odbioru i porównywalnym stanie repo. Oddzielić eksperyment prototypu z etapu 2, pełny pilot z etapu 8 oraz końcowe porównanie z etapu 11.
+
+| Wymiar | Mierniki |
+| --- | --- |
+| Jakość | Akceptacja bez poprawek, pominięte wymagania, regresje i liczba iteracji |
+| Czas | Od prośby do zaakceptowanego rezultatu, czas Brain, oczekiwanie na decyzje |
+| Koszt modeli | Wszystkie role, konteksty, ponowienia, eskalacje i Judge |
+| Praca człowieka | Liczba REVIEW, czas obsługi, fałszywe alarmy i powtórne zgody |
+| Operacje | Tool calls, zapisy, starty sesji, długość HANDOFF i przekazane dane |
+| Niezawodność | Nieudane transfery, restarty, duplikacje, nieustalone wyniki |
+| Kontrola | Wykryte naruszenia i niepotrzebne blokady w zdefiniowanym zestawie testów |
+
+Przed pomiarem ustalić mierzalne progi, zbiór zadań, sposób powtórzeń i dopuszczalny narzut. Nie wpisywać arbitralnej oszczędności procentowej bez danych.
+
+Warunki przejścia:
+
+- wymagania bezpieczeństwa i integralności są spełnione na dopuszczonych ścieżkach;
+- jakość nie spada poniżej ustalonego poziomu;
+- koszt, czas i obciążenie człowieka mieszczą się w zaakceptowanych granicach;
+- wynik uzasadnia dalsze rozszerzanie;
+- jeśli korzyścią jest lepsza kontrola przy większym koszcie, ten kompromis zostaje jawnie uzgodniony zamiast przedstawiany jako oszczędność.
+
+Niespełniona bramka uruchamia poprawę lub zatrzymanie rozbudowy. Nie usuwa samowolnie uzgodnionego zakresu trzech harnessów; wymaga przedstawienia wyników i propozycji decyzji.
+
+## 13. Testy akceptacyjne
+
+Zachowujemy ID A-01–A-18 i doprecyzowujemy ich znaczenie. Nowe przypadki rozszerzają zestaw. Testy uruchamiamy na poziomie Core, adaptera i rzeczywistego runtime odpowiednio do ryzyka.
+
+| ID | Scenariusz | Oczekiwanie |
+| --- | --- | --- |
+| A-01 | Brain otrzymuje refactor | Opis efektu i tabela przed/po przed planem |
+| A-02 | Brain po akceptacji | Jeden pełny HANDOFF; brak skutków ubocznych |
+| A-03 | Writer otrzymuje poprawny HANDOFF | Dokładne treści, właściwe ID, manifest i linki |
+| A-04 | Brak bloku lub ID | Brak publikacji READY; konkretny błąd |
+| A-05 | Implementer uruchamia T-01 | T-02 pozostaje nieuruchomione |
+| A-06 | Niejednoznaczny kontrakt | Zatrzymanie przed zależnym działaniem |
+| A-07 | Jednoznacznie dozwolona akcja | Fast ALLOW bez Judge i popupu |
+| A-08 | Twarde naruszenie | DENY bez obejścia przez LLM lub jednorazową zgodę |
+| A-09 | REVIEW | LLM Judge, następnie Human Judge zawsze |
+| A-10 | LLM rekomenduje allow, człowiek odrzuca | Brak wykonania; powód i evidence |
+| A-11 | Zmienione argumenty po Approve once | Poprzednia zgoda nie działa |
+| A-12 | Brak UI, timeout lub RPC przed uruchomieniem | Brak wykonania; bezpieczna możliwość wznowienia |
+| A-13 | Alternatywny zapis przez shell/MCP | Kontrola przed skutkiem albo skuteczna blokada kanału |
+| A-14 | Restart Herdr w trakcie zadania | Sprawdzenie stanu, bez ślepego replay |
+| A-15 | Niedostępna obowiązkowa weryfikacja | Brak akceptacji zadania; zachowane evidence i MANUAL PENDING, jeśli właściwe |
+| A-16 | Prompt injection w repo lub wyniku Judge | Treść nie zmienia autorytatywnego kontraktu ani uprawnień |
+| A-17 | Model i effort ról modelowych | Potwierdzone efektywne ustawienia; Writer bez modelu |
+| A-18 | Mieszany przepływ między harnessami | Zachowana treść, tożsamość zadań i zasady wykonania |
+| A-19 | Brak handlera/interpretera, crash, timeout, zły JSON | Awaria kontroli nie dopuszcza operacji |
+| A-20 | Dwa starty tego samego planu/tasku | Tylko jeden wykonawca przejmuje pracę |
+| A-21 | Zmiana skryptu, diffu lub istotnych warunków po zgodzie | Nieaktualna zgoda zostaje unieważniona |
+| A-22 | Ucięty lub zbyt duży HANDOFF, kolizje bloków | Brak publikacji; czytelny błąd i kontrolowane ponowienie |
+| A-23 | Implementer próbuje zmienić Guard, politykę lub wymagania | Zablokowana zmiana źródła uprawnień |
+| A-24 | Zerwane połączenie po przekazaniu operacji do wykonania | Wynik nieustalony; sprawdzenie skutków przed retry |
+| A-25 | Awaria Writera między zapisami plików | Częściowy zestaw nie staje się aktywnym planem |
+| A-26 | Wyjście poza katalog, dowiązanie, niedozwolona ścieżka | Brak zapisu poza zakresem materializera |
+| A-27 | Evidence testów sprzed ostatniej istotnej zmiany | Nie wystarcza do odbioru końcowego kodu |
+| A-28 | HANDOFF poprawny składniowo, pomija wymaganie | Walidacja pokrycia blokuje READY |
+| A-29 | Autoryzowana rewizja aktywnego planu | Zachowane ID i historia; poprawna aktualizacja oraz unieważnienie zależnych zgód |
+| A-30 | Eskalacja z LOW lub podział trudnego zadania | Zachowane uprawnienia i uzgodniony scope |
+| A-31 | Kolejne wejście do interaktywnego procesu | Osobna właściwa kontrola albo wyłączona ścieżka |
+| A-32 | Własny plugin tool bezpośrednio i przez Code Mode | Ta sama skuteczna kontrola przed skutkiem |
+| A-33 | Błędny wynik lub niedostępność Judge | Brak auto-allow i brak wykonania |
+| A-34 | Duplikat ID, brak zadania, cykl zależności lub uszkodzony link | Odrzucenie niepoprawnego planu |
+| A-35 | Zapisana zgoda, autoaccept lub drugi plugin odpowiadający na approval | REVIEW nadal wymaga właściwej decyzji człowieka |
+| A-36 | Inna wersja lub tryb TUI/headless | Brak nieuprawnionego dziedziczenia deklaracji wsparcia; osobny test lub blokada |
+| A-37 | Stara blokada, ale wykonawca nadal działa | Brak równoczesnego przejęcia; ustalenie stanu |
+| A-38 | Ponowne uruchomienie Writera z tą samą paczką | Brak duplikacji i resetowania statusów |
+| A-39 | Porównanie z baseline | Te same wymagania; pełne koszty i jawny zakres pomiaru |
+| A-40 | Próba skutku ubocznego przez Brain/Judge | Blokada także przez shell, MCP i delegowanie |
+| A-41 | Wznowienie sesji po zmianie kontraktu | Stary kontekst nie autoryzuje wykonania |
+| A-42 | Migracja lub rollback przy dirty working tree | Zachowane cudze zmiany, aktywne plany i historyczne evidence |
+| A-43 | Późniejsza reguła/config osłabia ograniczenie | Twarda polityka nadal skuteczna albo konfiguracja blokuje start |
+| A-44 | Herdr zgłasza idle/done po niewłaściwej turze | Task nie zostaje uznany za ukończony bez właściwego wyniku |
+
+Scenariusze dotyczące wyłączonej funkcji wymagają dowodu blokady. Pominięcie z powodu braku wsparcia musi być jawne i nie może pozostawiać czynnego kanału. A-18 jest końcowym testem przenośności; brak pozostałych adapterów nie blokuje samego prototypu OpenCode.
+
+## 14. Minimalna struktura rozwiązania
+
+Przed tworzeniem katalogów znaleźć rzeczywisty układ repo. Poniższe ścieżki są przykładem odpowiedzialności, nie obowiązkiem stworzenia osobnego frameworku.
+
+| Obszar | Przykładowa lokalizacja | Zawartość |
+| --- | --- | --- |
+| Wspólne reguły | `.agent-workflow/core/` | Opis operacji, klasyfikacja, walidacja i wspólne kontrakty |
+| Materializer | Istniejący skrypt lub mały moduł w `.agent-workflow/` | Mechaniczny zapis, walidacja i publikacja |
+| Prompty | `.agent-workflow/prompts/` lub istniejące skille | Brain, Implementer i migracja; bez obowiązkowego promptu LLM Writera |
+| Testy | Istniejący układ testów lub `.agent-workflow/tests/` | Fixtures i scenariusze wspólne |
+| Adaptery | `.agent-workflow/adapters/<harness>/` | Wyłącznie integracja z konkretnym runtime |
+| Profile OpenCode | Faktycznie używana konfiguracja projektowa | Rzeczywiste modele, effort i uprawnienia |
+| Skille | Istniejące `brain-to-implementer`, `make-plan`, `test-gap-discovery` | Aktualizacja bez dublowania źródeł zasad |
+| Plany | `todos/<slug>/` | `plan.md`, `implementer-prompt.md`, `tasks/T-xx.md` |
+
+Konfiguracje Codex/Claude dodawać dopiero w ich etapach i we właściwych lokalizacjach. Techniczna blokada lub obszar roboczy publikacji nie jest drugą kolejką zadań. Audytowe metadane pozostają w istniejącym evidence, a chroniony kod zarządza nimi w kontrolowany sposób.
+
+## 15. Migracja, rollback i warunki zatrzymania
+
+### 15.1. Ochrona istniejącej pracy
+
+- Zachować zaakceptowany scope, testy, ID, statusy i historię aktywnych planów.
+- Zachować `implementer-prompt.md`; aktualizować wzorzec w skillu, a aktywne plany tylko w autoryzowanym trybie.
+- Nie instalować globalnych pakietów ani nie modyfikować sekretów bez odrębnej zgody.
+- Zapisać zakres zmienianych konfiguracji i punkt powrotu przed zmianą. Współdzielonych konfiguracji nie nadpisywać całym plikiem bez analizy innych wpisów.
+- Nowy workflow włączać etapowo; istniejące aktywne plany nie są automatycznie konwertowane.
+- Przypiąć lub zapisać sprawdzone wersje. Aktualizacja runtime lub pluginu unieważnia odpowiednią część deklaracji pokrycia do czasu testów.
+
+### 15.2. Rollback
+
+Rollback przywraca wyłącznie zmiany konfiguracji i komponentów wykonane przez migrację, po sprawdzeniu późniejszych modyfikacji. Nie usuwa pracy użytkownika, aktywnych planów, wyników ani historii.
+
+Przed wyłączeniem nowego workflow zatrzymać aktywne wykonanie, rozstrzygnąć operacje z nieustalonym wynikiem, unieważnić zgody i zachować evidence. Nie wykonywać automatycznego resetu checkoutu.
+
+Procedurę OpenCode przygotować przed pierwszym użyciem produkcyjnym; później rozszerzać ją na kolejne adaptery.
+
+### 15.3. Warunki zatrzymania
+
+Zatrzymać zależną pracę, jeśli:
+
+- nie można wykazać blokady przed skutkiem albo awaria handlera powoduje kontynuację;
+- nie ma pełnego HANDOFF lub wiarygodnego powiązania z konkretną odpowiedzią;
+- aktywny kontrakt nie odpowiada temu, na podstawie którego działa sesja;
+- istnieje nieustalony wynik wcześniejszej operacji lub nierozstrzygnięty drugi wykonawca;
+- REVIEW nie ma kompletnej ścieżki LLM Judge → Human Judge;
+- wymagane testy lub evidence są niedostępne albo nieaktualne;
+- benchmark nie uzasadnia kolejnego etapu zgodnie z ustalonymi kryteriami;
+- rozszerzenie wymaga nieuzgodnionej zmiany scope lub uprawnień.
+
+Nie nazywać systemu produkcyjnym ani multi-harness „gotowym” na podstawie samej konfiguracji, interfejsu lub deklaracji agenta.
+
+## 16. Źródła techniczne do weryfikacji podczas wdrożenia
+
+Źródła potwierdzają opisane możliwości i ograniczenia na moment przeglądu. Nie zastępują testu zainstalowanej wersji.
+
+- [S1] [OpenCode V2 — Plugin API](https://opencode.ai/v2/docs/build/plugins/)
+- [S2] [OpenCode V2 — Permissions](https://opencode.ai/v2/docs/permissions/)
+- [S3] [OpenCode — zgłoszenie #50652 i wyjaśnienie uprawnień zewnętrznych plugin tools](https://github.com/anomalyco/opencode/issues/50652)
+- [S4] [Herdr — Agent automation](https://herdr.dev/docs/agent-automation/)
+- [S5] [Herdr — Integrations](https://herdr.dev/docs/integrations/)
+- [S6] [Codex — Hooks](https://learn.chatgpt.com/docs/hooks)
+- [S7] [Claude Code — Hooks reference](https://code.claude.com/docs/en/hooks)
+- [S8] [OpenCode V2 — Agents](https://opencode.ai/v2/docs/agents)
+- [S9] [OpenCode V2 — Models](https://opencode.ai/v2/docs/models)
+- [S10] [Herdr — CLI reference](https://herdr.dev/docs/cli-reference/)
+- [S11] [Claude Code — Model configuration](https://code.claude.com/docs/en/model-config)
+
+## 17. Pierwsza instrukcja dla agenta realizującego plan
+
+**Zacznij od etapu 0, a następnie dostarcz główne założenie w minimalnej wersji z etapu 1.**
+
+Ustal istniejący układ repo, zabezpiecz aktywną pracę, zbierz baseline i wykonaj krótki eksperyment read-only, transportu HANDOFF oraz blokowania operacji. Potem uruchom Brain → deterministyczny Writer → jedno zadanie Implementera → weryfikacja → STOP w izolowanym OpenCode.
+
+Zmierz rezultat przed dalszą rozbudową. Pozostałe etapy realizuj według bramek, z zachowaniem obowiązkowego Human Judge dla REVIEW, ograniczeń uprawnień i istniejących planów.
+
+## 18. Najważniejsze zmiany względem poprzedniego planu
+
+1. Główne założenie jest pierwszym rezultatem, a jego opłacalność podlega wczesnemu pomiarowi.
+2. Krótki dowód wykonalności blokowania i pełnego transportu poprzedza większą przebudowę.
+3. Writer jest deterministycznym programem bez obowiązkowej sesji LLM.
+4. Zdefiniowano granice delegacji decyzji i akceptacji nowych istotnych ustaleń.
+5. Dodano pokrycie wymagań, limity HANDOFF i atomową publikację plików.
+6. Doprecyzowano ochronę kontraktu, polityk i kontrolowany zapis statusów.
+7. Dodano tożsamość kontraktu, blokady wykonania oraz aktualność zgód.
+8. Oddzielono awarię przed wykonaniem od nieustalonego wyniku po uruchomieniu.
+9. Opisano bezpieczną rewizję aktywnego planu bez utraty historii.
+10. LOW jest ustawieniem domyślnym z jawną eskalacją, a evidence dotyczy końcowego kodu.
+11. Benchmark pełnego OpenCode poprzedza adaptery Codex/Claude.
+12. Rozszerzono testy akceptacyjne do A-44 i uwzględniono rzeczywiste ograniczenia runtime.
