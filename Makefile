@@ -110,7 +110,7 @@ _validate-rust-migration-guest: _check-test-guest
 	    if [ "$$group" = make-test ]; then \
 	      count=$$(grep -Eo '[0-9]+ passed' "$$log" | awk '{ total += $$1 } END { print total+0 }'); \
 	      if [ "$$count" -eq 0 ]; then printf 'FAILED: %s (zero tests)\n' "$$group"; exit 1; fi; \
-	      for suite in foundation_tests profiles_tests mcp_config_tests mcp_runtime_tests lifecycle_tests cli_tests mariadb_tests wordpress_dump_tests wordpress_preflight_tests wordpress_localize_tests restore_tests; do \
+	      for suite in foundation_tests profiles_tests mcp_config_tests mcp_runtime_tests lifecycle_tests cli_tests wordpress_dump_tests wordpress_preflight_tests wordpress_localize_tests restore_tests; do \
 	        suite_count=$$(awk -v pattern="^test .*$$suite::" '$$0 ~ pattern { count++ } END { print count+0 }' "$$log"); \
 	        if [ "$$suite_count" -eq 0 ]; then printf 'FAILED: %s (required suite %s missing)\n' "$$group" "$$suite"; exit 1; fi; \
 	        printf '  %s: %s tests\n' "$$suite" "$$suite_count"; \

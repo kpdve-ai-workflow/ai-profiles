@@ -17,8 +17,6 @@ thiserror = "2"
 tempfile = "3"
 regex = "1"
 flate2 = "1"
-tar = "0.4"
-ureq = "3"
 fs2 = "0.4"
 url = "2"
 ctrlc = { version = "3", features = ["termination"] }

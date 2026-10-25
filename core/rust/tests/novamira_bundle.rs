@@ -226,7 +226,11 @@ fn plugin_script_installs_verified_release_in_real_disposable_wordpress_without_
         .arg(project.path())
         .output()
         .unwrap();
-    assert!(installed.status.success(), "{}", String::from_utf8_lossy(&installed.stderr));
+    assert!(
+        installed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
     let unique = project
         .path()
         .file_name()

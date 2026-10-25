@@ -1,3 +1,108 @@
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/AGENTS.md ---
+Instalacja odbywa się poprzez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> PROJECT=<projekt>`.
+
+## Obowiązkowa polityka testowania
+
+- Przed projektowaniem, dodawaniem, modyfikowaniem lub oceną testów przeczytaj [docs/testing.md](docs/testing.md) i stosuj metodykę `test-gap-discovery`; wczytaj skill, jeśli jest dostępny. Gdy jest niedostępny, zgłoś to i nadal stosuj metodykę opisaną w tym dokumencie, zamiast zastępować ją dowolnym podejściem.
+- Zmiana zachowania aplikacji wymaga adekwatnej ochrony testowej i wykonania wymaganej weryfikacji zgodnie z `docs/testing.md`. Obowiązuje to również bez Brain i handoffu.
+- Brak środowiska, uprawnień lub możliwości wykonania wymaganych testów blokuje weryfikację; nie oznacza sukcesu. Zatrzymaj pracę i zgłoś blokadę, zachowując informację o wykonanych zmianach.
+- Nie osłabiaj testów, nie pomijaj wymaganych kontroli ani nie obchodź izolacji, aby zakończyć zadanie. Wymagana VM dotyczy testów Rust i integracji Playwright, nie lokalnych operacji produkcyjnych, takich jak instalacja profilu.
+
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/AGENTS.md ---
+
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/README.md ---
+# ai-profiles
+
+Repozytorium profili dla narzędzi programistycznych i agentów AI. Umożliwia
+instalowanie, aktualizowanie, przełączanie i walidowanie zestawów umiejętności
+oraz konfiguracji dla projektów.
+Wymagania: Rust/Cargo 1.85+, Git i Make na Linux/Unix. Instalator buduje
+natywne narzędzia Rust; Python nie jest wymagany. Zainstalowane runtime nie
+potrzebują Cargo ani dostępu do repozytorium.
+
+## Szybki start
+
+Uruchamiaj polecenia z katalogu sklonowanego repozytorium:
+
+```bash
+make help
+make install CLIENT=opencode PROFILE=backend-go PROJECT=~/projects/my-api
+make install-codex PROFILE=react PROJECT=~/projects/my-api
+make status PROJECT=~/projects/my-api
+make update CLIENT=codex PROJECT=~/projects/my-api
+make validate
+make test
+```
+
+Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
+`core/rust/target/release/ai-profile help`.
+Po instalacji, aktualizacji lub zmianie profilu uruchom ponownie narzędzie,
+w którym korzystasz z profilu.
+
+Wybrane skille są kopiowane niezależnie do
+`.ai-profiles/<klient>/plugin/skills/`. OpenCode otrzymuje jawne źródło skills;
+repozytorium nie instaluje kopii pod `.agents/skills/` ani `.claude/skills/`.
+Wtyczki Claude Code i Codex wymagają natywnej rejestracji i zaufania projektu.
+Profile przygotowują wybrane MCP tylko dla wskazanego klienta
+na poziomie projektu. Klienci mogą wymagać restartu, zaufania projektu,
+zatwierdzenia MCP lub osobnego logowania OAuth. Status potwierdza przygotowanie
+konfiguracji, nie połączenie z serwerem.
+
+`CLIENT=opencode|claude|codex|all` jest wymagany przy install/update/switch/uninstall
+i pull-update. Aliasy: `install-opencode`, `install-claude`, `install-codex`.
+`status` bez CLIENT pokazuje wszystkie trzy integracje, z CLIENT tylko wybraną.
+Każdy klient może mieć inny profil i wersję; operacja dla jednego nie zmienia
+plików ani rekordu pozostałych. Stan formatu 2: `.ai-profiles/state.json`;
+lokalne nadpisania MCP: `.ai-profiles/<klient>/local.json` (plik użytkownika).
+
+Profil WordPress domyślnie włącza Novamirę i przygotowuje bundle klienta
+`.ai-profiles/<klient>/mcp/novamira/` z dołączonym do repozytorium, zweryfikowanym ZIP-em
+1.12.12. Instalator nie dostarcza ani nie tworzy poświadczeń.
+Utwórz w katalogu projektu `.env.novamira` z prawami `0600` i uzupełnij endpoint,
+login WordPressa oraz **hasło aplikacyjne** (nie hasło wp-admin),
+Zainstaluj plugin dostarczonym `install-plugin`, aktywuj go i AI Abilities ręcznie,
+zbuduj dostarczony obraz Docker i zrestartuj klienta/MCP. Most działa w Dockerze,
+bez hostowego Node/npm/npx. Instalator nie dodaje reguły `.gitignore` dla Novamiry:
+samodzielnie zabezpiecz plik przed commitem i dostępem przez HTTP.
+Pliki poświadczeń Playwright użytkownik tworzy w katalogu głównym projektu,
+raporty są pod
+`.ai-profiles/reports/`. Nie migrujemy automatycznie starych lokalizacji.
+
+`install CLIENT=all` dodaje brakujących klientów, pomija zgodne profile i odrzuca
+konflikt profilu przed zapisem. Pozostałe operacje `all` dotyczą tylko
+zainstalowanych klientów; brak instalacji jest błędem. Kolejność: OpenCode,
+Claude, Codex. Nie ma transakcji między klientami: przygotowany stan i sukcesy
+pozostają zapisane także przy późniejszym błędzie aktywacji.
+
+Starszy stan formatu 1 jest rozpoznawany bez zapisu podczas statusu. Dopiero
+update/switch wybranego klienta przenosi jego konfigurację do osobnego payloadu.
+Stary stan `.opencode/ai-profile-state.json` i współdzielony payload pozostają
+zamrożonymi zasobami kompatybilności — nie są automatycznie usuwane, również
+po odinstalowaniu. Format 2 ma pierwszeństwo, także z pustą mapą klientów.
+Instalator nie instaluje aplikacji klientów, nie uruchamia Dockera ani OAuth.
+Współistnienie konfiguracji nie oznacza bezpiecznej równoległej edycji plików
+aplikacji przez agentów ani obsługi równoległych instalatorów.
+
+### Pozostałe instrukcje
+
+- [Zarządzanie profilami, wersjami i instalacjami](docs/profile-management.md)
+- [Testy Rust i Playwright w trwałej VM Debian 13 (Incus)](docs/testing.md)
+- [MCP: rejestr, konfiguracja lokalna, adapter i launchery](mcp/README.md)
+- [Instrukcja profilu WordPress](profiles/wordpress/README.md)
+
+Każdy profil może dostarczać własny plik README z instrukcjami projektowymi.
+README profilu WordPress jest samodzielną instrukcją instalowaną wraz z profilem.
+
+Testy (`make test`, `make test-playwright`, `make validate-rust-migration`,
+`make test-all`) wymagają osobno przygotowanego hosta Linux amd64 z Incus,
+QEMU/KVM, siecią/pulą storage i rsync; nie wymagają hostowego Cargo, Node ani
+Dockera. `make test-vm-up` przygotowuje VM (4 CPU, 8 GiB RAM, dysk 64 GiB),
+`make test-vm-stop` zatrzymuje ją z zachowaniem cache. Testy zawsze wykonują się
+ponownie; logi i raporty trafiają do `.test-vm/artifacts/`. Szczegóły wymagań,
+zasobów i jawnego re-provisioningu są w instrukcji testowania powyżej.
+
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/README.md ---
+
 --- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/codec.rs ---
 use std::{fs, path::Path};
 
@@ -639,7 +744,7 @@ pub(crate) enum McpConfigError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum EnvironmentError {
-    #[error("Cannot read env file: {filename}")]
+    #[error("Cannot read env file: {filename}. Create it in the project root with the required MCP values.")]
     ReadEnvFile { filename: String },
     #[error("Invalid env entry at line {line}")]
     InvalidEntry { line: usize },
@@ -978,11 +1083,11 @@ mod mcp_config_tests;
 #[path = "../tests/mcp_runtime.rs"]
 mod mcp_runtime_tests;
 #[cfg(test)]
-#[path = "../tests/novamira.rs"]
-mod novamira_tests;
-#[cfg(test)]
 #[path = "../tests/novamira_bundle.rs"]
 mod novamira_bundle_tests;
+#[cfg(test)]
+#[path = "../tests/novamira.rs"]
+mod novamira_tests;
 #[cfg(test)]
 #[path = "../tests/playwright.rs"]
 mod playwright_tests;
@@ -1803,7 +1908,7 @@ pub(crate) fn validate_servers(
 fn parse_server(
     name: &McpName,
     entry: Value,
-    project: Option<&Path>,
+    _project: Option<&Path>,
 ) -> Result<McpServerDefinition, McpConfigError> {
     let Some(object) = entry.as_object() else {
         return Err(McpConfigError::InvalidType(name.as_str().to_owned()));
@@ -1898,10 +2003,7 @@ fn parse_server(
                 return Err(McpConfigError::RemoteEnvFile(name.as_str().to_owned()));
             }
             let relative = value.as_str().ok_or(McpConfigError::InvalidProjectPath)?;
-            if !Path::new(relative).starts_with(".ai-profiles") {
-                return Err(McpConfigError::InvalidProjectPath);
-            }
-            project_path(project.unwrap_or(Path::new(".")), relative)?;
+            relative_project_path(relative)?;
             Some(relative.to_owned())
         }
     };
@@ -1927,15 +2029,7 @@ fn parse_server(
 }
 
 pub(crate) fn project_path(project: &Path, relative: &str) -> Result<PathBuf, McpConfigError> {
-    let relative_path = Path::new(relative);
-    if relative.is_empty()
-        || relative_path.is_absolute()
-        || relative_path
-            .components()
-            .any(|part| matches!(part, Component::ParentDir | Component::Prefix(_)))
-    {
-        return Err(McpConfigError::InvalidProjectPath);
-    }
+    let relative_path = relative_project_path(relative)?;
     let mut path = project.to_owned();
     for component in relative_path.components() {
         if let Component::Normal(part) = component {
@@ -1946,6 +2040,19 @@ pub(crate) fn project_path(project: &Path, relative: &str) -> Result<PathBuf, Mc
         }
     }
     Ok(project.join(relative_path))
+}
+
+fn relative_project_path(relative: &str) -> Result<&Path, McpConfigError> {
+    let relative_path = Path::new(relative);
+    if relative.is_empty()
+        || relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|part| matches!(part, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(McpConfigError::InvalidProjectPath);
+    }
+    Ok(relative_path)
 }
 
 pub(crate) fn definitions_to_map(definitions: &[McpServerDefinition]) -> Map<String, Value> {
@@ -1993,8 +2100,14 @@ fn load_local_at(
         let Some(fields) = entry.as_object() else {
             return Err(McpConfigError::InvalidOverrideFields(name.clone()));
         };
-        if name == "novamira" && ["env_file", "command", "cwd"].iter().any(|key| fields.contains_key(*key)) {
-            return Err(McpConfigError::InvalidOverrideFields("novamira: command/cwd/env_file mają stałe lokalizacje w .ai-profiles/mcp/novamira".into()));
+        if name == "novamira"
+            && ["env_file", "command", "cwd"]
+                .iter()
+                .any(|key| fields.contains_key(*key))
+        {
+            return Err(McpConfigError::InvalidOverrideFields(
+                "novamira: command/cwd/env_file mają stałą konfigurację".into(),
+            ));
         }
         if fields
             .keys()
@@ -2831,7 +2944,7 @@ fn failure(id: &Value, message: &str) {
 }
 
 pub(super) fn configuration_failure(env_file: &str) {
-    let message = format!("Novamira: uzupełnij WP_API_URL, WP_API_USERNAME i WP_API_PASSWORD w {env_file}. Użyj hasła aplikacyjnego WordPressa, nie hasła do panelu. Sprawdź plik i konfigurację połączenia.");
+    let message = format!("Novamira: utwórz w katalogu głównym projektu plik {env_file} i uzupełnij WP_API_URL, WP_API_USERNAME i WP_API_PASSWORD. Użyj hasła aplikacyjnego WordPressa, nie hasła do panelu. Sprawdź plik i konfigurację połączenia.");
     initial_failure(&message);
 }
 
@@ -2887,8 +3000,11 @@ impl Drop for Bridge {
         while self.0.try_wait().is_ok_and(|status| status.is_none()) && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(20));
         }
-        let _ = Command::new("kill").args(["-KILL", "--", &group])
-            .stdout(Stdio::null()).stderr(Stdio::null()).status();
+        let _ = Command::new("kill")
+            .args(["-KILL", "--", &group])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
@@ -3567,7 +3683,7 @@ const PROJECT_METADATA: &str = "AI_PROFILE_PROJECT_DIR";
 const COMPOSE_FILE: &str = "COMPOSE_FILE";
 const BASIC_AUTH_FILE: &str = "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE";
 const STORAGE_STATE: &str = "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE";
-const DEFAULT_BASIC_AUTH: &str = ".ai-profiles/.private/playwright-basic-auth.json";
+const DEFAULT_BASIC_AUTH: &str = "base-auth.json";
 const CA_CERT: &str = "AI_PROFILE_PLAYWRIGHT_CA_CERT";
 const CAROOT_OUTPUT_LIMIT: usize = 8192;
 
@@ -3823,7 +3939,8 @@ fn installed_identity(executable: &Path) -> Result<(PathBuf, PathBuf), Playwrigh
 }
 
 fn prepare_reports(project: &Path) -> Result<(), PlaywrightError> {
-    let path = file_path(project, ".ai-profiles/reports").map_err(|_| PlaywrightError::InvalidReports)?;
+    let path =
+        file_path(project, ".ai-profiles/reports").map_err(|_| PlaywrightError::InvalidReports)?;
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => Ok(()),
         Ok(_) => Err(PlaywrightError::InvalidReports),
@@ -3880,7 +3997,7 @@ fn private_input(
     let canonical = path
         .canonicalize()
         .map_err(|_| PlaywrightError::InvalidPrivateInput)?;
-    if canonical.starts_with(reports) || !canonical.starts_with(project.join(".ai-profiles")) {
+    if canonical.starts_with(reports) || !canonical.starts_with(project) {
         return Err(PlaywrightError::InvalidPrivateInput);
     }
     Ok(canonical)
@@ -4232,7 +4349,6 @@ fn wait_for_child(
 
 --- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management.rs ---
 pub mod cli;
-pub(crate) mod credentials;
 pub(crate) mod installation;
 pub(crate) mod migration;
 pub(crate) mod native;
@@ -4683,128 +4799,6 @@ fn parser_error(message: &str) -> i32 {
 }
 
 --- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/cli.rs ---
-
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/credentials.rs ---
-//! Shared, immutable Novamira bootstrap. Secrets are never read, hashed or owned.
-use std::{
-    fs::{self, OpenOptions},
-    io::{self, Read, Write},
-    os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
-    path::{Path, PathBuf},
-    time::Duration,
-};
-
-pub(crate) const ROOT: &str = ".ai-profiles/mcp/novamira";
-pub(crate) const ENV_FILE: &str = ".ai-profiles/mcp/novamira/.env.novamira";
-pub(crate) const ARCHIVE_SHA: &str = "ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78";
-const ARCHIVE_URL: &str = "https://github.com/use-novamira/novamira/releases/download/v1.12.12/novamira-1.12.12.zip";
-const ARCHIVE: &str = ".ai-profiles/mcp/novamira/downloads/novamira.zip";
-const MAX_ARCHIVE: u64 = 8 * 1024 * 1024;
-const FILES: &[(&str, &[u8], u32)] = &[
-    ("Dockerfile", include_bytes!("../../../../mcp/images/novamira/Dockerfile"), 0o644),
-    (".dockerignore", include_bytes!("../../../../mcp/images/novamira/.dockerignore"), 0o644),
-    ("compose.yaml", include_bytes!("../../../../mcp/images/novamira/compose.yaml"), 0o644),
-    ("compose.ca.yaml", include_bytes!("../../../../mcp/images/novamira/compose.ca.yaml"), 0o644),
-    ("launcher", include_bytes!("../../../../mcp/images/novamira/launcher"), 0o755),
-    ("install-plugin", include_bytes!("../../../../mcp/images/novamira/install-plugin"), 0o755),
-    ("README.md", include_bytes!("../../../../mcp/images/novamira/README.md"), 0o644),
-];
-
-const TEMPLATE: &str = "# Adres endpointu Novamiry, np. https://twoja-witryna/wp-json/mcp/novamira\nWP_API_URL=\n# Login konta WordPress, które wygenerowało hasło aplikacyjne\nWP_API_USERNAME=\n# Hasło aplikacyjne WordPressa — NIE hasło do panelu wp-admin\nWP_API_PASSWORD=\"\"\n";
-
-pub(super) fn check(project: &Path) -> io::Result<()> {
-    for relative in [".ai-profiles", ".ai-profiles/mcp", ROOT, ".ai-profiles/mcp/novamira/.private", ".ai-profiles/mcp/novamira/downloads"] {
-        let path = safe_path(project, relative)?;
-        if fs::symlink_metadata(path).is_ok_and(|m| !m.is_dir()) {
-            return Err(io::Error::other("Novamira: kolizja katalogu bundle"));
-        }
-    }
-    check_regular(&safe_path(project, ENV_FILE)?)?;
-    for (name, expected, _) in FILES {
-        let path = safe_path(project, &format!("{ROOT}/{name}"))?;
-        check_regular(&path)?;
-        if path.exists() && fs::read(&path)? != *expected {
-            return Err(io::Error::other(format!("Novamira: zmieniony plik bundle {name}; nie zostanie nadpisany")));
-        }
-    }
-    let archive = safe_path(project, ARCHIVE)?;
-    check_regular(&archive)?;
-    if archive.exists() {
-        if fs::metadata(&archive)?.len() > MAX_ARCHIVE || crate::codec::sha(&fs::read(archive)?) != ARCHIVE_SHA {
-            return Err(io::Error::other("Novamira: niezgodna suma ZIP-a; nie zostanie nadpisany"));
-        }
-    }
-    Ok(())
-}
-
-fn safe_path(project: &Path, relative: &str) -> io::Result<PathBuf> {
-    crate::filesystem::file_path(project, relative).map_err(|_| io::Error::other("Novamira: niedozwolona ścieżka lub symlink"))
-}
-
-fn check_regular(path: &Path) -> io::Result<()> {
-    match fs::symlink_metadata(path) {
-        Ok(m) if m.file_type().is_file() => Ok(()),
-        Ok(_) => Err(io::Error::other("Novamira: wymagany zwykły plik, bez symlinków")),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
-}
-
-pub(crate) fn archive_for(project: &Path) -> io::Result<Vec<u8>> {
-    check(project)?;
-    if project.join(ARCHIVE).exists() { return Ok(Vec::new()); }
-    download_verified(ARCHIVE_URL, ARCHIVE_SHA)
-}
-
-pub(crate) fn download_verified(url: &str, sha: &str) -> io::Result<Vec<u8>> {
-    let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(60))).build().into();
-    let response = agent.get(url).call().map_err(|_| io::Error::other("Novamira: nie udało się pobrać oficjalnej paczki ZIP"))?;
-    let mut bytes = Vec::new();
-    response.into_body().into_reader().take(MAX_ARCHIVE + 1).read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_ARCHIVE || crate::codec::sha(&bytes) != sha {
-        return Err(io::Error::other("Novamira: niezgodna suma SHA-256 paczki ZIP"));
-    }
-    Ok(bytes)
-}
-
-fn seed(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
-    if path.exists() { return Ok(()); }
-    let mut file = tempfile::NamedTempFile::new_in(path.parent().ok_or_else(|| io::Error::other("missing parent"))?)?;
-    file.write_all(bytes)?;
-    file.as_file().set_permissions(fs::Permissions::from_mode(mode))?;
-    file.as_file().sync_all()?;
-    file.persist_noclobber(path).map_err(|e| e.error)?;
-    Ok(())
-}
-
-pub(crate) fn prepare(project: &Path, archive: &[u8]) -> io::Result<()> {
-    check(project)?;
-    let root = safe_path(project, ROOT)?;
-    fs::create_dir_all(&root)?;
-    let private = safe_path(project, ".ai-profiles/mcp/novamira/.private")?;
-    if !private.exists() { fs::DirBuilder::new().mode(0o700).create(&private)?; }
-    fs::create_dir_all(safe_path(project, ".ai-profiles/mcp/novamira/downloads")?)?;
-    if !project.join(ARCHIVE).exists() {
-        if crate::codec::sha(archive) != ARCHIVE_SHA { return Err(io::Error::other("Novamira: brak zweryfikowanej paczki ZIP")); }
-        seed(&safe_path(project, ARCHIVE)?, archive, 0o644)?;
-    }
-    for (name, bytes, mode) in FILES { seed(&root.join(name), bytes, *mode)?; }
-    // O_EXCL/create_new rejects even dangling symlinks atomically; mode is
-    // private at creation, not repaired after writing. Never open an existing
-    // file for read/write or hash its contents.
-    match OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(safe_path(project, ENV_FILE)?)
-    {
-        Ok(mut file) => file.write_all(TEMPLATE.as_bytes()),
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => check(project),
-        Err(error) => Err(error),
-    }
-}
-
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/credentials.rs ---
 
 --- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/installation.rs ---
 use std::path::Path;
@@ -7260,6 +7254,31 @@ fn build_files(
                 )?;
             }
         }
+        if name == "novamira" {
+            let root = file_path(&context.sources, "mcp/images/novamira")?;
+            for (filename, destination) in [
+                ("Dockerfile", "Dockerfile"),
+                (".dockerignore", ".dockerignore"),
+                ("compose.yaml", "compose.yaml"),
+                ("compose.ca.yaml", "compose.ca.yaml"),
+                ("README.md", "README.md"),
+                ("novamira.zip", "downloads/novamira.zip"),
+            ] {
+                insert_file(
+                    &mut files,
+                    &format!(".opencode/mcp/novamira/{destination}"),
+                    &root.join(filename),
+                    true,
+                )?;
+            }
+            for filename in ["launcher", "install-plugin"] {
+                insert_executable_file(
+                    &mut files,
+                    &format!(".opencode/mcp/novamira/{filename}"),
+                    &root.join(filename),
+                )?;
+            }
+        }
         let launcher = file_path(&context.sources, &format!("mcp/launchers/{name}"))?;
         if launcher.exists() {
             if !launcher.is_dir() {
@@ -7648,6 +7667,26 @@ fn insert_file(
         relative_path: relative_path.to_owned(),
         contents,
         kind: PayloadKind::Data,
+    });
+    Ok(())
+}
+
+fn insert_executable_file(
+    files: &mut Vec<PayloadFile>,
+    relative_path: &str,
+    source: &Path,
+) -> Result<(), PayloadError> {
+    if files.iter().any(|file| file.relative_path == relative_path) {
+        return Err(PayloadError::DuplicateSkillFile(relative_path.to_owned()));
+    }
+    let contents = fs::read(source).map_err(|source_error| PayloadError::Io {
+        path: source.to_owned(),
+        source: source_error,
+    })?;
+    files.push(PayloadFile {
+        relative_path: relative_path.to_owned(),
+        contents,
+        kind: PayloadKind::Executable,
     });
     Ok(())
 }
@@ -8096,7 +8135,6 @@ struct Prepared {
     writes: BTreeMap<String, Vec<u8>>,
     old: Option<Value>,
     record: Value,
-    novamira_archive: Option<Vec<u8>>,
 }
 
 fn check_destination(project: &Path, relative: &str) -> Result<()> {
@@ -8150,9 +8188,6 @@ fn prepare(
         files.iter().map(|file| file.relative_path.as_str()),
     )?;
     let mut base = config::definitions_to_map(&config::desired_mcp(context, profile)?);
-    if base.contains_key("novamira") {
-        super::credentials::check(project)?;
-    }
     render_mcp(&mut base, target);
     let mut writes = BTreeMap::new();
     if base.contains_key("playwright") {
@@ -8288,14 +8323,12 @@ fn prepare(
         "layout":"isolated","files":hashes,"mcp":mcp,"mcp_base":base,"skills_directory_added":skills_directory_added,
         "mcp_local_hash":sha(&json_bytes(&overrides)?),"had_config":had_config,
         "gitignore_added":false,"instructions_added":false,"native":native_state});
-    let novamira_archive = if base.contains_key("novamira") { Some(super::credentials::archive_for(project)?) } else { None };
     Ok(Prepared {
         client,
         files,
         writes,
         old: old.cloned(),
         record,
-        novamira_archive,
     })
 }
 
@@ -8312,9 +8345,6 @@ impl Prepared {
         manifest: &mut Manifest,
         runner: &impl crate::process::ProcessRunner,
     ) -> Result<()> {
-        if let Some(archive) = &self.novamira_archive {
-            super::credentials::prepare(project, archive)?;
-        }
         if let Some(old) = &self.old {
             if let Some(files) = old.get("files").and_then(Value::as_object) {
                 let removed: Vec<String> = files
@@ -9263,7 +9293,7 @@ use crate::{
 
 const STATE: &str = crate::layout::LEGACY_STATE;
 const IGNORE_LINE: &str = ".opencode/workflow-approval.json";
-const PLAYWRIGHT_AUTH_IGNORE: &[u8] = b"/.ai-profiles/.private/playwright-basic-auth.json";
+const PLAYWRIGHT_AUTH_IGNORE: &[u8] = b"/base-auth.json";
 const SCHEMA: &str = "https://opencode.ai/config.json";
 
 /// Format 2 is authoritative, even when its client map is empty. Legacy import
@@ -11338,4 +11368,683 @@ unsafe extern "C" {
 }
 
 --- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/restore.rs ---
+
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/docs/profile-management.md ---
+# Zarządzanie profilami i instalacjami
+
+## Tworzenie i struktura profilu
+
+Profile są wykrywane automatycznie z `profiles/<nazwa>/`. Profil zawiera
+`profile.json`, `mcp.json` oraz `skills.json`. `name` w metadanych musi
+odpowiadać nazwie katalogu. Najprościej utworzyć profil poleceniem:
+
+```bash
+make create PROFILE=backend-python DESCRIPTION="Backend Python development profile"
+```
+
+Nazwa jest wymagana; opis jest opcjonalny. Komenda tworzy metadane w wersji
+`1.0.0`, pusty wybór MCP i pusty wybór skilli. Nie instaluje
+profilu ani nie nadpisuje istniejącego. Szczegóły formatu wyboru MCP znajdują się
+w [dokumentacji MCP](../mcp/README.md).
+
+Skille dystrybuowane przechowuj raz w `skills/<nazwa>/SKILL.md`, z frontmatter
+`name` i `description`; nazwa musi odpowiadać katalogowi. Pliki pomocnicze
+pozostają w katalogu skilla. Profile wybierają je jawnie w `skills.json`.
+Przykładowy wybór WordPress:
+
+```json
+{
+  "skills": ["acf", "make-plan", "sage-block-scaffold", "styling"]
+}
+```
+
+Nazwy są bezpośrednimi nazwami katalogów pod `skills/`; wpisy muszą być
+unikalne. Dwa profile mogą wskazać ten sam katalog źródłowy, a instalator
+kopiuje każdy skill do własnego projektu. Na przykład
+`skills/make-plan/SKILL.md` trafia do
+`<projekt>/.ai-profiles/<klient>/plugin/skills/make-plan/SKILL.md`, a
+`skills/make-plan/references/plan-layout.md` do tego samego katalogu
+`references/`. Każdy klient otrzymuje oddzielną kopię dystrybucyjną.
+Nowy profil zaczyna z `{"skills":[]}`. Zmiany manifestu docierają do projektu
+przez `make update CLIENT=<klient> PROJECT=<projekt>`; usunięte pliki są zdejmowane zgodnie z
+kontrolą własności i hashy. Nie używaj symlinków ani kolidujących nazw.
+
+Instalacja przygotowuje osobny payload wybranego klienta. OpenCode otrzymuje jawny
+source skills w `opencode.json`, a wybrane Claude Code lub Codex dostają natywne katalogi
+projektowe oraz włączenie pluginu. Katalog Claude znajduje się w
+`.claude-plugin/marketplace.json`, katalog Codex w
+`.agents/plugins/marketplace.json`. Identyfikator marketplace zawiera skrót
+kanonicznej ścieżki projektu, dzięki czemu projekty nie dzielą tożsamości.
+
+Przed użyciem pluginu Claude Code może wymagać zaufania repozytorium; Codex
+ładuje `.codex/config.toml` tylko w zaufanym projekcie. Instalator nie zmienia
+zaufania ani uprawnień. Gdy CLI hosta nie ma, pliki projektu są przygotowane,
+a aktywacja pozostaje oczekująca. Przy błędzie aktywacji `status` pokazuje
+oddzielnie pliki projektu i ostatni zapisany wynik instalacji natywnej; ponowne
+`make update CLIENT=codex PROJECT=<projekt>` ponawia aktywację Codex po błędzie lub stanie oczekującym.
+Claude Code instaluje plugin przez `claude plugin install ai-profile@<marketplace>
+--scope project`; przy kolejnej aktualizacji menedżer używa `claude plugin
+update`.
+
+Codex rejestruje lokalny marketplace i instaluje plugin osobnymi poleceniami,
+uruchamianymi z katalogu projektu:
+
+```bash
+codex plugin marketplace add <bezwzględna-ścieżka-projektu> --json
+codex plugin add ai-profile@<marketplace-z-.agents/plugins/marketplace.json> --json
+```
+
+Instalator bierze nazwy z katalogu Codex i weryfikuje rejestrację oraz wynik
+przez `codex plugin list --marketplace <marketplace> --json`. Istniejąca
+rejestracja jest używana tylko wtedy, gdy jej nazwa i lokalne źródło pasują do
+projektu. Rejestracja i instalacja Codex zapisują ustawienia oraz cache w
+konfiguracji użytkownika Codex; CLI nie udostępnia tu opcji zakresu projektu.
+Stan śledzi, które zasoby natywne dodał instalator, a `uninstall` usuwa tylko te
+zasoby. Istniejące pluginy, rejestracje i jawne wyłączenie pozostają zachowane.
+
+Powtórne `make update CLIENT=codex PROJECT=<projekt>` sprawdza inwentarz i nie powtarza `plugin add`, jeśli
+plugin jest już zainstalowany. Zmiana plików projektu bez zmiany wersji nie
+dowodzi odświeżenia zawartości cache Codex; nie potwierdzono obsługiwanego
+polecenia odświeżającego lokalny plugin, więc aktualność cache pozostaje
+niezweryfikowana. Wynik `installed` oznacza wyłącznie potwierdzenie przez
+natywny inwentarz. Nie dowodzi, że uruchomiona sesja Codex załadowała skille.
+Uruchom ponownie Codex, aby ocenić je w nowej sesji. Wpisy `Dir` lub `File` w
+selektorze wzmianek nie potwierdzają wykrycia skilla.
+
+Skill może się załadować, gdy jego wymagany serwer MCP nie jest dostępny w tym
+hoście. Instalator przygotowuje MCP tylko w konfiguracji wybranego klienta:
+`opencode.json`, `.codex/config.toml` albo `.mcp.json`, na podstawie wspólnego rejestru i lokalnych
+nadpisań. Status opisuje konfigurację; nie sprawdza połączenia MCP. Po instalacji
+lub aktualizacji uruchom ponownie klienta, zatwierdź projekt i MCP zgodnie z
+jego natywnymi ustawieniami, a zdalne OAuth zaloguj osobno w każdym kliencie.
+Skille mogą też zachowywać metadane
+`opencode/slash`, ale składnia wywołania i automatyczna aktywacja zależą od hosta.
+
+Starszy współdzielony payload `.opencode/` pozostaje zamrożony, również gdy
+wybrany klient przechodzi do izolowanego układu. Nie jest automatycznie usuwany.
+Narzędzia użytkownika profilu umieszczaj w `profiles/<profil>/scripts/`, nie
+w skillach. Są instalowane bez automatycznego wykonywania.
+
+Skille przeznaczone wyłącznie dla tego repozytorium umieszczaj w
+`.opencode/skills/`; OpenCode wykrywa je natywnie. Nie są częścią `skills/`
+ani żadnego profilu i nie są dostarczane do projektów. Workflow tego checkoutu
+jest oddzielony od zawartości profili.
+
+## Wersje i publikowanie
+
+Nazwę istniejącego profilu zmieniaj poleceniem:
+
+```bash
+make rename PROFILE=stara-nazwa NEW_NAME=nowa-nazwa
+```
+
+Komenda zmienia katalog `profiles/stara-nazwa` na `profiles/nowa-nazwa`
+oraz pole `name` w jego `profile.json`. Zachowuje wersję, opis, dodatkowe
+metadane, skille, skrypty i wybór MCP. Nie zastępuje nazw w treści dokumentacji.
+Nowa nazwa musi być wolna i składać się z małych liter/cyfr rozdzielonych
+pojedynczymi myślnikami. Nie używa `PROJECT` i odrzuca opcję `--project`.
+Odpowiednik CLI: `ai-profile rename stara-nazwa --new-name nowa-nazwa`.
+
+Istniejące instalacje pozostają bez zmian i nadal wskazują starą nazwę.
+Komenda nie tworzy aliasu; ich `status` i `update` mogą odrzucić profil,
+którego stara nazwa nie istnieje już w źródłach.
+
+Każdy profil ma niezależną stabilną wersję `MAJOR.MINOR.PATCH`. Aktualizuj ją
+poleceniem `make bump PROFILE=<nazwa> PART=patch|minor|major` (domyślnie `patch`):
+
+- **MAJOR** — niekompatybilna zmiana;
+- **MINOR** — kompatybilne rozszerzenie;
+- **PATCH** — poprawka istniejących instrukcji lub konfiguracji.
+
+Wersje prerelease i build metadata nie są obsługiwane. Zmiana plików nie zwiększa
+wersji automatycznie. Zmiany wspólne wymagają świadomego bumpu wszystkich
+dotkniętych profili; przy zmianie definicji MCP bumpuj tylko profile, które ją
+wybierają. Bump zmienia wyłącznie metadane: nie aktualizuje projektów, nie
+wykonuje commitów ani nie tworzy tagów.
+
+## Instalacja i aktualizacja
+
+Instaluj przez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> PROJECT=<projekt>`.
+Aliasy: `install-opencode`, `install-claude`, `install-codex` z tymi samymi PROFILE
+i PROJECT; sprzeczny CLIENT jest błędem. Make buduje
+manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
+launchery MariaDB/Playwright i restore WordPress trafiają do projektu jako samodzielne
+pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
+referencyjny. Współdzielone zasoby legacy (również dawne `.py`) pozostają zamrożone;
+obce i lokalnie zmienione pliki zachowują dotychczasową ochronę.
+
+Make wymaga `PROFILE` przy `create`, `rename`, `install`, `switch` i `bump`, oraz `PROJECT`
+przy komendach projektowych. CLI domyślnie działa na bieżącym katalogu.
+`status` i `update` korzystają z lokalnego checkoutu i nie pobierają zmian;
+`pull-update` wykonuje `git pull --ff-only`, a następnie `update`. Przed oceną
+najnowszej wersji upstream pobierz zmiany jawnie.
+
+`update` dodaje i synchronizuje zarządzane pliki oraz usuwa wycofane pliki,
+zachowując pliki obce i lokalną konfigurację. Powtórzenie bez zmian daje tę samą
+zawartość. Downgrade tego samego profilu jest blokowany; `switch` wybiera inny
+profil. `uninstall` usuwa wyłącznie zarządzaną zawartość.
+
+Stan `.ai-profiles/state.json` formatu 2 śledzi osobno dla każdego klienta wersję, źródło, SHA-256 plików,
+zarządzane wpisy MCP i dane potrzebne do bezpiecznej synchronizacji. Status
+rozróżnia aktualność wersji od zmian treści oraz pokazuje lokalne modyfikacje.
+SHA commit nie opisuje niezacommitowanych zmian; do publikowania używaj czystego
+checkoutu.
+
+Stary stan `.opencode/ai-profile-state.json` oraz współdzielone zasoby legacy
+pozostają zachowane, ponieważ inni klienci lub cache pluginów mogą ich używać.
+Wpis `workflow-rules.md` w `instructions` jest usuwany przy update/switch
+wyłącznie, gdy stan potwierdza, że dodał go instalator (`instructions_added`).
+Własny wpis użytkownika pozostaje; po usunięciu wpisu instalatora flaga
+ownership jest zerowana.
+
+Przed zapisem menedżer sprawdza hashe plików, wpisy MCP i kolizje ścieżek.
+Konflikt przerywa operację bez częściowego zastosowania; nie ma opcji wymuszającej
+nadpisanie lokalnych zmian. Zrób kopię lub commit, przenieś zmiany wspólne do
+repozytorium, a projektowe ustawienia MCP do `.ai-profiles/<klient>/local.json`.
+Przywróć zarządzany plik/wpis do zainstalowanej wartości i ponów aktualizację.
+Nie edytuj hashy stanu ani zarządzanych wpisów w `opencode.json`. Menedżer odmawia
+pracy z `opencode.jsonc` tylko dla operacji OpenCode, by nie utracić komentarzy. Zapis nie jest transakcją
+odporną na awarię dysku lub przerwanie procesu.
+
+## Migracja starszej instalacji
+
+Format 1 jest importowany leniwie; status niczego nie zapisuje. Pierwsza udana
+operacja zmieniająca stan zapisuje format 2. Dodanie klienta nie przenosi innych.
+Tylko update/switch wybranego klienta zmienia jego żywe odwołania na
+`.ai-profiles/<klient>/`. Odpowiednie stare nadpisania są kopiowane do local.json
+bez zmiany oryginału; konflikt z docelowym plikiem blokuje operację.
+Stary stan i współdzielone pliki nie są automatycznie sprzątane. Pusty manifest
+formatu 2 blokuje ponowny import starego stanu.
+
+Stan formatu 1 bez wersji/SHA commita jest obsługiwany: status pokaże
+`VERSION UNKNOWN`, a udany update uzupełni metadane po sprawdzeniu hashy.
+Starsze stany bez `mcp_base` są również aktualizowane po sprawdzeniu starej
+konfiguracji. Instalacje MVP bez hashy wymagają przeglądu i backupu przed
+świadomym przejęciem:
+
+```bash
+make migrate-legacy PROJECT=~/projects/my-api
+make update CLIENT=opencode PROJECT=~/projects/my-api
+```
+
+Migracja uznaje istniejące pliki za punkt odniesienia. Walidację repozytorium
+uruchom przez `make validate`; szczegóły walidacji MCP są w dokumentacji MCP.
+
+Starsze instalacje aktualizuj osobno przez `make update CLIENT=<klient> PROJECT=<projekt>`.
+Brakującą integrację dodaj przez `make install CLIENT=<klient> PROFILE=<profil> PROJECT=<projekt>`.
+Przygotowanie konfiguracji nie wymaga obecności
+CLI tych klientów. Dla Playwright instalator dostarcza launcher, Dockerfile i Compose
+do `.ai-profiles/<klient>/mcp/playwright/`, bez uruchamiania Dockera lub npm. Przygotowanie
+obrazu wykonuje użytkownik w katalogu głównym docelowego repozytorium:
+
+```sh
+docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
+```
+
+Dla Claude Code/Codex użyj w ścieżce odpowiednio `claude`/`codex`.
+Do korzystania potrzebny jest lokalny Linux Docker Engine i plugin Compose.
+Adapter uruchamia dostarczony `playwright-launcher`, który automatycznie tworzy
+`.ai-profiles/reports/` i przygotowuje kontener, bez konfiguracji VPN lub hosta.
+Nie ma automatycznego buildu/pull ani zależności od publikacji GHCR.
+Zależności Playwright są w obrazie, bez hostowego Node. Opcjonalny Basic Auth
+używa `<PROJECT>/base-auth.json` z `username`, `password`, `origin` i prawami
+`0600`; bez pliku działa bez uwierzytelniania. Opcjonalne cookies/storage state
+także wskazuj jako plik w katalogu projektu, z prawami `0600`. Compose nie wymaga edycji.
+Po przygotowaniu zrestartuj klienta i zatwierdź wymagane natywne zgody projektu/MCP.
+
+React 4.0.0 i WordPress 3.0.0 używają `.ai-profiles/reports/`; poświadczenia
+użytkownik tworzy w katalogu głównym projektu, bez migracji starych lokalizacji.
+Sieć pozostaje `host`.
+WordPress dodatkowo przygotowuje `.ai-profiles/<klient>/mcp/novamira/` z oficjalnym ZIP-em,
+skryptem instalacji pluginu i mostem w Dockerze. Ścieżki Novamiry są stałe;
+wszystkie `env_file` MCP są ścieżkami względnymi od katalogu głównego projektu.
+`<PROJECT>/.env.novamira` jest wymagany wyłącznie przy uruchamianiu Novamiry;
+użytkownik tworzy go samodzielnie, instalator go nie dostarcza. `env_file` MCP
+może wskazywać ścieżkę względną od katalogu projektu.
+Uninstall nie usuwa credentials ani reguły `.gitignore`, którą instalator dodaje
+dla domyślnego pliku Basic Auth. Instrukcja i wyjątki (CA, uprawnienia, HTTP 401)
+są w `.ai-profiles/<klient>/mcp/playwright/README.md`;
+[szczegóły wspólne](../mcp/README.md#playwright-i-audyty-wcag).
+
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/docs/profile-management.md ---
+
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/docs/testing.md ---
+# Testy w trwałej VM Incus
+
+Testy Rust i pełny test integracyjny Playwright działają wyłącznie w prawdziwej
+VM QEMU/KVM Debian 13 Trixie amd64. Host nie uruchamia Cargo, Node ani Dockera.
+Wymagania te dotyczą testowania, nie lokalnego `make install CLIENT=opencode PROFILE=… PROJECT=…`.
+Instalator nadal wymaga Rust/Cargo 1.85+, Git i Make.
+
+## Projektowanie i jakość testów
+
+Metodyka `test-gap-discovery` obowiązuje przy projektowaniu, dodawaniu,
+modyfikowaniu i ocenie testów, także bez Brain. Przed taką pracą przeczytaj ten
+dokument i wczytaj skill, jeśli jest dostępny. Jeśli go brakuje, zgłoś
+niedostępność; poniższe zasady nadal obowiązują i nie mogą być zastąpione
+dowolnym podejściem.
+
+1. Ustal obserwowalne wymaganie i niezależne źródło oczekiwanego wyniku:
+   wymagania, kontrakt, standard, sprawdzony przykład lub niezmiennik.
+2. Wyprowadź scenariusze przed kopiowaniem oczekiwań z implementacji. Czytanie
+   kodu może pomóc znaleźć punkty testowania, ale aktualny wynik programu nie
+   jest sam w sobie dowodem poprawności.
+3. Dobieraj przypadki według ryzyka: granice, błędne dane, sekwencje, ponowienia,
+   częściowe awarie, izolacja i integracje — tylko tam, gdzie mają znaczenie.
+4. Wybierz właściwy poziom testu, dane, izolację i granice mockowania. Nie
+   zastępuj mockiem zachowania, którego poprawność test ma potwierdzić.
+5. Wskaż wiarygodny błędny wariant zachowania, który test powinien wykryć,
+   oraz asercję, która go ujawni.
+6. Uruchom testy zgodnie z polityką repozytorium i oceń rzeczywisty wynik.
+7. Przy niepowodzeniu rozróżnij błąd produktu, błędne oczekiwanie, wadliwe dane
+   testowe, niedeterministyczność i problem infrastruktury, zamiast automatycznie
+   dopasowywać test do implementacji.
+
+Dla nowego lub naprawianego zachowania stosuj **test-first**: niezależne
+oczekiwanie → test → uzasadnione **RED** przed zmianą implementacji → minimalna
+implementacja → **GREEN** → wymagane kontrole regresji. RED ma wynikać
+z brakującego lub błędnego zachowania, nie z błędu środowiska. Test istniejącego,
+poprawnego zachowania może być od razu GREEN; sprawdź jego zdolność wykrywania
+realistycznej regresji, ale nie psuj kodu, aby wymusić RED. Nierozstrzygnięta
+sprzeczność oczekiwań z kontraktem wymaga zatrzymania i zgłoszenia.
+
+Nie wymagamy odkrycia błędu przez każdy test, minimalnej liczby przypadków ani
+eksperymentów mutacyjnych. Mutacje są opcjonalne; wymagają bezpiecznej izolacji
+(jednorazowej kopii lub odrębnego worktree), odpowiedniej wyraźnej zgody i kontroli
+sprzątania. Nie wolno zmieniać wymagań, usuwać zasadnych asercji ani dodawać
+skipów tylko po to, by uzyskać GREEN.
+
+Mockowane wywołanie procesu nie dowodzi działania prawdziwego programu.
+Kontrola orkiestracji nie zastępuje rzeczywistej integracji. W Rust samo dodanie
+pliku do `core/rust/tests/` nie gwarantuje wykonania: `core/rust/Cargo.toml`
+ustawia `autotests = false`, a pliki są jawnie dołączane jako moduły testowe
+w `core/rust/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
+uruchomienie nowych testów, nie tylko sukces całego polecenia.
+
+### Wymagana weryfikacja przed akceptacją
+
+Zmiana zachowania wymaga adekwatnej ochrony testowej oraz poniższej bramki.
+Polecenia Make uruchamiaj z katalogu głównego repozytorium; orkiestrują testy
+Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
+`bash tests/vm/check.sh` można wykonać na hoście; nie testuje ona aplikacji w VM.
+
+| Zakres zmiany | Weryfikacja przed akceptacją |
+| --- | --- |
+| Zachowanie `core/rust` | `make validate-rust-migration` |
+| Integracja/obraz Playwright | `make test-playwright` |
+| Wspólne zmiany obejmujące oba obszary | `make test-all` |
+| Orkiestracja VM | `bash tests/vm/check.sh` oraz `make test-all` |
+| Wyłącznie dokumentacja/instrukcje | Kontrola treści, odnośników i spójności; bez udawania weryfikacji aplikacji |
+
+`make test` służy również iteracyjnej weryfikacji Rust. Szersza bramka może już
+obejmować wymagane testy (`make test-all` obejmuje bramkę Rust i Playwright,
+a `make validate-rust-migration` obejmuje `make test`); nie uruchamiaj ich
+ponownie wyłącznie dla formalności. Dla nowych obszarów ustal kontrakt
+weryfikacji na podstawie rzeczywistych narzędzi projektu; nie wymyślaj komend.
+
+Zapisuj rzeczywiście wykonane polecenia, ich rezultaty i ograniczenia
+w istniejącym planie lub podsumowaniu, wraz z uzasadnionymi scenariuszami.
+Nie twórz obowiązkowych osobnych raportów dla każdego testu. Oddzielaj status
+implementacji od weryfikacji: „kod zmieniony” nie znaczy „zachowanie zweryfikowane”.
+Brak środowiska, uprawnień lub możliwości wymaganej weryfikacji oznacza blokadę,
+nie sukces ani nieadekwatność testów. Zatrzymaj pracę, zachowaj zmiany i zgłoś
+dokładny bloker oraz faktyczne wyniki; nie akceptuj zadania (checkbox pozostaje
+niezaznaczony, jeśli jest używany). Nie osłabiaj testów, nie pomijaj wymaganych
+kontroli ani nie obchodź izolacji. Zakaz lokalnych testów Rust i Playwright nie
+dotyczy lokalnych operacji produkcyjnych opisanych dalej.
+
+## Przygotowanie hosta
+
+Pierwsza implementacja obsługuje tylko Linux x86_64/amd64. Użytkownik musi
+świadomie zainstalować i uruchomić lokalny Incus z obsługą VM/QEMU, włączyć
+wirtualizację sprzętową (także nested virtualization na hoście będącym VM),
+zapewnić dostęp do `/dev/kvm`, zainicjalizować daemon oraz przygotować storage
+pool i zarządzany bridge z IPv4 NAT/DHCP, DNS i działającym wyjściem do Internetu.
+Potrzebne są Make, Bash, rsync, tar, jq, util-linux (`flock`), GNU coreutils
+i uprawnienia do lokalnego socketu Incus. Testy nie instalują pakietów hosta,
+nie tworzą sieci/puli i nie zmieniają grup ani globalnych profili Incus.
+
+**Dostęp administracyjny do socketu Incus jest wysoce uprzywilejowany** (w praktyce
+pozwala przejąć hosta). Nie nadawaj go niezaufanym użytkownikom. Orkiestracja używa
+`--force-local --project default`, niezależnie od aktualnego remote/projektu CLI.
+Wyjątkiem składni CLI jest `incus query`: wymusza lokalny daemon przez
+`--force-local`, a projekt zasobu wskazuje parametrem URL `?project=default`.
+
+Jeśli dystrybucja używa innej ścieżki socketu niż domyślna CLI (np. Bluefin),
+ustaw ją w terminalu przed wywołaniem Make:
+
+```sh
+export INCUS_SOCKET=/run/incus/unix.socket
+```
+
+Właściwą ścieżkę pokazuje `systemctl cat incus.socket` w `ListenStream`.
+
+### Dokładna konfiguracja lokalnego Incus (Bluefin/Fedora, systemd)
+
+Poniższa konfiguracja odpowiada przygotowaniu hosta do tego repozytorium.
+Zakłada już zainstalowane Incus i QEMU oraz dostępne `/dev/kvm`. To świadoma,
+jednorazowa konfiguracja administracyjna hosta, nie część skryptów testowych.
+
+**1. Uruchom socket i sprawdź dostęp do daemona:**
+
+```sh
+sudo systemctl enable --now incus.socket
+export INCUS_SOCKET=/run/incus/unix.socket
+incus --force-local info
+```
+
+Na Bluefin socket należy do grupy `incus-admin`. Jeśli występuje odmowa dostępu,
+sprawdź `id` i `systemctl cat incus.socket`; nadanie dostępu powinien świadomie
+wykonać administrator. Po zmianie grup trzeba ponownie się zalogować. Nie
+naprawiaj tego przez `chmod 666` ani uruchamianie całych testów przez sudo.
+`INCUS_SOCKET` obowiązuje w bieżącym terminalu; po otwarciu nowego ustaw ją
+ponownie albo świadomie dodaj export do własnej konfiguracji powłoki.
+
+**2. Sprawdź istniejącą konfigurację i zajęte podsieci:**
+
+```sh
+incus --force-local admin init --dump
+incus --force-local --project default list
+incus --force-local storage list
+incus --force-local --project default network list
+ip -4 route show
+```
+
+Jeśli masz już pulę i odpowiednią sieć, **nie uruchamiaj ponownie inicjalizacji**.
+Wykorzystaj je przez `TEST_VM_POOL` i `TEST_VM_NETWORK`. Preseed poniżej jest
+przeznaczony dla świeżego, nieskonfigurowanego Incus: tworzy zasoby i ustawia
+domyślny profil. Nie stosuj go w ciemno do instalacji używanej przez inne projekty.
+
+**3. Na świeżej instalacji zastosuj gotowy preseed zamiast wybierać opcje
+interaktywnie:**
+
+Sprawdź wcześniej, czy `10.203.77.0/24` nie koliduje z LAN, VPN, Dockerem ani
+innymi sieciami. Jeżeli koliduje, zmień `ipv4.address` na wolną prywatną podsieć.
+
+```sh
+incus --force-local admin init --preseed <<'YAML'
+config: {}
+networks:
+  - name: incusbr0
+    type: bridge
+    config:
+      ipv4.address: 10.203.77.1/24
+      ipv4.nat: "true"
+      ipv6.address: none
+storage_pools:
+  - name: default
+    driver: dir
+    config: {}
+profiles:
+  - name: default
+    description: Default Incus profile
+    config: {}
+    devices:
+      eth0:
+        name: eth0
+        network: incusbr0
+        type: nic
+      root:
+        path: /
+        pool: default
+        type: disk
+YAML
+```
+
+Wybrane ustawienia:
+
+| Element | Wartość i znaczenie |
+| --- | --- |
+| Klaster | Nie; pojedynczy lokalny daemon. |
+| API przez sieć | Wyłączone; dostęp przez lokalny socket, bez otwierania portu 8443. |
+| Pula `default` | Backend `dir`, bez wskazywania urządzenia i bez formatowania dysków. Dane pod katalogiem Incus na filesystemie hosta (typowo `/var/lib/incus/storage-pools/default`). |
+| Sieć `incusbr0` | Zarządzany bridge, brama `10.203.77.1/24`, IPv4 NAT; domyślne DHCP i DNS Incus włączone. |
+| IPv6 | Wyłączone dla tej sieci. |
+| Interfejs fizyczny | Nie jest przyłączany do bridge; VM wychodzi do Internetu przez NAT hosta. |
+| Profil `default` | Dysk z puli `default` i karta `eth0` w `incusbr0`. Orkiestrator testów używa `--no-profiles` i wskazuje te zasoby jawnie, więc nie zależy od tego profilu. |
+
+Pula katalogowa korzysta z wolnego miejsca hosta; nie rezerwuje automatycznie
+64 GiB. Rozmiar dysku konkretnej VM ustawia dopiero `make test-vm-up`.
+
+**3a. Na hoście z firewalld zezwól na DHCP/DNS i ruch wychodzący z bridge'a:**
+
+Na Bluefin/Fedora samo utworzenie bridge'a i NAT przez Incus może nie wystarczyć.
+Nieprzypisany bridge trafia pod reguły domyślnej strefy; blokada DHCP powoduje
+brak IPv4 w VM, a APT zgłasza potem `Temporary failure resolving deb.debian.org`.
+Nie naprawiaj tego przez wyłączanie zapory ani wpisywanie publicznego DNS
+w gościu pozbawionym adresu i trasy domyślnej.
+
+Poniższa jednorazowa konfiguracja tworzy dedykowaną strefę `ai-profiles`
+wyłącznie dla `incusbr0` oraz politykę `ai-profiles-out`. Najpierw sprawdź
+`firewall-cmd --get-active-zones` i `firewall-cmd --permanent --get-policies`.
+Nie stosuj jej bez inspekcji, jeśli te nazwy już istnieją lub bridge ma własne
+reguły. Użyj faktycznej nazwy bridge'a, jeżeli jest inna niż `incusbr0`.
+
+```sh
+sudo firewall-cmd --permanent --new-zone=ai-profiles
+sudo firewall-cmd --permanent --zone=ai-profiles --add-service=dhcp
+sudo firewall-cmd --permanent --zone=ai-profiles --add-service=dns
+sudo firewall-cmd --permanent --zone=ai-profiles --add-interface=incusbr0
+sudo firewall-cmd --permanent --new-policy=ai-profiles-out
+sudo firewall-cmd --permanent --policy=ai-profiles-out --add-ingress-zone=ai-profiles
+sudo firewall-cmd --permanent --policy=ai-profiles-out --add-egress-zone=ANY
+sudo firewall-cmd --permanent --policy=ai-profiles-out --set-target=ACCEPT
+sudo firewall-cmd --check-config
+sudo firewall-cmd --reload
+```
+
+Wykonuj kolejne polecenie tylko po sukcesie poprzedniego. `--reload` stosuje
+konfigurację trwałą z zachowaniem stanu połączeń; przed jego użyciem sprawdź,
+czy inne potrzebne reguły firewalld nie istnieją wyłącznie w konfiguracji runtime.
+Nie używaj `--complete-reload` ani zbiorczego `--runtime-to-permanent`.
+
+Strefa pozwala gościowi korzystać z DHCP i DNS hosta, ale nie otwiera mu
+wszystkich usług hosta jak strefa `trusted`. Polityka pozwala na forwarding
+z tej strefy do innych stref (`ANY` nie oznacza `HOST`). NAT pozostaje
+zarządzany przez Incus. Nie zmieniamy stref interfejsu fizycznego, Dockera ani
+libvirt. Jest to świadoma konfiguracja hosta, nigdy automatyczny krok testów.
+
+Weryfikacja:
+
+```sh
+firewall-cmd --zone=ai-profiles --list-all
+firewall-cmd --policy=ai-profiles-out --list-all
+incus --force-local --project default exec NAZWA_VM -- ip -4 address
+incus --force-local --project default exec NAZWA_VM -- ip -4 route
+incus --force-local --project default exec NAZWA_VM -- timeout 10 getent ahostsv4 deb.debian.org
+```
+
+Jeśli VM uruchomiono przed naprawą zapory, odnowienie DHCP przez
+`networkctl renew enp5s0` wewnątrz tego obrazu przywraca adres bez restartu VM
+(sprawdź nazwę interfejsu przez `ip link`). Po potwierdzeniu łączności wykonaj
+`make test-vm-reprovision`, aby naprawić przerwany provisioning bez usuwania
+dysku. Sama naprawa sieci nie ponawia zakończonych błędem skryptów cloud-init.
+
+**4. Zweryfikuj wynik i przygotuj VM:**
+
+```sh
+incus --force-local storage list
+incus --force-local --project default network list
+incus --force-local query /1.0 | jq '.environment | {driver, addresses}'
+TEST_VM_POOL=default TEST_VM_NETWORK=incusbr0 make test-vm-up
+```
+
+Oczekiwane: pula `default` ma stan `CREATED`, zarządzana sieć `incusbr0` ma stan
+`CREATED`, driver zawiera `qemu`, a `addresses` jest pustą listą przy niewystawionym
+API. Stan `CREATED` sieci nie dowodzi jeszcze dostępu VM do Internetu; potwierdza
+go dopiero udany provisioning. Po przygotowaniu VM wykonaj `make test-all`.
+Przy jednej puli i jednej pasującej sieci zmienne `TEST_VM_POOL` i
+`TEST_VM_NETWORK` można pominąć.
+
+Jeżeli daemon nadal nie startuje:
+
+```sh
+systemctl status incus.socket incus.service --no-pager
+sudo journalctl -u incus.service -u incus.socket -n 80 --no-pager
+```
+
+### Źródło obrazu i zasoby VM
+
+Remote `images` musi wskazywać `https://images.linuxcontainers.org` przez
+simplestreams. Przed utworzeniem sprawdzany jest aktualny katalog:
+
+```sh
+incus remote list --format json
+incus image list images: debian/13/cloud --format json
+```
+
+Wybierany jest wyłącznie obraz typu `virtual-machine`, `x86_64`, Debian,
+`release=trixie`, `variant=cloud`, alias `debian/13/cloud` lub wariant `/amd64`.
+Nie ma fallbacku do kontenera, Debian 12 ani innego systemu. Wariant cloud
+dostarcza cloud-init i incus-agent; ich faktyczne działanie jest sprawdzane po
+starcie. Fingerprint zostaje zapisany w `.test-vm/image-source`, konfiguracji
+VM `user.ai-profiles.image` i metadanych każdego przebiegu. Identyfikator
+jest wybierany ponownie dopiero przy tworzeniu nowej VM, nie przy każdym teście.
+
+Domyślnie VM ma **4 vCPU, 8 GiB RAM, dysk 64 GiB**. Przy pierwszym utworzeniu:
+
+```sh
+TEST_VM_CPUS=6 TEST_VM_MEMORY_GIB=12 TEST_VM_DISK_GIB=96 make test-vm-up
+TEST_VM_POOL=default TEST_VM_NETWORK=incusbr0 make test-vm-up
+```
+
+Dozwolone są liczby całkowite: CPU 1–256, RAM 4–1024 GiB, dysk 32–4096 GiB.
+Zmienne nie zmieniają już istniejącej VM. Pool i sieć wybierane są automatycznie
+tylko przy jednoznacznym wyborze; inaczej trzeba wskazać istniejące zasoby.
+Provisioning wymaga filesystemu o rozmiarze co najmniej 90% zamówionego dysku
+i 8 GiB wolnego miejsca; pokazuje też rzeczywiste `df`, nie tylko rozmiar dysku.
+
+## Polecenia
+
+```sh
+make test-vm-up                # utworzenie/przygotowanie lub wznowienie
+make test                     # pełne cargo test --locked --all-targets
+make test-playwright          # zawsze docker build, potem istniejący run.sh
+make validate-rust-migration  # format, release, Clippy, walidacja, testy Rust
+make test-all                 # powyższa bramka, potem Playwright; Rust tylko raz
+make test-vm-sync              # sama synchronizacja aktualnego checkoutu
+make test-vm-reprovision       # jawne ponowne wykonanie provision.sh w VM
+make test-vm-stop              # zatrzymanie bez usuwania dysku/cache
+```
+
+Każdy test wznawia własną VM, czeka na agenta i cloud-init, sprawdza marker
+udanego provisioningu, synchronizuje źródła i wykonuje testy jako `tester`
+UID/GID 1000:1000. Zagnieżdżone `make test` w bramce wykonuje testy bez ponownej
+orkiestracji; rozpoznanie gościa wymaga root-owned markera provisioningu,
+nie flagi środowiskowej. Wewnętrzne cele Make odmawiają wykonania poza gościem.
+Produkcyjne cele `install`, `update`, `uninstall`, `switch`, `status`, `validate`
+i `rust-build` nadal działają lokalnie.
+
+Pierwszy start wymaga Internetu: Debian APT, oficjalne pakiety Docker dla Trixie
+(Engine, Buildx, Compose), podpisane repozytorium NodeSource dla Node.js 24 LTS,
+rustup stable z rustfmt/Clippy. Wersje systemu, Node i minimum Rust są sprawdzane.
+Konflikt istniejących UID/GID 1000 zatrzymuje provisioning zamiast osłabiać testy.
+Grupa Docker daje uprawnienia równoważne root **wewnątrz gościa**; granicą
+izolacji pozostaje VM. Nie udostępniamy hostowego socketu Docker, home, agenta
+SSH ani żadnych live mountów. Nie dodajemy SSH do orkiestracji.
+
+Provisioning działa tylko przy tworzeniu albo jawnej komendzie reprovision.
+Ponowny provisioning nie czyści cache i nie wykonuje ogólnego upgrade; instaluje
+brakujące pakiety/komponenty. Po zmianie skryptu użyj `make test-vm-reprovision`:
+sama zmiana user-data nie uruchamia ponownie cloud-init. Błąd pierwszego
+provisioningu pozostawia VM do diagnozy; jawna udana naprawa zapisuje osobny
+marker pozwalający zachować historyczny błąd cloud-init bez blokowania testów.
+
+## Źródła, cache i izolacja przebiegów
+
+Testy jednostkowe aktywacji używają wstrzykniętych runnerów; domyślny runner
+natywnych integracji w testach zgłasza brak CLI. Nigdy nie rejestrują marketplace
+w rzeczywistym HOME. Test adaptera Playwright instaluje wyłącznie CLIENT=opencode
+do jednorazowego projektu, pod `.ai-profiles/opencode/`.
+
+Jedna nieefemeryczna VM na kanoniczną ścieżkę checkoutu/użytkownika/hosta.
+Tożsamość w konfiguracji VM jest weryfikowana przed operacjami; kolizja
+zatrzymuje wykonanie. Wszystkie operacje mają wspólny nieblokujący `flock`:
+równoległe wywołanie kończy się czytelnym błędem.
+
+Źródła (również niezacommitowane i nowe) są kopiowane przez hostowy rsync do
+świeżego stagingu, tar bez dereferencji symlinków i `incus file push`; następnie
+guest-local rsync z `--delete` uzgadnia `/home/tester/ai-profiles`. Symlinki
+pozostają symlinkami, executable bits i `.dockerignore` zostają zachowane.
+Nie jest kopiowany hostowy build ani UID/GID; pliki w workspace należą do testera.
+Lista `tests/vm/excludes` wyklucza m.in. `.git`, `.opencode`, `.test-vm`, Cargo
+config, katalogi zależności, `.env*`, klucze i lokalne ustawienia. Nie umieszczaj
+sekretów pod zwykłymi nazwami źródeł; żaden filtr nie rozpozna dowolnego sekretu.
+Staging jest usuwany także po błędach. Nie używamy `--copy-links` ani
+`--delete-excluded`. Usunięte źródła znikają z workspace.
+
+Na dysku Incus zostają: `/home/tester/.cargo` (registry/git/toolchain),
+`/home/tester/ai-profiles/core/rust/target` (debug/release) i obrazy/warstwy Docker.
+Build pozostaje w miejscu wymaganym przez wykrywanie payloadów repozytorium.
+**Wyniki testów nigdy nie służą do pomijania wykonania**; obraz Playwright jest
+budowany przy każdym żądaniu (Docker może wykorzystać warstwy).
+
+## Logi i diagnostyka
+
+Każde wywołanie drukuje unikalną ścieżkę `.test-vm/artifacts/<run>/`.
+Zawiera log hosta, log operacji gościa i wyłącznie raporty JSON/HTML oraz PNG
+z `reports/`, także po niepowodzeniu. Nie eksportujemy `.private`, kluczy,
+auth storage ani całego tymczasowego projektu. TMPDIR i syntetyczne dane są
+świeże dla każdego przebiegu w `/home/tester/test-runs/<run>/tmp`.
+Scratch pozostaje w gościu do świadomej diagnostyki/usunięcia; może zawierać
+wygenerowane sekrety testowe. Nie ma automatycznego prune ani cargo clean.
+`.test-vm` to stan/lock/artefakty, **nie dysk VM**; dyskiem zarządza Incus.
+
+Kod błędu testu przechodzi przez exec i logowanie. Błąd eksportu nie maskuje
+błędu testu, ale po sukcesie testów powoduje niepowodzenie wywołania.
+Ctrl-C/TERM przekazuje TERM tylko grupie procesów własnego przebiegu, aby
+istniejący cleanup Playwright usunął własne kontenery. Nie zatrzymuje całej VM.
+Przy braku agenta nie ma fallbacku do SSH ani testów lokalnych.
+
+Nazwę VM znajdziesz w `artifacts/<run>/instance` lub `incus list`. Diagnostyka:
+
+```sh
+incus exec NAZWA_VM -- cloud-init status --long
+incus exec NAZWA_VM -- cat /var/log/cloud-init-output.log
+incus exec NAZWA_VM -- df -h /home/tester
+incus exec NAZWA_VM -- du -sh /home/tester/.cargo /home/tester/ai-profiles/core/rust/target /home/tester/test-runs
+incus exec NAZWA_VM -- docker system df
+```
+
+Lekkie kontrole granic orkiestracji: `bash tests/vm/check.sh`. Nie zastępują
+prawdziwego `make test-all`. Brak daemona, agenta, uprawnień lub wirtualizacji
+jest blokerem, a nie wynikiem testów aplikacji.
+
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/docs/testing.md ---
+
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/profiles/dotnet/mcp.json ---
+{
+  "servers": ["postgres"]
+}
+
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/profiles/dotnet/mcp.json ---
+
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/profiles/dotnet/profile.json ---
+{
+  "name": "dotnet",
+  "version": "2.0.0",
+  "description": "Profil dotnet"
+}
+
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/profiles/dotnet/profile.json ---
+
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/profiles/dotnet/skills.json ---
+{
+  "skills": [
+    "arch-check",
+    "architecture-advisor",
+    "changelogs",
+    "create-datadriven-aspnetcore",
+    "dotnet-webapi",
+    "improve-skill-quality",
+    "make-plan",
+    "make-roadmap",
+    "modular-design-principles",
+    "optimizing-ef-core-queries",
+    "refine-plan",
+    "test-gap-discovery"
+  ]
+}
+
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/profiles/dotnet/skills.json ---
 

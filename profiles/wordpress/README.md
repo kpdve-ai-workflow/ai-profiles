@@ -1,8 +1,8 @@
-# Profil WordPress: Novamira + Figma + MariaDB + Playwright
+# Profil WordPress: Novamira + Figma + Playwright
 
 Jedna instalacja profilu, następnie konfiguracja połączeń dla Twojego projektu.
 Nie używamy Pi. Novamira korzysta z loginu i **hasła aplikacyjnego WordPressa**, bez OAuth.
-Profil wybiera `novamira`, `figma`, `mariadb` i `playwright` w swoim `mcp.json`; ich jedyne definicje
+Profil wybiera `novamira`, `figma` i `playwright` w swoim `mcp.json`; ich jedyne definicje
 znajdują się w `mcp/servers/`. Figma jest współdzielona z profilem React,
 ale każdy projekt zachowuje własne lokalne ustawienia i połączenie.
 
@@ -21,15 +21,12 @@ użyj `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=...` dla zainstalowanego
 Instalacja dostarcza:
 
 - wspólne i wordpressowe skille do `{{AI_PROFILE_ROOT}}/plugin/skills/`, niezależnie dla wskazanego klienta;
-- definicje MCP `novamira`, `figma`, `mariadb` i `playwright` w zarządzanej konfiguracji wskazanego klienta;
+- definicje MCP `novamira`, `figma` i `playwright` w zarządzanej konfiguracji wskazanego klienta;
 - adapter Rust `{{AI_PROFILE_ROOT}}/ai-profile-mcp`, który uruchamia most Novamira;
 - osobny bundle Novamiry `.ai-profiles/<klient>/mcp/novamira/` dla każdego klienta: Dockerfile, Compose, launcher,
   `install-plugin` i zweryfikowany ZIP; bez plików poświadczeń;
-- launcher Rust `{{AI_PROFILE_MCP}}/mariadb/mariadb-launcher`, który buduje i uruchamia
-  oficjalny serwer MCP w Dockerze;
 - launcher Rust i kontekst ręcznego buildu Playwright w `{{AI_PROFILE_MCP}}/playwright/`;
 - tę instrukcję wraz z przykładami konfiguracji w `{{AI_PROFILE_ROOT}}/README.md`;
-- skill SQL w `{{AI_PROFILE_ROOT}}/plugin/skills/mcp-mariadb/`;
 - skrypt importu UpdraftPlus i jego pliki pomocnicze w `{{AI_PROFILE_ROOT}}/scripts/`.
 
 W źródłowej instrukcji `{{AI_PROFILE_ROOT}}`, `{{AI_PROFILE_MCP}}`,
@@ -37,7 +34,7 @@ W źródłowej instrukcji `{{AI_PROFILE_ROOT}}`, `{{AI_PROFILE_MCP}}`,
 podczas instalacji dla wybranego klienta. Dla nowych instalacji root to
 `.ai-profiles/<klient>`. Możesz wybrać CLIENT=claude lub CLIENT=codex bez OpenCode.
 
-**Novamira jest domyślnie włączona**, a MariaDB początkowo wyłączona.
+**Novamira jest domyślnie włączona.**
 Instalacja nie łączy się z WordPressem i działa bez sekretów. Nie tworzy
 `.env.novamira`; brak pliku nie blokuje instalacji. Przy uruchomieniu Novamira
 wskaże nazwę pliku do samodzielnego utworzenia. Figma wymaga autoryzacji.
@@ -253,146 +250,7 @@ przez Figmę. Sam zapis konfiguracji nie potwierdza udanej autoryzacji.
 Jeśli chwilowo nie potrzebujesz Figmy, dodaj do lokalnego `mcp` wpis
 `"figma": {"disabled": true}`, wykonaj update i restart OpenCode.
 
-## 8. Połącz MariaDB — pełny SQL
-
-MariaDB MCP jest niezależny od Novamiry. Łączy się bezpośrednio z bazą SQL;
-nie wymaga pluginu WordPressa, OAuth, usługi HTTP MCP ani kluczy do modeli AI.
-
-### Wymagania i pierwsza budowa
-
-- Host Linux, działający Docker CLI i Linux Docker Engine dostępny dla procesu
-  OpenCode. Nie montujemy gniazda Docker wewnątrz kontenera MCP.
-- Uruchomiona baza projektu, np. przez DDEV. Profil jej nie uruchamia i nie tworzy.
-- Konto MariaDB z **pełnymi uprawnieniami do docelowej bazy**, w tym do żądanych
-  operacji DDL/DML. Nie wymuszamy konta read-only; instalator nie nadaje sam grantów.
-- Przy pierwszym uruchomieniu: dostęp do GitHub, rejestrów obrazu bazowego
-  i zależności oraz kilka GB wolnego miejsca. Pełne zależności upstream obejmują
-  biblioteki ML, mimo że embeddings nie są w tej integracji włączone.
-
-`make install` dostarcza launcher bez pobierania źródeł i bez budowania obrazu.
-Po skonfigurowaniu i włączeniu MCP launcher:
-
-1. Sprawdza wymagane zmienne, następnie obecność obrazu Docker.
-2. Jeśli obrazu brak, pobiera archiwum oficjalnego
-   [MariaDB/mcp](https://github.com/MariaDB/mcp) w wersji 0.2.6, commit
-   `64876fb1a4cb81bf51564c46eb60401097c067cc`.
-3. Weryfikuje SHA-256 archiwum:
-   `0730bd3dd546bce18fb3cb4f940fd79980d6114b89909c72da1ebefc1d5fbbc0`.
-4. Buduje z jego Dockerfile obraz
-   `ai-profiles/mariadb-mcp:64876fb1a4cb81bf51564c46eb60401097c067cc`.
-   Budowa nie otrzymuje zmiennych bazy ani prywatnych plików projektu jako kontekstu.
-5. Uruchamia MCP przez stdio, przekazując poświadczenia przez środowisko,
-   nie wartości w argumentach komendy. Nie publikuje portu HTTP MCP.
-
-Nie potrzebujesz nowej komendy Make ani ręcznego klonowania źródeł.
-Pierwsza budowa może trwać kilka–kilkadziesiąt minut; postęp trafia na stderr,
-nie na strumień protokołu. Startup timeout tego MCP wynosi godzinę.
-Przy kolejnych uruchomieniach i w innych projektach korzystających z tego samego
-Docker Engine gotowy obraz jest współdzielony. Blokada budowy jest przechowywana
-w `${XDG_CACHE_HOME:-~/.cache}/ai-profiles/mariadb/`.
-
-Przypięte są źródła i ich checksum, nie wszystkie zależności przechodnie ani
-obraz `python:3.11-slim` upstream. Nie jest to gwarancja bitowo identycznych rebuildów.
-Obraz budujemy i uruchamiamy jako `linux/amd64`, zgodnie z obejściem upstream dla
-awarii asyncmy na natywnym ARM64. Inna architektura hosta wymaga emulacji Docker.
-
-### Połączenie per projekt
-
-Plik `<PROJECT>/.env.mariadb` jest wymagany tylko wtedy, gdy włączasz MariaDB.
-Utwórz go samodzielnie (powyższe polecenia); instalator go nie dostarcza,
-nie kopiuje ani nie usuwa. Wymagane pola to `DB_HOST`, `DB_PORT`, `DB_NAME`,
-`DB_USER` i `DB_PASSWORD`. Uprawnienia `0600`; nie commituj go ani nie udostępniaj
-przez HTTP.
-
-W głównym katalogu projektu dodaj do `.gitignore`:
-
-```gitignore
-/.env.mariadb
-```
-
-Utwórz plik i ustaw prawa przed wpisaniem hasła:
-
-```bash
-umask 077
-touch .env.mariadb
-chmod 600 .env.mariadb
-```
-
-Przykład dla DDEV z portem bazy opublikowanym na hoście:
-
-```dotenv
-DB_HOST=127.0.0.1
-DB_PORT=62335
-DB_NAME=przykladowa_baza
-DB_USER=przykladowy_uzytkownik
-DB_PASSWORD="fikcyjne haslo do bazy"
-```
-
-**62335 jest przykładem z konfiguracji WFOŚiGW**, nie globalnym domyślnym portem.
-Sprawdź `host_db_port` w `.ddev/config.yaml` i dane połączenia po uruchomieniu DDEV
-(np. `ddev describe`). Nazwę bazy i konto potwierdź dla konkretnego projektu.
-Hasło aplikacyjne Novamiry nie jest hasłem MariaDB.
-
-Domyślnie launcher stosuje `--network=host`, więc `127.0.0.1` oznacza host Linuxa.
-Nie używaj tu nazwy `db`, która zwykle jest dostępna tylko w sieci kontenerów DDEV.
-Nie przekierowuj połączenia na inną bazę przez zgadywanie portów.
-
-Do istniejącego `{{AI_PROFILE_LOCAL}}` dodaj wpis `mariadb` wewnątrz `mcp`:
-
-```json
-{
-  "mcp": {
-    "mariadb": {
-      "disabled": false,
-      "env_file": ".env.mariadb"
-    }
-  }
-}
-```
-
-**Zachowaj istniejące wpisy `novamira`, `figma` i inne ustawienia.** Przykłady
-konfiguracji znajdują się wyłącznie w tej instrukcji, nie w skillach. Nazwę pliku env możesz
-zmienić. Własne nazwy zmiennych mapujesz przez lokalne `environment`, np.
-`"DB_PASSWORD": "{env:LOCAL_DB_PASSWORD}"`. Pozostałe pola środowiska są scalane.
-
-Jeżeli potrzebujesz połączenia po sieci Docker zamiast portu hosta, ustaw
-`MARIADB_MCP_NETWORK=nazwa_sieci`, `DB_HOST=nazwa_kontenera_bazy` i `DB_PORT=3306`
-w tym samym pliku env. Najpierw potwierdź nazwy sieci/kontenera; profil ich nie
-tworzy ani nie zmienia. Ścieżki do certyfikatów i mounty dla zdalnych baz TLS
-wymagają osobnego dostosowania komendy — ten domyślny wariant dotyczy lokalnego DDEV.
-
-Z katalogu `ai-profiles` wykonaj standardowe:
-
-```bash
-make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu
-```
-
-Zrestartuj OpenCode, sprawdź `/mcps` lub `opencode mcp list`, poczekaj na pierwszą
-budowę. Do sprawdzenia połączenia wystarczy zapytanie
-`SELECT DATABASE(), VERSION()` i odczyt schematu. Nie trzeba tworzyć testowych tabel.
-
-### Uprawnienia i używanie SQL
-
-Profil ustawia **`MCP_READ_ONLY=false` i `MCP_BLOCK_SENSITIVE_SHOW=false`**.
-MCP dopuszcza odczyt, zapis, DDL i administracyjne polecenia SHOW. Ostateczne
-możliwości wynikają z uprawnień konta MariaDB — te flagi nie przyznają grantów.
-`DB_NAME` jest domyślną bazą połączenia, a nie granicą dostępu konta.
-
-Nie ograniczamy tego połączenia do read-only. Pełny dostęp nie oznacza jednak
-zgody na niezamówione kasowanie, migracje lub zmiany uprawnień. W multisite
-jedna baza może zawierać tabele kilku blogów; przed zapisem ustal blog i prefiks.
-Bezpośredni SQL omija hooki, walidację i cache WordPressa. Nie zastępuj nim
-bez potrzeby operacji treściowych, które wykonuje Novamira.
-Upstream blokuje wykonywanie wielu instrukcji w jednym zapytaniu; osobne
-wywołania MCP mogą korzystać z różnych połączeń z puli.
-
-Docker otrzymuje tylko jawnie wybrane zmienne bazy i flagi MCP, bez sekretów
-Novamiry czy kluczy embeddingów. Administratorzy demona Docker mogą odczytać
-środowisko kontenera — korzystaj z zaufanego lokalnego demona. Upstream loguje
-SQL i parametry: nie umieszczaj sekretów w zapytaniach ani nie publikuj pełnych logów.
-Serwer WWW musi blokować dostęp HTTP do `.env*`, `.ai-profiles/` i `.opencode/`.
-
-## 9. Import bazy UpdraftPlus do lokalnego DDEV
+## 8. Import bazy UpdraftPlus do lokalnego DDEV
 
 Profil dostarcza natywne narzędzie Rust **`restore-updraft`**. Pobierasz plik bazy z UpdraftPlus
 ręcznie, wskazujesz jego ścieżkę, a narzędzie wykonuje lokalny backup, import
@@ -408,8 +266,8 @@ Sama instalacja/aktualizacja profilu nigdy nie uruchamia importu.
   `ddev exec -- wp ...`. Standardowy obraz webowy DDEV dostarcza WP-CLI.
 - Zainstalowany/zaktualizowany profil WordPress i standardowy WordPress
   z `wp-config.php` oraz `wp-content/` w docroot DDEV.
-- Istniejąca, zainicjalizowana lokalna baza WordPressa `db`, na usłudze `db`
-  (`DB_HOST=db` lub `db:3306`). Skrypt nie działa z produkcyjnym/remote DB_HOST.
+- Istniejąca, zainicjalizowana lokalna baza WordPressa `db`, dostępna w usłudze
+  `db` (host `db`, port `3306`). Skrypt nie działa z bazą produkcyjną/zdalną.
 - `WP_ENVIRONMENT_TYPE` ustawione na `local` w lokalnym wp-config lub środowisku.
   Skrypt nie zmienia sam plików konfiguracyjnych WordPressa.
 - Pełny, **zaufany i nieszyfrowany** backup bazy `.sql` lub `.gz`. Nie ZIP z plikami,
@@ -537,7 +395,7 @@ Backupów nie commituj ani nie publikuj — zawierają dane i sekrety witryny.
 - `make uninstall` usuwa skrypt dostarczony z profilem, ale nie usuwa backupów
   ani ochrony MU, którą importer utworzył poza zarządzanymi plikami profilu.
 
-## 10. Aktualizacje, odinstalowanie i diagnostyka
+## 9. Aktualizacje, odinstalowanie i diagnostyka
 
 ```bash
 make status PROJECT=/sciezka/do/projektu
@@ -548,11 +406,6 @@ make uninstall CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu
 Te komendy zarządzają wyłącznie profilem i jego plikami. **Nie instalują,
 nie aktualizują, nie wyłączają ani nie usuwają pluginu Novamira, danych WordPressa
 czy hasła aplikacyjnego**. Zachowują lokalną konfigurację i plik env.
-Tak samo nie zmieniają bazy MariaDB, kont i grantów ani nie usuwają pliku
-`.env.mariadb`. Odinstalowanie usuwa zarządzany launcher, ale zostawia obraz
-Docker i cache blokady, ponieważ mogą być używane przez inne projekty.
-Zmiana przypiętego commita w przyszłej wersji launchera tworzy nowy tag obrazu;
-nie zastępuje starego tagu ani nie wykonuje migracji SQL.
 Plugin aktualizujesz osobno, po backupie i sprawdzeniu zgodności.
 Po zakończeniu korzystania z integracji możesz samodzielnie unieważnić jej hasło.
 
@@ -568,12 +421,8 @@ Po zakończeniu korzystania z integracji możesz samodzielnie unieważnić jej h
 | Błąd inicjalizacji Novamiry | panel MCP klienta pokazuje bezpieczny błąd; HTTP 401 oznacza potwierdzone odrzucenie danych, pozostałe awarie dostają komunikat ogólny |
 | Niewłaściwa witryna | host w `WP_API_URL`, faktyczny blog ID i URL z odczytu |
 | Figma wymaga logowania | autoryzację `figma` w `/mcps`, niezależnie od Novamiry |
-| MariaDB wyłączona | lokalne `disabled: false`, update i restart OpenCode |
-| MariaDB buduje się długo | postęp stderr, miejsce na dysku, dostęp do rejestrów i emulację amd64 |
 | Błąd checksum archiwum | przerwij start; nie pomijaj kontroli SHA-256 |
 | Docker niedostępny | działanie Linux Docker Engine i uprawnienia procesu OpenCode |
-| MariaDB connection refused | uruchomienie DDEV, prawidłowy port hosta i wybraną sieć |
-| MariaDB access denied | konto, hasło, dozwolony host i pełne granty do zamierzonej bazy |
 
 Nie wklejaj sekretów ani pełnych zrzutów środowiska do logów/czatu.
 Adapter nie uznaje `connectionFailed` mostu (również `{}`) za udane połączenie.

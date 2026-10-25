@@ -237,7 +237,7 @@ Dokumentacja: [HTTP authentication](https://playwright.dev/docs/network#http-aut
   `{{AI_PROFILE_LOCAL}}`. Zachowują priorytet; aktualizacja nie usuwa ich automatycznie.
 - Zmiana credentials, środowiska lub konfiguracji wymaga restartu MCP/klienta.
 
-React 4.0.0 / WordPress 3.0.0 używają `.ai-profiles/reports/`; poświadczenia
+React 4.0.0 / WordPress 3.1.0 używają `.ai-profiles/reports/`; poświadczenia
 pozostają w katalogu głównym projektu, bez migracji i fallbacku do starych lokalizacji.
 Sieć pozostaje `host`. Uninstall zachowuje raporty, credentials i regułę
 `.gitignore`. Prywatne pliki wskazywane jawnie muszą być w katalogu projektu.

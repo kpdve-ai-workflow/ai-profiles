@@ -7,7 +7,6 @@ mod codec;
 mod error;
 mod filesystem;
 mod layout;
-pub mod mariadb;
 pub mod mcp;
 mod model;
 pub mod playwright;
@@ -23,9 +22,6 @@ mod foundation_tests;
 #[cfg(test)]
 #[path = "../tests/lifecycle.rs"]
 mod lifecycle_tests;
-#[cfg(test)]
-#[path = "../tests/mariadb.rs"]
-mod mariadb_tests;
 #[cfg(test)]
 #[path = "../tests/mcp_config.rs"]
 mod mcp_config_tests;

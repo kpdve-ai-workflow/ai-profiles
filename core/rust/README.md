@@ -25,7 +25,6 @@ This builds, but does not run, the executables in
 | --- | --- | --- |
 | `ai-profile` | Profile manager CLI | `core/rust/target/release/ai-profile help` |
 | `ai-profile-mcp` | Standalone MCP adapter | Configured as the project's MCP executable |
-| `mariadb-launcher` | MariaDB MCP container launcher | Configured as the MariaDB MCP executable |
 | `restore-updraft` | WordPress database restore | `core/rust/target/release/restore-updraft --help` |
 | `test-inventory` | Shared test-discovery skill inventory | Installed as the skill's `scripts/inventory-tests` |
 
@@ -48,8 +47,7 @@ as the source root.
 The MCP adapter is standalone after it has been copied to a project's
 `.ai-profiles/<client>/` directory. It reads only that client's record in format-2
 state and its `local.json` at each startup. Frozen legacy adapters under
-`.opencode/` keep reading the retained format-1 state. The MariaDB launcher likewise starts only when
-explicitly configured and invoked.
+`.opencode/` keep reading the retained format-1 state.
 
 ## Native project payload
 
@@ -64,7 +62,6 @@ project writes; direct Cargo users must build all release binaries there first.
 | Release binary | Installed executable (mode 0755) |
 | --- | --- |
 | `ai-profile-mcp` | `.ai-profiles/<client>/ai-profile-mcp` (local MCP selected) |
-| `mariadb-launcher` | `.ai-profiles/<client>/mcp/mariadb/mariadb-launcher` (selected MariaDB) |
 | `restore-updraft` | `.ai-profiles/<client>/scripts/restore-updraft` (WordPress) |
 | `test-inventory` | `.ai-profiles/<client>/plugin/skills/test-gap-discovery/scripts/inventory-tests` |
 
@@ -100,9 +97,6 @@ implementation. Rust module filenames are relative to `core/rust/src/`.
 | `profile_management/mcp_runtime.py`: `ConfigError`, `read_json`, `project_path`, `load_local`, `merge`, `split_access_mode`, `apply_access_mode`, `validate_servers`, `resolve`, `render`, `changed_override_paths` | `mcp/config.rs` |
 | `profile_management/mcp_runtime.py`: `dotenv`, `environment_for` | `mcp/environment.rs` |
 | `profile_management/mcp_runtime.py`: `launch`, `main` | `mcp/runtime.rs`, `bin/ai-profile-mcp.rs` |
-| `mcp/launchers/mariadb/launch.py`: `StartupError`, `docker_environment`, `image_available`, `fetch_source` | `mariadb.rs`, `mariadb/archive.rs` |
-| `mcp/launchers/mariadb/launch.py`: `ensure_image`, `launch`, `main` | `mariadb/runtime.rs`, `bin/mariadb-launcher.rs` |
-| `mcp/launchers/mariadb/launch.py`: pinned image/source/platform constants | `mariadb.rs`, `mariadb/archive.rs` |
 | `profiles/wordpress/scripts/restore-updraft.py`: `RestoreError`, `inside`, `origin`, `mappings`, `mapped_url`, `inspect_dump`, `file_hash` | `wordpress.rs`, `wordpress/preflight.rs`, `wordpress/mapping.rs`, `wordpress/dump.rs` |
 | `profiles/wordpress/scripts/restore-updraft.py`: `Ddev`, `literal`, `topology` | `wordpress/ddev.rs` |
 | `profiles/wordpress/scripts/restore-updraft.py`: `preflight` | `wordpress/preflight.rs` |
@@ -111,7 +105,5 @@ implementation. Rust module filenames are relative to `core/rust/src/`.
 | Python embedded in `skills/test-gap-discovery/scripts/inventory-tests.sh` | `bin/test-inventory.rs` |
 
 The Rust manager does not invoke a host Python interpreter to implement any
-operation. The MariaDB launcher retains the upstream container's documented
-entrypoint (`python src/server.py`) inside the pinned Docker image; that
-upstream server is outside this migration's scope. Third-party MCP runtimes
-(Docker/Node) and PHP helpers keep their own dependencies.
+operation. Third-party MCP runtimes (Docker/Node) and PHP helpers keep their own
+dependencies.

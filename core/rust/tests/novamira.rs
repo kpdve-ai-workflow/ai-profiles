@@ -79,14 +79,22 @@ impl Adapter {
                 ])
                 .output()
                 .unwrap();
-            assert!(build.status.success(), "{}", String::from_utf8_lossy(&build.stderr));
+            assert!(
+                build.status.success(),
+                "{}",
+                String::from_utf8_lossy(&build.stderr)
+            );
             let installer = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/ai-profile");
             let installed = Command::new(installer)
                 .args(["install", "wordpress", "--client", "opencode", "--project"])
                 .arg(project.path())
                 .output()
                 .unwrap();
-            assert!(installed.status.success(), "{}", String::from_utf8_lossy(&installed.stderr));
+            assert!(
+                installed.status.success(),
+                "{}",
+                String::from_utf8_lossy(&installed.stderr)
+            );
         }
         let root = project.path().join(".ai-profiles/opencode");
         fs::create_dir_all(&root).unwrap();

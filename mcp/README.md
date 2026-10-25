@@ -62,9 +62,8 @@ pojedyncze `KEY=value`, cudzysłowy, komentarze i `export`; nie wykonuje powłok
 nie interpoluje `$VAR`/`${VAR}` i nie obsługuje wartości wieloliniowych.
 Brak wymaganego pliku lub zmiennej zatrzymuje start MCP.
 
-Poświadczenia tworzy wyłącznie użytkownik w katalogu projektu. W profilach
-WordPress standardową nazwą dla MariaDB jest `<PROJECT>/.env.mariadb` (gdy MCP
-jest włączony); dla PostgreSQL można wskazać `<PROJECT>/.env.postgres` przez
+Poświadczenia tworzy wyłącznie użytkownik w katalogu projektu. Dla PostgreSQL
+można wskazać `<PROJECT>/.env.postgres` przez
 lokalne `env_file` (opcjonalny sposób dostarczenia `DATABASE_URI`). Samodzielnie
 utwórz plik lokalnym edytorem, ustaw `chmod 600 <nazwa>`, dodaj do `.gitignore`
 i nie udostępniaj przez HTTP. Przykładowa zawartość PostgreSQL (fikcyjna):
@@ -73,8 +72,6 @@ i nie udostępniaj przez HTTP. Przykładowa zawartość PostgreSQL (fikcyjna):
 DATABASE_URI=postgresql://example_user:example_password@db.example.test:5432/example_db
 ```
 
-MariaDB używa `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`;
-konkretny przykład znajduje się w [instrukcji WordPress](../profiles/wordpress/README.md).
 PostgreSQL bez pliku może otrzymać URI z odziedziczonego środowiska. Figma jest
 zdalnym OAuth MCP i nie wymaga pliku poświadczeń w projekcie. Playwright używa
 opcjonalnego `base-auth.json` i opcjonalnego `playwright-auth.json` (cookies/storage
@@ -168,7 +165,7 @@ bez osobnej wtyczki. Surowe logi i plikowy sink logów mostu są wyłączone, st
 zawiera tylko MCP. Poprawne odpowiedzi i narzędzia są przekazywane; zero narzędzi
 nie oznacza błędnego hasła. Pozostałe serwery nadal działają przez zwykłe exec.
 
-WordPress 3.0.0 dostarcza ten nowy układ bez migracji starych lokalizacji.
+WordPress 3.1.0 dostarcza ten układ bez migracji starych lokalizacji.
 Szczegóły: [instrukcja WordPress](../profiles/wordpress/README.md).
 
 ### Zarządzane pliki launcherów
@@ -178,13 +175,6 @@ Instalowane są do `.ai-profiles/<klient>/mcp/<nazwa>/` wyłącznie projektom pr
 serwer i podlegają kontroli hashy, konfliktów oraz usuwaniu jak inne zarządzane
 pliki. Nie przechowuj w nich sekretów, cache ani artefaktów budowy. Szczegóły
 konkretnej integracji znajdują się w dokumentacji właściwego profilu.
-
-Launcher Rust `.ai-profiles/<klient>/mcp/mariadb/mariadb-launcher` jest kopiowany z
-lokalnego release builda. Historyczny `launch.py` pozostaje w repozytorium;
-nie jest instalowany. Launcher buduje przypięte źródła upstream dopiero przy pierwszym
-włączonym uruchomieniu MCP, nie podczas instalacji profilu. Weryfikuje SHA-256
-archiwum i buduje obraz Docker; szczegółowe wymagania, konfiguracja i ostrzeżenia
-dotyczące SQL znajdują się w [instrukcji WordPress](../profiles/wordpress/README.md).
 
 ## Playwright i audyty WCAG
 
@@ -236,7 +226,7 @@ zależności przechodnich w przyszłych rebuildach.
 
 Po aktualizacji dostarczonej receptury użytkownik jawnie ponawia build w projekcie.
 Aktualizacja i uninstall nie zarządzają lokalnymi obrazami ani raportami.
-React 4.0.0 i WordPress 3.0.0 umieszczają raporty pod `.ai-profiles/reports/`;
+React 4.0.0 i WordPress 3.1.0 umieszczają raporty pod `.ai-profiles/reports/`;
 plikami poświadczeń zarządza użytkownik w katalogu głównym projektu, bez migracji
 i fallbacku do starych lokalizacji. Sieć pozostaje `host`.
 Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwright/README.md).

@@ -89,17 +89,12 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     put(
         source.path(),
         "profiles/wordpress/mcp.json",
-        br#"{"servers":["mariadb"]}"#,
+        br#"{"servers":["legacy"]}"#,
     );
     put(
         source.path(),
-        "mcp/servers/mariadb.json",
-        br#"{"type":"local","command":[".opencode/mcp/mariadb/mariadb-launcher"]}"#,
-    );
-    put(
-        source.path(),
-        "mcp/launchers/mariadb/launch.py",
-        b"reference only",
+        "mcp/servers/legacy.json",
+        br#"{"type":"local","command":[".opencode/ai-profile-mcp","legacy"]}"#,
     );
     put(
         source.path(),
@@ -113,7 +108,6 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     );
     for binary in [
         "ai-profile-mcp",
-        "mariadb-launcher",
         "playwright-launcher",
         "restore-updraft",
         "test-inventory",
@@ -509,7 +503,7 @@ fn versions_profiles_empty_selections_and_user_overrides_are_independent() {
     );
     assert!(!project
         .path()
-        .join(".ai-profiles/codex/mcp/mariadb")
+        .join(".ai-profiles/codex/mcp/legacy")
         .exists());
     assert!(!project
         .path()
@@ -549,7 +543,7 @@ fn combined_legacy_native_migration_partitions_ownership_and_preserves_original_
     put(
         project.path(),
         ".opencode/ai-profile.local.json",
-        br#"{"mcp":{"mariadb":{"environment":{"CUSTOM":"literal"}}}}"#,
+        br#"{"mcp":{"legacy":{"environment":{"CUSTOM":"literal"}}}}"#,
     );
     let imported = crate::project::manifest_for(&context, project.path()).unwrap();
     for client in Client::ALL {
@@ -856,9 +850,9 @@ fn lazy_legacy_import_and_selected_migration_retain_frozen_assets_and_overrides(
     put(
         project.path(),
         ".opencode/ai-profile.local.json",
-        br#"{"mcp":{"mariadb":{"environment":{"PASSWORD":"do-not-print"}}}}"#,
+        br#"{"mcp":{"legacy":{"environment":{"PASSWORD":"do-not-print"}}}}"#,
     );
-    let legacy = json!({"format":1,"profile":"wordpress","version":"1.0.0","files":{},"mcp":{},"mcp_base":{"mariadb":{"type":"local","command":[".opencode/mcp/mariadb/mariadb-launcher"]}},"native":{"opencode_skill_path_added":true},"had_config":false});
+    let legacy = json!({"format":1,"profile":"wordpress","version":"1.0.0","files":{},"mcp":{},"mcp_base":{"legacy":{"type":"local","command":[".opencode/mcp/legacy/launcher"]}},"native":{"opencode_skill_path_added":true},"had_config":false});
     put(
         project.path(),
         ".opencode/ai-profile-state.json",
@@ -1279,7 +1273,7 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
     let legacy = ".opencode/ai-profile-mcp.py";
     put(project.path(), legacy, b"old managed adapter");
     put(project.path(), "user.py", b"user owned");
-    let old_mcp = json!({"mariadb":{"type":"local","command":["python3",legacy,"mariadb"]}});
+    let old_mcp = json!({"legacy":{"type":"local","command":["python3",legacy,"legacy"]}});
     let old_state = json!({
         "format":1,"profile":"wordpress","version":"1.0.0",
         "files":{(legacy):sha(b"old managed adapter")},"mcp":old_mcp,
@@ -1324,7 +1318,6 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
             "test-inventory",
         ),
         (".opencode/ai-profile-mcp", "ai-profile-mcp"),
-        (".opencode/mcp/mariadb/mariadb-launcher", "mariadb-launcher"),
         (
             ".opencode/ai-profile/scripts/restore-updraft",
             "restore-updraft",
@@ -1358,30 +1351,9 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
         .all(|path| !path.ends_with(".py")));
     let config = read_json(&project.path().join("opencode.json")).unwrap();
     assert_eq!(config["theme"], "keep");
-    assert_eq!(
-        config["mcp"]["mariadb"]["command"],
-        json!([
-            project
-                .path()
-                .join(".opencode/ai-profile-mcp")
-                .to_str()
-                .unwrap(),
-            "mariadb"
-        ])
-    );
-    assert_eq!(
-        state["mcp_base"]["mariadb"]["command"],
-        json!([".opencode/mcp/mariadb/mariadb-launcher"])
-    );
-    let claude_mcp = read_json(&project.path().join(".mcp.json")).unwrap();
-    assert_eq!(claude_mcp["mcpServers"]["mariadb"]["type"], "stdio");
-    assert!(claude_mcp["mcpServers"]["mariadb"]["command"]
-        .as_str()
-        .unwrap()
-        .contains(".opencode/ai-profile-mcp"));
     let codex = fs::read_to_string(project.path().join(".codex/config.toml")).unwrap();
     assert!(codex.contains("mcp_servers"));
-    assert!(codex.contains("args = [\"mariadb\"]"));
+    assert!(codex.contains("legacy"));
     apply_profile(&context, project.path(), "wordpress").unwrap();
     assert_eq!(read_json(&state_path).unwrap(), state);
     crate::profile_management::uninstall::uninstall(&context, project.path()).unwrap();

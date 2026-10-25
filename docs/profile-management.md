@@ -136,7 +136,7 @@ Instaluj przez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> P
 Aliasy: `install-opencode`, `install-claude`, `install-codex` z tymi samymi PROFILE
 i PROJECT; sprzeczny CLIENT jest błędem. Make buduje
 manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
-launchery MariaDB/Playwright i restore WordPress trafiają do projektu jako samodzielne
+launcher Playwright i restore WordPress trafiają do projektu jako samodzielne
 pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
 referencyjny. Współdzielone zasoby legacy (również dawne `.py`) pozostają zamrożone;
 obce i lokalnie zmienione pliki zachowują dotychczasową ochronę.
@@ -220,7 +220,7 @@ używa `<PROJECT>/base-auth.json` z `username`, `password`, `origin` i prawami
 także wskazuj jako plik w katalogu projektu, z prawami `0600`. Compose nie wymaga edycji.
 Po przygotowaniu zrestartuj klienta i zatwierdź wymagane natywne zgody projektu/MCP.
 
-React 4.0.0 i WordPress 3.0.0 używają `.ai-profiles/reports/`; poświadczenia
+React 4.0.0 i WordPress 3.1.0 używają `.ai-profiles/reports/`; poświadczenia
 użytkownik tworzy w katalogu głównym projektu, bez migracji starych lokalizacji.
 Sieć pozostaje `host`.
 WordPress dodatkowo przygotowuje `.ai-profiles/<klient>/mcp/novamira/` z oficjalnym ZIP-em,

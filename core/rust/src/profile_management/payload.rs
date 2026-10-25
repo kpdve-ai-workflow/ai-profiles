@@ -120,14 +120,6 @@ fn build_files(
 
     for definition in definitions {
         let name = definition.name.as_str();
-        if name == "mariadb" {
-            insert_native(
-                context,
-                &mut files,
-                "mariadb-launcher",
-                ".opencode/mcp/mariadb/mariadb-launcher",
-            )?;
-        }
         if name == "playwright" {
             insert_native(
                 context,
@@ -200,9 +192,6 @@ fn build_files(
                     .map_err(|_| PayloadError::InvalidPayloadPath(source.clone()))?;
                 if contains_component(relative, "__pycache__") || has_extension(&source, "pyc") {
                     continue;
-                }
-                if name == "mariadb" && relative == Path::new("launch.py") {
-                    continue; // Preserved reference; distributed as mariadb-launcher.
                 }
                 if source.is_file() {
                     let relative_path =
