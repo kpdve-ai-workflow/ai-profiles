@@ -5,3 +5,4 @@ __pycache__/
 core/rust/target/
 skills-main
 .test-vm/
+/.ai-profiles-logs/

@@ -25,9 +25,10 @@ fn binaries() -> PathBuf {
 fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without_touching_wordpress(
 ) {
     let bin = binaries();
+    let checkout = crate::manager_fixture::Checkout::with_assets(&bin);
     let project = tempfile::tempdir().unwrap();
     let invoke = |action: &str, client: &str| {
-        let mut cmd = Command::new(bin.join("ai-profile"));
+        let mut cmd = Command::new(&checkout.executable);
         cmd.arg(action);
         if action == "install" {
             cmd.arg("wordpress");
@@ -262,7 +263,8 @@ fn plugin_script_installs_verified_release_in_real_disposable_wordpress_without_
     }
     let project = tempfile::tempdir().unwrap();
     let root = project.path().join(".ai-profiles/opencode/mcp/novamira");
-    let installed = Command::new(binaries().join("ai-profile"))
+    let checkout = crate::manager_fixture::Checkout::with_assets(&binaries());
+    let installed = Command::new(&checkout.executable)
         .args(["install", "wordpress", "--client", "opencode", "--project"])
         .arg(project.path())
         .output()

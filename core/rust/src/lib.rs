@@ -27,6 +27,12 @@ mod lifecycle_tests;
 #[path = "../tests/logging.rs"]
 mod logging_tests;
 #[cfg(test)]
+#[path = "../tests/manager_fixture.rs"]
+mod manager_fixture;
+#[cfg(test)]
+#[path = "../tests/manager_logging.rs"]
+mod manager_logging_tests;
+#[cfg(test)]
 #[path = "../tests/mcp_config.rs"]
 mod mcp_config_tests;
 #[cfg(test)]

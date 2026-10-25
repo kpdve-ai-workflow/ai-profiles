@@ -90,8 +90,9 @@ impl Adapter {
                 "{}",
                 String::from_utf8_lossy(&build.stderr)
             );
-            let installer = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/ai-profile");
-            let installed = Command::new(installer)
+            let checkout =
+                crate::manager_fixture::Checkout::with_assets(&crate::manager_fixture::binaries());
+            let installed = Command::new(&checkout.executable)
                 .args(["install", "wordpress", "--client", "opencode", "--project"])
                 .arg(project.path())
                 .output()
