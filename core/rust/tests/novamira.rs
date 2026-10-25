@@ -32,12 +32,18 @@ enum Fixture {
 
 impl Adapter {
     fn start(command: Value, env_contents: &str, extra: Value, server: &str) -> Self {
-        Self::start_with(command, env_contents, extra, server, Fixture::Synthetic)
+        Self::start_with(
+            command,
+            Some(env_contents),
+            extra,
+            server,
+            Fixture::Synthetic,
+        )
     }
 
     fn start_with(
         command: Value,
-        env_contents: &str,
+        env_contents: Option<&str>,
         extra: Value,
         server: &str,
         fixture: Fixture,
@@ -103,7 +109,9 @@ impl Adapter {
         fs::copy(release, &executable).expect("build release binaries in VM before process tests");
         let env_path = project.path().join(".env.novamira");
         fs::create_dir_all(env_path.parent().unwrap()).unwrap();
-        fs::write(env_path, env_contents).unwrap();
+        if let Some(env_contents) = env_contents {
+            fs::write(env_path, env_contents).unwrap();
+        }
         let mut entry = json!({"type":"local","command":command,"env_file":".env.novamira"});
         entry
             .as_object_mut()
@@ -409,7 +417,7 @@ fn check_real_bridge(fixture: Fixture) {
         };
         let mut adapter = Adapter::start_with(
             command,
-            &env,
+            Some(&env),
             json!({"environment":{"OAUTH_ENABLED":"false","USE_SYSTEM_PROXY":"false","WP_API_INIT_TIMEOUT_MS":"1500","LOG_TO_STDERR":"true","LOG_FILE":log_file}}),
             "novamira",
             fixture,
@@ -457,16 +465,22 @@ fn novamira_empty_configuration_fails_before_spawning_bridge() {
 
 #[test]
 fn novamira_missing_project_root_file_reports_its_name_without_spawning_bridge() {
-    let mut adapter = Adapter::start(
+    // Missing user-owned credentials must be arranged before spawning the
+    // adapter: deleting them after spawn races with its environment read.
+    let mut adapter = Adapter::start_with(
         json!(["sh", "-c", "echo SECRET-SENTINEL >&2; exit 9"]),
-        "WP_API_URL=https://wordpress.example.test/wp-json/mcp/novamira\nWP_API_USERNAME=fixture\nWP_API_PASSWORD=fixture-password\n",
+        None,
         json!({"environment":{"WP_API_URL":"{env:WP_API_URL}","WP_API_USERNAME":"{env:WP_API_USERNAME}","WP_API_PASSWORD":"{env:WP_API_PASSWORD}"}}),
         "novamira",
+        Fixture::Synthetic,
     );
-    fs::remove_file(adapter._project.path().join(".env.novamira")).unwrap();
+    assert!(!adapter._project.path().join(".env.novamira").exists());
     let reply = adapter.initialize();
     let message = reply["error"]["message"].as_str().unwrap();
     assert!(message.contains(".env.novamira"));
-    assert!(message.contains("utwórz w katalogu głównym projektu"));
+    assert!(
+        message.contains("utwórz w katalogu głównym projektu"),
+        "unexpected configuration diagnostic: {message}"
+    );
     assert!(!adapter.stop().contains("SECRET-SENTINEL"));
 }

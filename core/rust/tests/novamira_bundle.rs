@@ -67,9 +67,21 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         .contains("@automattic/mcp-wordpress-remote@0.4.0"));
     let config = fs::read(project.path().join("opencode.json")).unwrap();
     let effective: serde_json::Value = serde_json::from_slice(&config).unwrap();
+    // mcp/README.md: clients invoke the shared adapter; the adapter resolves
+    // the client-isolated launcher from mcp_base at runtime.
     assert_eq!(
-        effective["mcp"]["novamira"]["command"][0],
-        ".ai-profiles/opencode/mcp/novamira/launcher"
+        effective["mcp"]["novamira"]["command"],
+        serde_json::json!([
+            project.path().join(".ai-profiles/opencode/ai-profile-mcp"),
+            "novamira"
+        ])
+    );
+    let state: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path().join(".ai-profiles/state.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        state["clients"]["opencode"]["mcp_base"]["novamira"]["command"],
+        serde_json::json!([".ai-profiles/opencode/mcp/novamira/launcher"])
     );
     fs::write(
         project.path().join(".env.novamira"),
@@ -89,7 +101,11 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         serde_json::from_slice(&fs::read(project.path().join(".mcp.json")).unwrap()).unwrap();
     assert_eq!(
         claude_config["mcpServers"]["novamira"]["command"],
-        ".ai-profiles/claude/mcp/novamira/launcher"
+        serde_json::json!(project.path().join(".ai-profiles/claude/ai-profile-mcp"))
+    );
+    assert_eq!(
+        claude_config["mcpServers"]["novamira"]["args"],
+        serde_json::json!(["novamira"])
     );
     assert!(!project.path().join(".ai-profiles/mcp").exists());
     assert_eq!(
@@ -110,14 +126,6 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         fs::read(root.join(".private/ca.crt")).unwrap(),
         b"user-owned-public-ca"
     );
-    for client in ["opencode", "claude"] {
-        assert!(invoke("uninstall", client).status.success());
-    }
-    assert_eq!(
-        fs::read_to_string(project.path().join(".env.novamira")).unwrap(),
-        "WP_API_PASSWORD=synthetic-private-sentinel\n"
-    );
-    assert!(root.join("downloads/novamira.zip").exists());
     // Exercise the real shell script with a controlled WP-CLI boundary. It
     // must verify local context first and never request force or activation.
     let tools = tempfile::tempdir().unwrap();
@@ -163,11 +171,44 @@ esac
     assert!(log.contains("plugin install"));
     assert!(!log.contains("--force") && !log.contains("--activate"));
     fs::write(&calls, "").unwrap();
+    let archive = fs::read(root.join("downloads/novamira.zip")).unwrap();
     fs::write(root.join("downloads/novamira.zip"), "corrupt archive").unwrap();
     assert!(!run_plugin("no").status.success());
     assert!(
         fs::read_to_string(&calls).unwrap().is_empty(),
         "bad ZIP must fail before WordPress is started"
+    );
+    // Restore the managed bytes after the corruption check so ownership
+    // verification remains enabled during uninstall.
+    fs::write(root.join("downloads/novamira.zip"), archive).unwrap();
+    for client in ["opencode", "claude"] {
+        assert!(invoke("uninstall", client).status.success());
+        let bundle = project
+            .path()
+            .join(format!(".ai-profiles/{client}/mcp/novamira"));
+        for name in [
+            "Dockerfile",
+            "compose.yaml",
+            "compose.ca.yaml",
+            ".dockerignore",
+            "README.md",
+            "launcher",
+            "install-plugin",
+            "downloads/novamira.zip",
+        ] {
+            assert!(
+                !bundle.join(name).exists(),
+                "uninstall retained {client}/{name}"
+            );
+        }
+    }
+    assert_eq!(
+        fs::read_to_string(project.path().join(".env.novamira")).unwrap(),
+        "WP_API_PASSWORD=synthetic-private-sentinel\n"
+    );
+    assert_eq!(
+        fs::read(root.join(".private/ca.crt")).unwrap(),
+        b"user-owned-public-ca"
     );
 }
 

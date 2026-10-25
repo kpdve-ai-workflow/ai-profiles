@@ -142,21 +142,44 @@ fn scoped_action(
     .unwrap();
 }
 
-#[test]
-fn novamira_credentials_are_user_owned_optional_for_install_and_survive_lifecycle() {
-    use crate::model::{Client, ProfileAction as A};
+fn novamira_source() -> (tempfile::TempDir, RepositoryContext) {
     let (source, context) = native_source();
     put(
         source.path(),
         "profiles/wordpress/mcp.json",
         br#"{"servers":["novamira"]}"#,
     );
-    // The production definition is the oracle for distribution, not a fixture default.
+    // Installation requires the complete bundle (mcp/README.md), even when
+    // this test only observes ownership of the user-created credentials.
     put(
         source.path(),
         "mcp/servers/novamira.json",
         include_bytes!("../../../mcp/servers/novamira.json"),
     );
+    let images = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mcp/images/novamira");
+    for filename in [
+        "Dockerfile",
+        ".dockerignore",
+        "compose.yaml",
+        "compose.ca.yaml",
+        "README.md",
+        "novamira.zip",
+        "launcher",
+        "install-plugin",
+    ] {
+        put(
+            source.path(),
+            &format!("mcp/images/novamira/{filename}"),
+            &fs::read(images.join(filename)).unwrap(),
+        );
+    }
+    (source, context)
+}
+
+#[test]
+fn novamira_credentials_are_user_owned_optional_for_install_and_survive_lifecycle() {
+    use crate::model::{Client, ProfileAction as A};
+    let (source, context) = novamira_source();
     let project = tempfile::tempdir().unwrap();
     put(project.path(), ".gitignore", b"# user rules\nkeep\n");
     scoped_action(
@@ -247,17 +270,7 @@ fn novamira_credentials_are_user_owned_optional_for_install_and_survive_lifecycl
 #[test]
 fn novamira_credential_collisions_do_not_block_install_or_get_modified() {
     use crate::model::{Client, ClientSelection, ProfileAction as A};
-    let (source, context) = native_source();
-    put(
-        source.path(),
-        "profiles/wordpress/mcp.json",
-        br#"{"servers":["novamira"]}"#,
-    );
-    put(
-        source.path(),
-        "mcp/servers/novamira.json",
-        include_bytes!("../../../mcp/servers/novamira.json"),
-    );
+    let (_source, context) = novamira_source();
     for kind in ["symlink", "dangling", "directory", "fifo"] {
         let project = tempfile::tempdir().unwrap();
         let outside = tempfile::NamedTempFile::new().unwrap();
