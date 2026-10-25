@@ -38,39 +38,6 @@ enum CliFailure {
     Operation(String),
 }
 
-/// Prepare diagnostics for the ai-profile entry point only. Source discovery is
-/// the same executable-relative contract used by operations, never CWD/PROJECT.
-/// The caller owns subscriber installation and its lifetime.
-pub fn diagnostic_subscriber() -> std::io::Result<impl tracing::Subscriber + Send + Sync> {
-    let context = RepositoryContext::discover().map_err(std::io::Error::other)?;
-    let directory = context.sources.join(".ai-profiles-logs");
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(std::io::Error::other)?
-        .as_nanos();
-    for sequence in 0u64.. {
-        let run_id = format!("{}-{timestamp}-{sequence}", std::process::id());
-        let subscriber = crate::logging::build_subscriber(
-            &directory,
-            &format!("{run_id}.jsonl"),
-            crate::logging::RunMetadata {
-                binary: "ai-profile",
-                version: env!("CARGO_PKG_VERSION"),
-                run_id: &run_id,
-            },
-        );
-        match subscriber {
-            // Atomic create-new is the authority, even after PID reuse or a
-            // clock rollback. Retry only a filename collision, never elsewhere.
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            result => return result,
-        }
-    }
-    Err(std::io::Error::other(
-        "exhausted diagnostic run identifiers",
-    ))
-}
-
 pub fn main() -> i32 {
     let mut args = env::args_os();
     let _program = args.next();

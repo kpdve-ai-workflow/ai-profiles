@@ -12,6 +12,31 @@ pub(crate) const LEGACY_STATE: &str = ".opencode/ai-profile-state.json";
 pub(crate) const LEGACY_LOCAL: &str = ".opencode/ai-profile.local.json";
 
 impl Layout {
+    /// Resolve an installed skill helper using the same paths as the installer.
+    pub(crate) fn project_from_skill_helper(
+        executable: &std::path::Path,
+        skill: &str,
+        helper: &str,
+    ) -> Option<std::path::PathBuf> {
+        let executable = executable.canonicalize().ok()?;
+        for project in executable.ancestors().skip(1) {
+            for layout in
+                std::iter::once(Self::Legacy).chain(Client::ALL.into_iter().map(Self::Isolated))
+            {
+                if executable
+                    == project
+                        .join(layout.skills())
+                        .join(skill)
+                        .join("scripts")
+                        .join(helper)
+                {
+                    return Some(project.to_owned());
+                }
+            }
+        }
+        None
+    }
+
     pub(crate) fn from_state(client: Client, state: Option<&serde_json::Value>) -> Self {
         if state.and_then(|v| v.get("layout")).and_then(|v| v.as_str()) == Some("legacy") {
             Self::Legacy

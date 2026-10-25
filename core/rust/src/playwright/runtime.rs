@@ -236,7 +236,7 @@ fn public_certificate(path: &Path) -> Result<PathBuf, PlaywrightError> {
     Ok(path)
 }
 
-fn installed_identity(executable: &Path) -> Result<(PathBuf, PathBuf), PlaywrightError> {
+pub(crate) fn installed_identity(executable: &Path) -> Result<(PathBuf, PathBuf), PlaywrightError> {
     let executable = executable
         .canonicalize()
         .map_err(|_| PlaywrightError::InvalidLauncher)?;
@@ -436,6 +436,7 @@ pub fn main() -> i32 {
         ])
         .current_dir(&plan.project)
         .envs(plan.environment);
+    crate::logging::handoff();
     let source = command.exec();
     eprintln!("playwright: cannot start Docker Compose: {source}");
     1

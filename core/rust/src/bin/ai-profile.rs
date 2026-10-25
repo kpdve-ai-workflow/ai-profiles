@@ -10,14 +10,12 @@ fn main() -> ExitCode {
         tracing::info!(event = "cli.started");
         invocation::record();
         let code = ai_profiles_core::profile_management::cli::main();
-        tracing::info!(event = "cli.finished", exit_code = code);
+        tracing::info!(
+            event = "cli.finished",
+            exit_code = code,
+            diagnostics_complete = ai_profiles_core::logging::diagnostics_complete()
+        );
         ExitCode::from(code as u8)
     };
-    match ai_profiles_core::profile_management::cli::diagnostic_subscriber() {
-        Ok(subscriber) => tracing::subscriber::with_default(subscriber, invoke),
-        Err(error) => {
-            eprintln!("WARNING: diagnostics unavailable: {error}");
-            invoke()
-        }
-    }
+    ai_profiles_core::logging::with_diagnostics("ai-profile", invoke)
 }

@@ -1,3 +1,3 @@
-fn main() {
-    std::process::exit(ai_profiles_core::mcp::runtime::main());
+fn main() -> std::process::ExitCode {
+    ai_profiles_core::logging::runtime_entry("ai-profile-mcp", ai_profiles_core::mcp::runtime::main)
 }

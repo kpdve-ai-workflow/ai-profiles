@@ -24,6 +24,9 @@ mod foundation_tests;
 #[path = "../tests/lifecycle.rs"]
 mod lifecycle_tests;
 #[cfg(test)]
+#[path = "../tests/logging_session.rs"]
+mod logging_session_tests;
+#[cfg(test)]
 #[path = "../tests/logging.rs"]
 mod logging_tests;
 #[cfg(test)]
@@ -50,6 +53,9 @@ mod playwright_tests;
 #[cfg(test)]
 #[path = "../tests/profiles.rs"]
 mod profiles_tests;
+#[cfg(test)]
+#[path = "../tests/runtime_logging.rs"]
+mod runtime_logging_tests;
 #[cfg(test)]
 #[path = "../tests/wordpress_dump.rs"]
 mod wordpress_dump_tests;

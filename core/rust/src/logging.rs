@@ -16,7 +16,9 @@
 //! OS synchronously, not necessarily stable storage. Runtime I/O failures use
 //! tracing-subscriber's stderr reporting; this API returns preparation failures,
 //! not delivery acknowledgements. Disk-full/crash durability and a richer
-//! incompleteness reporting channel are outside this foundation's contract.
+//! incompleteness reporting channel are outside the low-level `build_subscriber`
+//! contract. Production entry points use `Session` and `with_diagnostics`, which
+//! add common configuration, payloads, rotation, retention and delivery status.
 
 use std::{
     fmt,
@@ -36,6 +38,11 @@ use tracing_subscriber::{
     },
     registry::LookupSpan,
 };
+
+mod session;
+pub use session::{Config, PayloadSummary, Session};
+mod entry;
+pub use entry::{diagnostics_complete, handoff, runtime_entry, with_diagnostics};
 
 /// Run identity supplied by the binary, not inferred from paths or environment.
 #[derive(Clone, Copy, Debug, Serialize)]

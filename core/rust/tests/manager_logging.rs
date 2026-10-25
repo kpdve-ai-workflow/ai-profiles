@@ -51,13 +51,24 @@ impl Invocation {
         );
         fs::read_dir(directory)
             .unwrap()
+            .filter(|entry| entry.as_ref().unwrap().file_type().unwrap().is_dir())
             .map(|entry| {
                 let path = entry.unwrap().path();
-                assert_eq!(path.extension().unwrap(), "jsonl");
-                fs::read_to_string(path)
+                let mut segments: Vec<_> = fs::read_dir(path)
                     .unwrap()
-                    .lines()
-                    .map(|line| serde_json::from_str(line).unwrap())
+                    .map(|e| e.unwrap().path())
+                    .filter(|p| p.extension().is_some_and(|e| e == "jsonl"))
+                    .collect();
+                segments.sort();
+                segments
+                    .into_iter()
+                    .flat_map(|p| {
+                        fs::read_to_string(p)
+                            .unwrap()
+                            .lines()
+                            .map(|line| serde_json::from_str(line).unwrap())
+                            .collect::<Vec<_>>()
+                    })
                     .collect()
             })
             .collect()

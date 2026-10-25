@@ -92,12 +92,16 @@ fn walk(root: &Path, directory: &Path, pattern: &Regex, files: &mut Vec<String>)
 }
 
 fn main() -> ExitCode {
+    ai_profiles_core::logging::runtime_entry("test-inventory", invoke)
+}
+
+fn invoke() -> i32 {
     let requested = env::args_os().nth(1).unwrap_or_else(|| ".".into());
     let root = match fs::canonicalize(&requested) {
         Ok(root) if root.is_dir() => root,
         _ => {
             eprintln!("Expected directory: {}", Path::new(&requested).display());
-            return ExitCode::from(2);
+            return 2;
         }
     };
     let pattern = Regex::new(concat!(
@@ -135,11 +139,11 @@ fn main() -> ExitCode {
     match serde_json::to_string_pretty(&inventory) {
         Ok(output) => {
             println!("{output}");
-            ExitCode::SUCCESS
+            0
         }
         Err(error) => {
             eprintln!("Cannot serialize inventory: {error}");
-            ExitCode::FAILURE
+            1
         }
     }
 }

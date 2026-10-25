@@ -172,6 +172,7 @@ fn launch(server_name: &str) -> Result<(), McpRuntimeError> {
             Err(McpRuntimeError::NovamiraRejected)
         };
     }
+    crate::logging::handoff();
     let _exec_error = process.exec();
     Err(McpRuntimeError::Exec)
 }
@@ -193,7 +194,7 @@ pub(crate) fn project_from_adapter(executable: &Path) -> Result<PathBuf, McpRunt
     identity_from_adapter(executable).map(|(project, _)| project)
 }
 
-fn identity_from_adapter(
+pub(crate) fn identity_from_adapter(
     executable: &Path,
 ) -> Result<(PathBuf, Option<crate::model::Client>), McpRuntimeError> {
     let executable = executable
