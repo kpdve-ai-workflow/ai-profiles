@@ -3,8 +3,10 @@
 use crate::manager_fixture::Checkout;
 use serde_json::Value;
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
+    ffi::{OsStr, OsString},
     fs,
+    os::unix::{ffi::OsStrExt, ffi::OsStringExt, process::CommandExt},
     path::Path,
     process::{Command, Output, Stdio},
 };
@@ -75,7 +77,11 @@ impl Invocation {
 }
 
 fn lifecycle(records: &[Value], code: i32, error: Option<(&str, &str)>) -> String {
-    assert_eq!(records.len(), if error.is_some() { 3 } else { 2 });
+    let context_end = context_structure(records);
+    assert_eq!(
+        records.len(),
+        context_end + if error.is_some() { 3 } else { 2 }
+    );
     assert_eq!(records[0]["fields"]["event"], "cli.started");
     let last = records.last().unwrap();
     assert_eq!(last["fields"]["event"], "cli.finished");
@@ -87,12 +93,198 @@ fn lifecycle(records: &[Value], code: i32, error: Option<(&str, &str)>) -> Strin
         assert_eq!(record["binary"], "ai-profile");
     }
     if let Some((kind, message)) = error {
-        assert_eq!(records[1]["fields"]["event"], "cli.failed");
-        assert_eq!(records[1]["fields"]["error_kind"], kind);
-        assert_eq!(records[1]["fields"]["message"], message);
-        assert_eq!(records[1]["level"], "ERROR");
+        assert_eq!(records[context_end + 1]["fields"]["event"], "cli.failed");
+        assert_eq!(records[context_end + 1]["fields"]["error_kind"], kind);
+        assert_eq!(records[context_end + 1]["fields"]["message"], message);
+        assert_eq!(records[context_end + 1]["level"], "ERROR");
     }
     run_id.to_owned()
+}
+
+// The versioned framing and contiguous indices detect missing/duplicate records,
+// even when the missing value was empty. Only these explicit additions are allowed.
+fn context_structure(records: &[Value]) -> usize {
+    let start = &records[1]["fields"];
+    assert_eq!(start["event"], "cli.context.started");
+    assert_eq!(start["schema_version"], 1);
+    let argc = start["argc"].as_u64().unwrap() as usize;
+    let envc = start["envc"].as_u64().unwrap() as usize;
+    for (offset, (event, count)) in [("cli.context.arg", argc), ("cli.context.env", envc)]
+        .into_iter()
+        .enumerate()
+    {
+        let base = if offset == 0 { 2 } else { 2 + argc };
+        for index in 0..count {
+            let fields = &records[base + index]["fields"];
+            assert_eq!(fields["event"], event);
+            assert_eq!(fields["index"], index);
+        }
+    }
+    assert_eq!(
+        records[2 + argc + envc]["fields"]["event"],
+        "cli.context.cwd"
+    );
+    assert_eq!(
+        records[3 + argc + envc]["fields"]["event"],
+        "cli.context.exe"
+    );
+    let end = 4 + argc + envc;
+    assert_eq!(records[end]["fields"]["event"], "cli.context.finished");
+    assert_eq!(records[end]["fields"]["argc"], argc);
+    assert_eq!(records[end]["fields"]["envc"], envc);
+    end
+}
+
+fn decode(fields: &Value, key: &str) -> Vec<u8> {
+    let value = fields[key].as_str().unwrap();
+    let bytes = match fields[format!("{key}_encoding")].as_str().unwrap() {
+        "utf-8" => value.as_bytes().to_vec(),
+        "hex" => {
+            assert_eq!(value.len() % 2, 0);
+            (0..value.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
+                .collect()
+        }
+        other => panic!("unknown encoding: {other}"),
+    };
+    assert_eq!(fields[format!("{key}_bytes")], bytes.len());
+    if let Ok(text) = std::str::from_utf8(&bytes) {
+        assert_eq!(fields[format!("{key}_encoding")], "utf-8");
+        assert_eq!(value, text, "ordinary UTF-8 must remain readable");
+    }
+    bytes
+}
+
+#[test]
+fn manager_logging_context_roundtrips_exact_process_inputs_before_parsing() {
+    for invalid in [false, true] {
+        let fixture = Invocation::new();
+        let cwd = fixture
+            .outside
+            .path()
+            .join(OsString::from_vec(b"cwd-\xff-\n".to_vec()));
+        fs::create_dir(&cwd).unwrap();
+        let exe = fixture
+            .checkout
+            .executable
+            .with_file_name(OsString::from_vec(b"manager-\xfe-\n".to_vec()));
+        crate::manager_fixture::copy_executable(&fixture.checkout.executable, &exe);
+        let argv0 = OsString::from_vec(b"custom argv0-\xfd".to_vec());
+        let mut args: Vec<OsString> = vec![if invalid {
+            OsString::from_vec(b"\xff".to_vec())
+        } else {
+            "--help".into()
+        }];
+        args.extend([
+            OsString::new(),
+            "a b".into(),
+            "a".into(),
+            "b".into(),
+            "\n\"\\żółw🌍".into(),
+            "TOKEN=synthetic-secret".into(),
+            OsString::from_vec(b"bad\xfe\n".to_vec()),
+            "x".repeat(20000).into(),
+        ]);
+        let env: Vec<(OsString, OsString)> = vec![
+            ("EMPTY".into(), OsString::new()),
+            ("UNICODE_ż🌍".into(), "\nżółw🌍\n\"\\=".into()),
+            ("API_TOKEN".into(), "synthetic-secret-no-redaction".into()),
+            (
+                OsString::from_vec(b"NAME_\xff\n".to_vec()),
+                OsString::from_vec(b"value_\xfe\n=".to_vec()),
+            ),
+            ("LONG".into(), "q".repeat(20000).into()),
+        ];
+        let output = Command::new(&exe)
+            .arg0(&argv0)
+            .args(&args)
+            .env_clear()
+            .envs(env.iter().cloned())
+            .current_dir(&cwd)
+            .output()
+            .unwrap();
+        let message = "argument must be valid UTF-8";
+        if invalid {
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stdout.is_empty());
+            assert_eq!(output.stderr, format!("usage: ai-profile KOMENDA [NAZWA] [opcje] (pomoc: make help)\nai-profile: error: {message}\n").as_bytes());
+        } else {
+            assert_eq!(output.status.code(), Some(0));
+            assert_eq!(output.stdout, include_bytes!("../help.txt"));
+            assert!(output.stderr.is_empty());
+        }
+        let logs = fixture.logs();
+        assert_eq!(logs.len(), 1);
+        let records = &logs[0];
+        lifecycle(
+            records,
+            if invalid { 2 } else { 0 },
+            invalid.then_some(("arguments", message)),
+        );
+        let expected_args: Vec<_> = std::iter::once(&argv0)
+            .chain(&args)
+            .map(|v| v.as_bytes().to_vec())
+            .collect();
+        let actual_args: Vec<_> = records
+            .iter()
+            .filter(|r| r["fields"]["event"] == "cli.context.arg")
+            .map(|r| decode(&r["fields"], "value"))
+            .collect();
+        assert_eq!(actual_args, expected_args);
+        let actual_env: BTreeMap<_, _> = records
+            .iter()
+            .filter(|r| r["fields"]["event"] == "cli.context.env")
+            .map(|r| (decode(&r["fields"], "name"), decode(&r["fields"], "value")))
+            .collect();
+        let expected_env: BTreeMap<_, _> = env
+            .iter()
+            .map(|(k, v)| (k.as_bytes().to_vec(), v.as_bytes().to_vec()))
+            .collect();
+        assert_eq!(records[1]["fields"]["envc"], expected_env.len());
+        assert_eq!(actual_env, expected_env);
+        for (event, expected) in [
+            ("cli.context.cwd", cwd.as_os_str()),
+            ("cli.context.exe", exe.as_os_str()),
+        ] {
+            let fields = &records
+                .iter()
+                .find(|r| r["fields"]["event"] == event)
+                .unwrap()["fields"];
+            assert_eq!(fields["status"], "available");
+            assert_eq!(decode(fields, "value"), expected.as_bytes());
+        }
+    }
+}
+
+#[test]
+fn manager_logging_unavailable_cwd_is_explicit_and_does_not_change_help() {
+    let fixture = Invocation::new();
+    let cwd = fixture.outside.path().join("deleted");
+    fs::create_dir(&cwd).unwrap();
+    let output = Command::new("/bin/sh")
+        .args([
+            OsStr::new("-c"),
+            OsStr::new("cd \"$1\" && rmdir \"$1\" && exec \"$2\" --help"),
+            OsStr::new("sh"),
+            cwd.as_os_str(),
+            fixture.checkout.executable.as_os_str(),
+        ])
+        .env_clear()
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, include_bytes!("../help.txt"));
+    assert!(output.stderr.is_empty());
+    let logs = fixture.logs();
+    lifecycle(&logs[0], 0, None);
+    let fields = &logs[0]
+        .iter()
+        .find(|r| r["fields"]["event"] == "cli.context.cwd")
+        .unwrap()["fields"];
+    assert_eq!(fields["status"], "unavailable");
+    assert_eq!(fields["os_error"], 2);
+    assert!(!fields["error"].as_str().unwrap().is_empty());
 }
 
 #[test]

@@ -3,10 +3,14 @@
 - brak hooka git conventional commits ( nie przepuszczamy commitow gd nie spelniaja tego wymogu )
 - zastanowic sie nad systemem zarzadzania agentami z wykorzystaniem herdr ( dodatkowo w tym uzyc agents ) ale nie tylko, w skrocie jakis ala systemik na poziomie systemu operacyjnego ( W RUST ) ktory pozwoli w dobry sposob zarzadzac procesami herdr ( o ile sam herdr nie jest wstanie tego robic ) po prostu na poziomie systemu operacyjnego tak aby jak najmniej umieszczac w skillach bo wiadomo ze AI halucynuje ;]
 - dodac blokade na bump wersji lub jakos bardziej pokierowac agenta ( obecny problem, trakuje mala zmianke jako major wersje )
-- agent przy blednym pluginie sie zacinal w momencie aktualizacji pliku .md ( nie widac bylo w TUI po prostu ciagle pracowal jakis podlgad by sie przydal )
 - config dostarczany juz do repo jako profil jest za duzy, zbyt wiele plikow laduje po instalacji pomyslec jak mozna to uproscic
-- zapomnialem o docker build po wdrozeniu mcp playwright, przydaloby sie moze stworzyc jakies lepsze instrukcje + automatyczne tworzenie folderu reports/wcag ( wywalic wcag i dodac bardziej generyczny folder ) w trakcie buildu docker
 - rozdzielic instalacje na 3 ( osobno opencode codex claude code + opcja wszystko )
+
+## TESTY
+Za dlugo trwaja testy i kopiowanie elementow do VM trzeba to jakos przyspieszyc
+-Chodzi o skopiowanie źródeł z hosta do istniejącej VM poleceniem make test-vm-sync: 
+1. Po dodaniu testów, przed implementacją — żeby uruchomić je w VM i potwierdzić RED.
+2. Po dodaniu implementacji — żeby VM dostała nowy kod i można było potwierdzić GREEN.
 
 # Bugi
 To pozostałości po testach instalatora, nie błąd ścieżki WFOSiGW. Potwierdziłem je w ~/.codex/config.toml.
@@ -25,17 +29,3 @@ Następnie uruchom z repozytorium ai-profiles:
 make update PROJECT=/var/home/kpdve/it/personal/wfosigw-ssh/WFOSiGW
 Docelowo trzeba też odizolować konfigurację Codexa w teście Playwright, żeby sytuacja nie wracała. Nic jeszcze nie zmieniałem.
 - VM już działała, ale make test-vm-up zwróciło błąd „The instance is already running”. To wskazuje na problem obsługi uruchomionej VM przez skrypt lub niespójność jej stanu - prawdopodobnie instancja nie jest automatycznie usuwana po wykonaniu testow
-
-
-# MCP
-
-## Playwright
-- za 1 razem gdy mowie agentowi aby uzyl mcp playwright i zrobil screenshot
-✗execute
-›playwright.browser_navigate [url=https://www.google.com]
-✗playwright.browser_take_screenshot [filename=google-check.png, scale=css]
-↳ ### Error
-  Error: EROFS: read-only file system, open '/var/home/kpdve/it/personal/react/google-check.png'
-- po instalacji i uruchomieniu swiezej instancji harness jest connection jako failed ( problem z initial polaczeniem ) zeby zadzialalo musze recznie zrobic disconnect i connect
-
-
