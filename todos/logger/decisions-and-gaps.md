@@ -17,7 +17,7 @@ This file owns decision rationale and unresolved questions, not task progress. S
 
 **Gap ID: STREAM-BOUNDARY.** How will complete diagnostic capture coexist with `CaptureLimited`, `Null`, inherited stdin, and timeout paths without changing application semantics?
 
-Evidence: [process.rs](../../core/rust/src/process.rs) drops `Null` streams, reads at most `limit + 1` bytes for limited capture, inherits stdin in one mode, and deliberately avoids joining readers after timeout because descendants may retain pipes. Simply teeing all streams or continuing to drain can change pipe closure, SIGPIPE, waiting, or deadlines.
+Evidence: [process.rs](../../core/src/process.rs) drops `Null` streams, reads at most `limit + 1` bytes for limited capture, inherits stdin in one mode, and deliberately avoids joining readers after timeout because descendants may retain pipes. Simply teeing all streams or continuing to drain can change pipe closure, SIGPIPE, waiting, or deadlines.
 
 Affected task: PROCESS-DATA and any acceptance claim of complete shared-runner stream coverage. The implementer must not choose to remove limits, redirect inherited input, or wait indefinitely merely for logging. A bounded observation design must specify which bytes can be captured, how unavailable bytes are reported, and demonstrate semantic preservation. If this requires changing approved application behavior or reducing required capture, owner approval is required. No such alternative has been accepted in this migration.
 
@@ -25,7 +25,7 @@ Affected task: PROCESS-DATA and any acceptance claim of complete shared-runner s
 
 **Gap ID: NOVAMIRA-CHANNEL.** Which real channel in the pinned bridge/container exposes request/response bodies and diagnostics without contaminating MCP stdout?
 
-Evidence: [novamira.rs](../../core/rust/src/mcp/novamira.rs) currently removes `LOG_FILE`, disables upstream logging, and discards upstream stderr. The wrapper sees only its own protocol boundary; no inspected proof establishes a complete HTTP capture interface inside the bridge.
+Evidence: [novamira.rs](../../core/src/mcp/novamira.rs) currently removes `LOG_FILE`, disables upstream logging, and discards upstream stderr. The wrapper sees only its own protocol boundary; no inspected proof establishes a complete HTTP capture interface inside the bridge.
 
 Affected task: NOVAMIRA-UPSTREAM. Unblock with a documented, verified integration contract for the actual pinned artifact/container. It must identify source ownership, byte fidelity, correlation, channel transport, failure behavior, and allowed required changes. Do not introduce host Node/npm or claim a synthetic bridge proves the real integration. Escalate a need to change the pinned upstream artifact or approved deployment contract to the owner.
 
@@ -33,7 +33,7 @@ Affected task: NOVAMIRA-UPSTREAM. Unblock with a documented, verified integratio
 
 **Gap ID: HANDOFF-CONTRACT.** What selected observation design preserves MCP/interactive stdio, process signals, exit status, deadlines, and Docker cleanup after the current exec boundary?
 
-Evidence: [MCP runtime](../../core/rust/src/mcp/runtime.rs) and [Playwright runtime](../../core/rust/src/playwright/runtime.rs) replace themselves with the child program. Existing handoff/flush events cannot observe its later exit. The source suggests a supervisor or independent collector but does not accept one concrete design.
+Evidence: [MCP runtime](../../core/src/mcp/runtime.rs) and [Playwright runtime](../../core/src/playwright/runtime.rs) replace themselves with the child program. Existing handoff/flush events cannot observe its later exit. The source suggests a supervisor or independent collector but does not accept one concrete design.
 
 Affected task: HANDOFF-OBSERVE. Unblock with an approved/authorized concrete design and real-process acceptance contract. Do not silently convert exec to spawn/wait. Independent preparation/wrapper logging does not require this decision.
 

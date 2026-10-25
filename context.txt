@@ -35,7 +35,7 @@ make test
 ```
 
 Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
-`core/rust/target/release/ai-profile help`.
+`core/target/release/ai-profile help`.
 Po instalacji, aktualizacji lub zmianie profilu uruchom ponownie narzędzie,
 w którym korzystasz z profilu.
 
@@ -103,7 +103,7 @@ zasobów i jawnego re-provisioningu są w instrukcji testowania powyżej.
 
 --- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/README.md ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/codec.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/codec.rs ---
 use std::{fs, path::Path};
 
 use serde::Serialize;
@@ -141,9 +141,9 @@ pub(crate) fn read_json(path: &Path) -> Result<Value, CodecError> {
     })
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/codec.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/codec.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/error.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/error.rs ---
 use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
@@ -782,9 +782,9 @@ pub(crate) enum McpRuntimeError {
     Config(#[from] McpConfigError),
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/error.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/error.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/filesystem.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/filesystem.rs ---
 use std::{
     fs,
     io::Write,
@@ -937,9 +937,9 @@ pub(crate) fn cleanup_empty_directories(
     Ok(())
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/filesystem.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/filesystem.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/layout.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/layout.rs ---
 use crate::model::Client;
 
 /// Legacy assets are frozen; only exclusive catalogs/configuration are owned.
@@ -1045,9 +1045,9 @@ impl Layout {
     }
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/layout.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/layout.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/lib.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/lib.rs ---
 //! Native Rust implementation of the AI Profiles tooling.
 //!
 //! Make and installed project tooling use this implementation. Python sources
@@ -1104,9 +1104,9 @@ mod wordpress_localize_tests;
 #[path = "../tests/wordpress_preflight.rs"]
 mod wordpress_preflight_tests;
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/lib.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/lib.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mariadb.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mariadb.rs ---
 pub(crate) mod archive;
 pub mod runtime;
 
@@ -1172,9 +1172,9 @@ pub(crate) enum MariaDbError {
     },
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mariadb.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mariadb.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mariadb/archive.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mariadb/archive.rs ---
 use std::{
     fs,
     io::{self, Cursor, Read, Write},
@@ -1338,9 +1338,9 @@ fn safe_archive_parts(path: &Path, expected_root: &str) -> Result<Vec<PathBuf>, 
     Ok(parts)
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mariadb/archive.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mariadb/archive.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mariadb/runtime.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mariadb/runtime.rs ---
 use std::{
     collections::HashMap,
     env,
@@ -1705,9 +1705,9 @@ fn is_generic_failure(error: &MariaDbError) -> bool {
     )
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mariadb/runtime.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mariadb/runtime.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp.rs ---
 pub(crate) mod config;
 pub(crate) mod environment;
 mod novamira;
@@ -1782,9 +1782,9 @@ pub(crate) struct McpServerDefinition {
     pub(crate) raw: Value,
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/config.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/config.rs ---
 use std::{
     collections::{BTreeMap, HashSet},
     fs,
@@ -2687,9 +2687,9 @@ fn parse_access_mode(value: &Value) -> Option<McpAccessMode> {
     }
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/config.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/config.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/environment.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/environment.rs ---
 use std::{collections::HashMap, fs, path::Path, sync::OnceLock};
 
 use regex::Regex;
@@ -2910,9 +2910,9 @@ fn parse_quoted_words(value: &str) -> Result<Vec<String>, ()> {
     Ok(words)
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/environment.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/environment.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/novamira.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/novamira.rs ---
 //! Novamira-only stdio guard for the pinned WordPress bridge's degraded handshake.
 //! Never diagnose from tools count or forward upstream error text/logs.
 use std::{
@@ -3150,9 +3150,9 @@ pub(super) fn run(process: &mut Command, env_file: &str) -> bool {
     initialized
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/novamira.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/novamira.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/runtime.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/runtime.rs ---
 use std::{
     collections::HashMap,
     env,
@@ -3394,9 +3394,9 @@ fn is_format_one(value: &Value) -> bool {
         || value.as_f64() == Some(1.0)
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/mcp/runtime.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/mcp/runtime.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/model.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/model.rs ---
 use std::{cmp::Ordering, path::PathBuf, str::FromStr};
 
 use crate::error::ModelError;
@@ -3652,14 +3652,14 @@ fn increment_decimal(value: &str) -> String {
     result
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/model.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/model.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/playwright.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/playwright.rs ---
 pub mod runtime;
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/playwright.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/playwright.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/playwright/runtime.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/playwright/runtime.rs ---
 use std::{
     collections::HashMap,
     env,
@@ -4103,9 +4103,9 @@ pub fn main() -> i32 {
     1
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/playwright/runtime.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/playwright/runtime.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/process.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/process.rs ---
 use std::{
     collections::HashMap,
     ffi::OsString,
@@ -4345,9 +4345,9 @@ fn wait_for_child(
     }
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/process.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/process.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management.rs ---
 pub mod cli;
 pub(crate) mod installation;
 pub(crate) mod migration;
@@ -4359,9 +4359,9 @@ pub(crate) mod status;
 pub(crate) mod uninstall;
 pub(crate) mod validation;
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/cli.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/cli.rs ---
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::{
     env,
@@ -4798,9 +4798,9 @@ fn parser_error(message: &str) -> i32 {
     2
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/cli.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/cli.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/installation.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/installation.rs ---
 use std::path::Path;
 #[cfg(test)]
 use std::{fs, str::FromStr};
@@ -5389,9 +5389,9 @@ fn build_updated_state(input: InstallationState<'_>) -> Result<Value, Installati
     Ok(Value::Object(state))
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/installation.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/installation.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/migration.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/migration.rs ---
 use std::path::Path;
 
 use serde_json::{Map, Value};
@@ -5525,9 +5525,9 @@ fn is_format_one(value: &Value) -> bool {
         || value.as_f64() == Some(1.0)
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/migration.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/migration.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/native.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/native.rs ---
 use std::{fs, path::Path, time::Duration};
 
 use serde_json::{json, Map, Value};
@@ -7088,9 +7088,9 @@ pub(crate) fn cleanup_claude(project: &Path, old: &Value) -> Option<String> {
     }
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/native.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/native.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/payload.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/payload.rs ---
 use std::{
     collections::HashSet,
     ffi::OsStr,
@@ -7699,7 +7699,7 @@ fn insert_native(
 ) -> Result<(), PayloadError> {
     let source = file_path(
         context.sources.as_path(),
-        &format!("core/rust/target/release/{binary}"),
+        &format!("core/target/release/{binary}"),
     )?;
     let metadata =
         fs::metadata(&source).map_err(|_| PayloadError::MissingNativeBinary(source.clone()))?;
@@ -7721,9 +7721,9 @@ fn insert_native(
     Ok(())
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/payload.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/payload.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/profiles.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/profiles.rs ---
 use std::{fs, io::Write, path::Path, str::FromStr};
 
 use serde_json::{json, Value};
@@ -7982,9 +7982,9 @@ fn set_temporary_permissions(
         })
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/profiles.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/profiles.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/scoped.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/scoped.rs ---
 //! Client-scoped lifecycle. Preparation is read-only; commits are sequential,
 //! deliberately not a cross-client transaction.
 use std::{collections::BTreeMap, fs, path::Path, str::FromStr};
@@ -8712,9 +8712,9 @@ fn remove(project: &Path, client: Client, old: &Value) -> Result<()> {
     Ok(())
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/scoped.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/scoped.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/status.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/status.rs ---
 use crate::{
     codec::{json_bytes, sha},
     error::StatusError,
@@ -8860,9 +8860,9 @@ pub(crate) fn status(
     Ok(())
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/status.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/status.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/uninstall.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/uninstall.rs ---
 #[cfg(test)]
 use std::fs;
 use std::path::Path;
@@ -9167,9 +9167,9 @@ fn is_truthy(value: &Value) -> bool {
     }
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/uninstall.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/uninstall.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/validation.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/validation.rs ---
 use std::fs;
 
 use serde_json::{Map, Value};
@@ -9273,9 +9273,9 @@ pub(crate) fn validate_sources(
     Ok(())
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/profile_management/validation.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/profile_management/validation.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/project.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/project.rs ---
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -9635,9 +9635,9 @@ fn matching_ignore_line(contents: &str) -> Option<(usize, usize)> {
     None
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/project.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/project.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/repository.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/repository.rs ---
 use std::{ffi::OsString, fs, path::Path, str::FromStr};
 
 use serde_json::Value;
@@ -9651,7 +9651,7 @@ use crate::{
 };
 
 pub(crate) fn is_source_root(path: &Path) -> bool {
-    ["core/rust/src", "profiles", "skills", "mcp/servers"]
+    ["core/src", "profiles", "skills", "mcp/servers"]
         .into_iter()
         .all(|relative| path.join(relative).is_dir())
 }
@@ -9749,9 +9749,9 @@ pub(crate) fn source_commit_with(
     Some(String::from_utf8(output.stdout).ok()?.trim().to_owned())
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/repository.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/repository.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress.rs ---
 pub(crate) mod ddev;
 pub(crate) mod dump;
 pub(crate) mod localize;
@@ -9856,9 +9856,9 @@ pub(crate) struct WordPressTopology {
     pub(crate) site_mode: SiteMode,
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/ddev.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/ddev.rs ---
 use std::{collections::HashMap, ffi::OsString, path::Path, sync::OnceLock};
 
 use regex::Regex;
@@ -10153,9 +10153,9 @@ pub(crate) fn topology(
     })
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/ddev.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/ddev.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/dump.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/dump.rs ---
 use std::{
     collections::HashSet,
     fs::{self, File},
@@ -10338,9 +10338,9 @@ fn scan_sql(reader_path: &Path, reader: impl Read) -> Result<HashSet<String>, Wo
     Ok(tables)
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/dump.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/dump.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/localize.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/localize.rs ---
 use std::collections::HashMap;
 
 use crate::{
@@ -10499,9 +10499,9 @@ pub(crate) fn localize(
     Ok(())
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/localize.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/localize.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/mapping.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/mapping.rs ---
 use std::collections::HashMap;
 
 use crate::{
@@ -10673,9 +10673,9 @@ fn valid_scheme(value: &str) -> bool {
         && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'.' | b'-'))
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/mapping.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/mapping.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/preflight.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/preflight.rs ---
 use std::{fs, path::Path};
 
 use regex::Regex;
@@ -10854,9 +10854,9 @@ pub(crate) fn preflight(
     })
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/preflight.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/preflight.rs ---
 
---- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/restore.rs ---
+--- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/restore.rs ---
 use std::{
     env,
     fs::{self, File, OpenOptions},
@@ -11367,7 +11367,7 @@ unsafe extern "C" {
     fn umask(mask: u32) -> u32;
 }
 
---- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/rust/src/wordpress/restore.rs ---
+--- END OF FILE: /var/home/kpdve/it/personal/ai-profiles/core/src/wordpress/restore.rs ---
 
 --- START OF FILE: /var/home/kpdve/it/personal/ai-profiles/docs/profile-management.md ---
 # Zarządzanie profilami i instalacjami
@@ -11507,7 +11507,7 @@ wykonuje commitów ani nie tworzy tagów.
 Instaluj przez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> PROJECT=<projekt>`.
 Aliasy: `install-opencode`, `install-claude`, `install-codex` z tymi samymi PROFILE
 i PROJECT; sprzeczny CLIENT jest błędem. Make buduje
-manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
+manager i runtime Rust w `core/target/release/` przed operacją. Adapter MCP,
 launchery MariaDB/Playwright i restore WordPress trafiają do projektu jako samodzielne
 pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
 referencyjny. Współdzielone zasoby legacy (również dawne `.py`) pozostają zamrożone;
@@ -11656,9 +11656,9 @@ skipów tylko po to, by uzyskać GREEN.
 
 Mockowane wywołanie procesu nie dowodzi działania prawdziwego programu.
 Kontrola orkiestracji nie zastępuje rzeczywistej integracji. W Rust samo dodanie
-pliku do `core/rust/tests/` nie gwarantuje wykonania: `core/rust/Cargo.toml`
+pliku do `core/tests/` nie gwarantuje wykonania: `core/Cargo.toml`
 ustawia `autotests = false`, a pliki są jawnie dołączane jako moduły testowe
-w `core/rust/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
+w `core/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
 uruchomienie nowych testów, nie tylko sukces całego polecenia.
 
 ### Wymagana weryfikacja przed akceptacją
@@ -11670,7 +11670,7 @@ Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
 
 | Zakres zmiany | Weryfikacja przed akceptacją |
 | --- | --- |
-| Zachowanie `core/rust` | `make validate-rust-migration` |
+| Zachowanie `core` | `make validate-rust-migration` |
 | Integracja/obraz Playwright | `make test-playwright` |
 | Wspólne zmiany obejmujące oba obszary | `make test-all` |
 | Orkiestracja VM | `bash tests/vm/check.sh` oraz `make test-all` |
@@ -11974,7 +11974,7 @@ Staging jest usuwany także po błędach. Nie używamy `--copy-links` ani
 `--delete-excluded`. Usunięte źródła znikają z workspace.
 
 Na dysku Incus zostają: `/home/tester/.cargo` (registry/git/toolchain),
-`/home/tester/ai-profiles/core/rust/target` (debug/release) i obrazy/warstwy Docker.
+`/home/tester/ai-profiles/core/target` (debug/release) i obrazy/warstwy Docker.
 Build pozostaje w miejscu wymaganym przez wykrywanie payloadów repozytorium.
 **Wyniki testów nigdy nie służą do pomijania wykonania**; obraz Playwright jest
 budowany przy każdym żądaniu (Docker może wykorzystać warstwy).
@@ -12002,7 +12002,7 @@ Nazwę VM znajdziesz w `artifacts/<run>/instance` lub `incus list`. Diagnostyka:
 incus exec NAZWA_VM -- cloud-init status --long
 incus exec NAZWA_VM -- cat /var/log/cloud-init-output.log
 incus exec NAZWA_VM -- df -h /home/tester
-incus exec NAZWA_VM -- du -sh /home/tester/.cargo /home/tester/ai-profiles/core/rust/target /home/tester/test-runs
+incus exec NAZWA_VM -- du -sh /home/tester/.cargo /home/tester/ai-profiles/core/target /home/tester/test-runs
 incus exec NAZWA_VM -- docker system df
 ```
 

@@ -1,24 +1,24 @@
 == format ==
 PASSED: format
 == release-build ==
-   Compiling ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core/rust)
+   Compiling ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core)
     Finished `release` profile [optimized] target(s) in 3.54s
 PASSED: release-build
 == clippy ==
-    Checking ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core/rust)
+    Checking ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.24s
 PASSED: clippy
 == make-validate ==
 make[1]: Entering directory '/home/kzielinski/private/ai-profiles'
-cargo build --manifest-path core/rust/Cargo.toml --target-dir "/home/kzielinski/private/ai-profiles/core/rust/target" --locked --release --bins
+cargo build --manifest-path core/Cargo.toml --target-dir "/home/kzielinski/private/ai-profiles/core/target" --locked --release --bins
     Finished `release` profile [optimized] target(s) in 0.10s
-"/home/kzielinski/private/ai-profiles/core/rust/target/release/ai-profile" validate 
+"/home/kzielinski/private/ai-profiles/core/target/release/ai-profile" validate 
 OK: wszystkie skille i definicje MCP są spójne
 make[1]: Leaving directory '/home/kzielinski/private/ai-profiles'
 PASSED: make-validate
 == make-test ==
 make[1]: Entering directory '/home/kzielinski/private/ai-profiles'
-cargo test --manifest-path core/rust/Cargo.toml --locked --all-targets
+cargo test --manifest-path core/Cargo.toml --locked --all-targets
    Compiling cfg-if v1.0.5
    Compiling stable_deref_trait v1.2.1
    Compiling litemap v0.8.3
@@ -101,9 +101,9 @@ cargo test --manifest-path core/rust/Cargo.toml --locked --all-targets
    Compiling rustls v0.23.46
    Compiling regex v1.13.1
    Compiling ureq v3.4.2
-   Compiling ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core/rust)
+   Compiling ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 12.16s
-     Running unittests src/lib.rs (core/rust/target/debug/deps/ai_profiles_core-017c9ceea32f82b4)
+     Running unittests src/lib.rs (core/target/debug/deps/ai_profiles_core-017c9ceea32f82b4)
 
 running 22 tests
 test foundation_tests::managed_paths_reject_parent_and_symlink_components ... ok
@@ -131,31 +131,31 @@ test lifecycle_tests::native_install_retires_owned_python_and_preserves_user_fil
 
 test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
-     Running unittests src/bin/ai-profile.rs (core/rust/target/debug/deps/ai_profile-c1e95d1319ce662b)
+     Running unittests src/bin/ai-profile.rs (core/target/debug/deps/ai_profile-c1e95d1319ce662b)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/ai-profile-mcp.rs (core/rust/target/debug/deps/ai_profile_mcp-c699a747e84ab367)
+     Running unittests src/bin/ai-profile-mcp.rs (core/target/debug/deps/ai_profile_mcp-c699a747e84ab367)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/mariadb-launcher.rs (core/rust/target/debug/deps/mariadb_launcher-7319be18d12d474a)
+     Running unittests src/bin/mariadb-launcher.rs (core/target/debug/deps/mariadb_launcher-7319be18d12d474a)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/restore-updraft.rs (core/rust/target/debug/deps/restore_updraft-50570f5ad48bd40a)
+     Running unittests src/bin/restore-updraft.rs (core/target/debug/deps/restore_updraft-50570f5ad48bd40a)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/test-inventory.rs (core/rust/target/debug/deps/test_inventory-6ac085226cf881a3)
+     Running unittests src/bin/test-inventory.rs (core/target/debug/deps/test_inventory-6ac085226cf881a3)
 
 running 0 tests
 

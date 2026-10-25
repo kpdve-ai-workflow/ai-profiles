@@ -63,7 +63,7 @@ fn put(root: &Path, relative: &str, contents: &[u8]) {
 
 fn native_source() -> (tempfile::TempDir, RepositoryContext) {
     let source = tempfile::tempdir().unwrap();
-    for directory in ["core/rust/src", "skills", "mcp/servers"] {
+    for directory in ["core/src", "skills", "mcp/servers"] {
         fs::create_dir_all(source.path().join(directory)).unwrap();
     }
     put(
@@ -112,7 +112,7 @@ fn native_source() -> (tempfile::TempDir, RepositoryContext) {
         "restore-updraft",
         "test-inventory",
     ] {
-        let relative = format!("core/rust/target/release/{binary}");
+        let relative = format!("core/target/release/{binary}");
         // Synthetic executable bytes are copied and hashed, never executed.
         put(source.path(), &relative, binary.as_bytes());
         fs::set_permissions(
@@ -1387,7 +1387,7 @@ fn missing_native_binary_stops_install_before_project_writes() {
     fs::remove_file(
         context
             .sources
-            .join("core/rust/target/release/restore-updraft"),
+            .join("core/target/release/restore-updraft"),
     )
     .unwrap();
     let project = tempfile::tempdir().unwrap();

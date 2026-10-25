@@ -6,7 +6,7 @@
 
 Reconstruct plan/apply, backup, safety guards, import, localization, verification and interrupted/recovery state without changing database safety behavior.
 
-Primary code: [restore.rs](../../../core/rust/src/wordpress/restore.rs) `restore`/`cli_main`; [preflight.rs](../../../core/rust/src/wordpress/preflight.rs) `preflight`; [dump.rs](../../../core/rust/src/wordpress/dump.rs) `inspect_dump`; [localize.rs](../../../core/rust/src/wordpress/localize.rs) `localize`; [ddev.rs](../../../core/rust/src/wordpress/ddev.rs) DDEV/WP-CLI boundary. Reuse process correlation/capture when available, not a second process logger.
+Primary code: [restore.rs](../../../core/src/wordpress/restore.rs) `restore`/`cli_main`; [preflight.rs](../../../core/src/wordpress/preflight.rs) `preflight`; [dump.rs](../../../core/src/wordpress/dump.rs) `inspect_dump`; [localize.rs](../../../core/src/wordpress/localize.rs) `localize`; [ddev.rs](../../../core/src/wordpress/ddev.rs) DDEV/WP-CLI boundary. Reuse process correlation/capture when available, not a second process logger.
 
 ## Contract
 
@@ -19,7 +19,7 @@ Primary code: [restore.rs](../../../core/rust/src/wordpress/restore.rs) `restore
 
 ## Test-first acceptance
 
-Extend [wordpress_restore.rs](../../../core/rust/tests/wordpress_restore.rs), [wordpress_preflight.rs](../../../core/rust/tests/wordpress_preflight.rs), and relevant existing dump/localize tests. Use synthetic dumps/projects and isolated controlled runners, never a real user database.
+Extend [wordpress_restore.rs](../../../core/tests/wordpress_restore.rs), [wordpress_preflight.rs](../../../core/tests/wordpress_preflight.rs), and relevant existing dump/localize tests. Use synthetic dumps/projects and isolated controlled runners, never a real user database.
 
 Oracles: the fixture plan/mapping, actual temporary files, controlled DDEV outcomes, and the existing no-mutation-before-confirmation invariant. Cover plan-only, rejected preflight, cancelled confirmation, successful apply, failure before/after database mutation, and diagnostic degradation. Compare events/payloads to independent input bytes and real retained fixture state. Mocking DDEV orchestration is not proof of a real import; retain existing integration protection where applicable.
 

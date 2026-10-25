@@ -15,17 +15,17 @@ make rust-build
 Equivalent Cargo command:
 
 ```sh
-cargo build --manifest-path core/rust/Cargo.toml --locked --release --bins
+cargo build --manifest-path core/Cargo.toml --locked --release --bins
 ```
 
 This builds, but does not run, the executables in
-`core/rust/target/release/`:
+`core/target/release/`:
 
 | Binary | Purpose | Explicit invocation |
 | --- | --- | --- |
-| `ai-profile` | Profile manager CLI | `core/rust/target/release/ai-profile help` |
+| `ai-profile` | Profile manager CLI | `core/target/release/ai-profile help` |
 | `ai-profile-mcp` | Standalone MCP adapter | Configured as the project's MCP executable |
-| `restore-updraft` | WordPress database restore | `core/rust/target/release/restore-updraft --help` |
+| `restore-updraft` | WordPress database restore | `core/target/release/restore-updraft --help` |
 | `test-inventory` | Shared test-discovery skill inventory | Installed as the skill's `scripts/inventory-tests` |
 
 These are examples of how to invoke the programs, not build or validation
@@ -37,9 +37,9 @@ build before invoking the manager. There is no `install2` target.
 
 The native profile manager discovers its source checkout by walking ancestors
 of its own executable location and looking for the repository layout
-(`core/rust/src/`, `profiles/`, `skills/`, and
+(`core/src/`, `profiles/`, `skills/`, and
 `mcp/servers/`). For a build inside the checkout, the executable is located at
-`core/rust/target/release/ai-profile`. If it is copied elsewhere, preserve a
+`core/target/release/ai-profile`. If it is copied elsewhere, preserve a
 layout where its ancestor contains those source directories. The manager does
 not use the caller's working directory or the compile-time Cargo manifest path
 as the source root.
@@ -54,9 +54,9 @@ state and its `local.json` at each startup. Frozen legacy adapters under
 Existing profile-management Make targets (`install`, `update`, `switch`,
 `status`, `validate`, `test`, and the other manager operations) use the Rust
 manager through Cargo. `make rust-build` only builds the native executables.
-Make fixes the build directory to `core/rust/target/`, including when
+Make fixes the build directory to `core/target/`, including when
 `CARGO_TARGET_DIR` is set. The manager reads native payloads from its checkout's
-`core/rust/target/release/`. Missing binaries stop payload preparation before
+`core/target/release/`. Missing binaries stop payload preparation before
 project writes; direct Cargo users must build all release binaries there first.
 
 | Release binary | Installed executable (mode 0755) |
@@ -75,7 +75,7 @@ executables need neither Cargo nor the source checkout.
 ## Production Python-to-Rust coverage map
 
 The entries below map the production Python callables to their Rust
-implementation. Rust module filenames are relative to `core/rust/src/`.
+implementation. Rust module filenames are relative to `core/src/`.
 
 | Python production source and symbols | Rust implementation |
 | --- | --- |

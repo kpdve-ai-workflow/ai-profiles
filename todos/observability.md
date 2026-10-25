@@ -47,7 +47,7 @@ Analiza dotyczy przekazanego eksportu 44 plików. Brakuje m.in. pełnego Cargo.t
 
 | Miejsce | Ustalenie | Konsekwencja |
 | - | - | - |
-| `core/rust/src/profile_management/cli.rs` → `scoped.rs` | Produkcyjna ścieżka instalacji przechodzi przez `scoped::run`, `prepare` i `Prepared::commit` | Tu integrować instalowanie obserwatora i własnych wpisów konfiguracyjnych |
+| `core/src/profile_management/cli.rs` → `scoped.rs` | Produkcyjna ścieżka instalacji przechodzi przez `scoped::run`, `prepare` i `Prepared::commit` | Tu integrować instalowanie obserwatora i własnych wpisów konfiguracyjnych |
 | `profile_management/installation.rs` | Historyczne `apply_profile` jest objęte `#[cfg(test)]`; helper `update_project_config` nadal działa w produkcyjnej ścieżce OpenCode | Nie rozbudowywać historycznego instalatora; wykorzystać potrzebne produkcyjne helpery konfiguracji |
 | `profile_management/payload.rs::insert_native` | Repo dystrybuuje gotowe samodzielne binaria Rust | Nowy runtime może korzystać z tej ścieżki; uruchomienie w projekcie nie powinno wymagać Cargo ani checkoutu źródeł |
 | `scoped.rs::Manifest::save` i rekordy klientów | Stan instalatora jest przebudowywany i obejmuje zarządzane pliki | Dzienniki, indeksy, sesje i sockety przechowywać poza manifestem i listą `files` |
@@ -466,7 +466,7 @@ Nazwy nowych modułów są propozycją. Agent implementujący powinien dopasowa�
 
 | Element | Proponowana odpowiedzialność |
 | - | - |
-| `core/rust/src/observability/model.rs` | Wersjonowana koperta, tożsamość, typy zdarzeń i pokrycie |
+| `core/src/observability/model.rs` | Wersjonowana koperta, tożsamość, typy zdarzeń i pokrycie |
 | `observability/runtime.rs` | Launcher, lifecycle kolektora, sygnały, konfiguracja uruchomienia |
 | `observability/store.rs` | Jeden writer, JSONL, replay, limity i bezpieczne ścieżki |
 | `observability/adapters/*` | Normalizacja zdarzeń Codex, Claude i OpenCode; tylko tyle plików, ile wymaga implementacja |

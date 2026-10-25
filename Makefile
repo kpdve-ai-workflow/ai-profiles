@@ -1,5 +1,5 @@
-RUST_MANIFEST := core/rust/Cargo.toml
-RUST_TARGET := $(abspath core/rust/target)
+RUST_MANIFEST := core/Cargo.toml
+RUST_TARGET := $(abspath core/target)
 PROFILE_CLI := "$(RUST_TARGET)/release/ai-profile"
 PROJECT ?=
 PROFILE ?=
@@ -12,7 +12,7 @@ PART ?= patch
 .PHONY: help create rename check-profile check-new-name check-project install update uninstall switch status validate test pull-update approve lock gate-status bump rust-build validate-rust-migration migrate-legacy test-playwright test-all test-vm-up test-vm-stop test-vm-sync test-vm-reprovision test-vm-logs _test-guest _validate-rust-migration-guest _check-test-guest
 
 help:
-	@cat core/rust/help.txt
+	@cat core/help.txt
 
 check-profile:
 	@test -n "$(PROFILE)" || (echo "Podaj PROFILE=nazwa-profilu" >&2; exit 2)

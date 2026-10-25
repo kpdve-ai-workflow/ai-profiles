@@ -35,15 +35,15 @@ impl Checkout {
         let binaries = binaries();
         let root = tempfile::tempdir().unwrap();
         for directory in [
-            "core/rust/src",
+            "core/src",
             "profiles",
             "skills",
             "mcp/servers",
-            "core/rust/target/release",
+            "core/target/release",
         ] {
             fs::create_dir_all(root.path().join(directory)).unwrap();
         }
-        let executable = root.path().join("core/rust/target/release/ai-profile");
+        let executable = root.path().join("core/target/release/ai-profile");
         copy_executable(&binaries.join("ai-profile"), &executable);
         Self { root, executable }
     }

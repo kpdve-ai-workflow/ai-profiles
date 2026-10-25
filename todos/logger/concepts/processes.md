@@ -2,7 +2,7 @@
 
 **Roadmap coverage:** PROCESS-LIFECYCLE and PROCESS-DATA. **Source:** [diagnostic contract](../logger.md#kontrakt-diagnostyczny), [process boundaries](../logger.md#procesy-i-przekazanie-sterowania). Requirements: REQ-FLOW, REQ-DATA, REQ-CORRELATION, REQ-SEMANTICS, REQ-HEALTH.
 
-Primary touchpoints: [process.rs](../../../core/rust/src/process.rs), `SystemProcessRunner::run`, `CommandSpec`, `CommandOutput`, reader/writer/wait helpers; [error.rs](../../../core/rust/src/error.rs), `ProcessError`; existing session/entry APIs. Test modules must be explicitly registered in [lib.rs](../../../core/rust/src/lib.rs).
+Primary touchpoints: [process.rs](../../../core/src/process.rs), `SystemProcessRunner::run`, `CommandSpec`, `CommandOutput`, reader/writer/wait helpers; [error.rs](../../../core/src/error.rs), `ProcessError`; existing session/entry APIs. Test modules must be explicitly registered in [lib.rs](../../../core/src/lib.rs).
 
 ## Runner lifecycle
 
@@ -22,7 +22,7 @@ Add `tests/process_logging.rs` and register it as `process_logging_tests`. Oracl
 
 Select cases for successful exit, known nonzero exit, missing executable, cancellation before spawn, controlled in-flight cancellation/timeout, and concurrent attempts. Assert correlation, event order/cardinality, actual returned status/error, available PID and cause, and no spawn event for pre-cancel/spawn failure. Use bounded fixture processes and synchronization; do not rely on arbitrary sleeps to manufacture races. Test that unavailable diagnostics leaves the returned result unchanged.
 
-Expected RED: a correctly exercised runner produces no required lifecycle records before implementation. GREEN: the new observations match the independently controlled process outcome and existing semantics still hold. Guest-side focused command: `cargo test --manifest-path core/rust/Cargo.toml --locked --lib process_logging -- --nocapture`. Follow the [shared acceptance rules](../quality-and-acceptance.md) for the required final gate.
+Expected RED: a correctly exercised runner produces no required lifecycle records before implementation. GREEN: the new observations match the independently controlled process outcome and existing semantics still hold. Guest-side focused command: `cargo test --manifest-path core/Cargo.toml --locked --lib process_logging -- --nocapture`. Follow the [shared acceptance rules](../quality-and-acceptance.md) for the required final gate.
 
 ## Process data
 

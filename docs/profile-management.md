@@ -144,7 +144,7 @@ wykonuje commitów ani nie tworzy tagów.
 Instaluj przez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> PROJECT=<projekt>`.
 Aliasy: `install-opencode`, `install-claude`, `install-codex` z tymi samymi PROFILE
 i PROJECT; sprzeczny CLIENT jest błędem. Make buduje
-manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
+manager i runtime Rust w `core/target/release/` przed operacją. Adapter MCP,
 launcher Playwright i restore WordPress trafiają do projektu jako samodzielne
 pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
 referencyjny. Współdzielone zasoby legacy (również dawne `.py`) pozostają zamrożone;

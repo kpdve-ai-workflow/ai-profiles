@@ -13,7 +13,7 @@ This is the bounded working reference for this objective. The archived input is 
 | REQ-SEMANTICS | Do not change application bytes, stdout/protocols, user messages, codes, cancellation, deadlines, or cleanup for logging. Diagnostic failure does not replace an operation's result. | [Diagnostic contract](logger.md#kontrakt-diagnostyczny) and [handoff scope](logger.md#procesy-i-przekazanie-sterowania). |
 | REQ-HEALTH | Distinguish operation outcome from diagnostic completeness. Report missing data and writer failures without pretending capture succeeded. | [Storage/completeness contract](logger.md#lokalizacja-retencja-i-kompletność). |
 | REQ-BOUNDARIES | Wrapper visibility does not imply access to internal bridge HTTP or execution after exec. Close those gaps through explicit integrations, not invented observations. | [Novamira](logger.md#novamira-i-granice-obserwowalności) and [handoff](logger.md#procesy-i-przekazanie-sterowania). |
-| REQ-QUALITY | Follow repository test-first and VM policy; preserve Rust 1.85 compatibility. Completion requires actual required verification. | [Repository testing policy](../../docs/testing.md), [Cargo manifest](../../core/rust/Cargo.toml). |
+| REQ-QUALITY | Follow repository test-first and VM policy; preserve Rust 1.85 compatibility. Completion requires actual required verification. | [Repository testing policy](../../docs/testing.md), [Cargo manifest](../../core/Cargo.toml). |
 
 ## Accepted foundation contracts
 
@@ -30,8 +30,8 @@ This is the bounded working reference for this objective. The archived input is 
 
 ## Current implementation boundaries
 
-[Session storage](../../core/rust/src/logging/session.rs), [entry integration](../../core/rust/src/logging/entry.rs), and entry-point lifecycle are existing reusable infrastructure. Manager invocation context already preserves argv/environment/path bytes using explicit UTF-8 or hex representation.
+[Session storage](../../core/src/logging/session.rs), [entry integration](../../core/src/logging/entry.rs), and entry-point lifecycle are existing reusable infrastructure. Manager invocation context already preserves argv/environment/path bytes using explicit UTF-8 or hex representation.
 
-The [shared runner](../../core/rust/src/process.rs) still returns nonzero child exit statuses as `Ok(CommandOutput)`. Its `CaptureLimited(n)` retains at most `n + 1` bytes, `Null` discards a stream, and inherited stdin is not an application-owned byte buffer. These are application semantics, not permission to claim full diagnostic capture. See [the unresolved stream boundary](decisions-and-gaps.md#stream-observation-boundary).
+The [shared runner](../../core/src/process.rs) still returns nonzero child exit statuses as `Ok(CommandOutput)`. Its `CaptureLimited(n)` retains at most `n + 1` bytes, `Null` discards a stream, and inherited stdin is not an application-owned byte buffer. These are application semantics, not permission to claim full diagnostic capture. See [the unresolved stream boundary](decisions-and-gaps.md#stream-observation-boundary).
 
 Do not add a new retry, rollback, transaction, network dependency, Tokio runtime, or alternative logging framework merely to emit events.

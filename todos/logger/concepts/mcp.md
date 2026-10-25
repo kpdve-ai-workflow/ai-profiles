@@ -6,10 +6,10 @@
 
 Observe local configuration and launch preparation up to the existing guard/exec boundary:
 
-- [mcp/runtime.rs](../../../core/rust/src/mcp/runtime.rs): `launch`, identity, selected server, executable/cwd and `apply_environment`.
-- [mcp/config.rs](../../../core/rust/src/mcp/config.rs): consumed state/local overrides, merge/resolve and effective configuration.
-- [mcp/environment.rs](../../../core/rust/src/mcp/environment.rs): `dotenv`, `environment_for`, substitution and validation.
-- [playwright/runtime.rs](../../../core/rust/src/playwright/runtime.rs): launch planning and the existing handoff.
+- [mcp/runtime.rs](../../../core/src/mcp/runtime.rs): `launch`, identity, selected server, executable/cwd and `apply_environment`.
+- [mcp/config.rs](../../../core/src/mcp/config.rs): consumed state/local overrides, merge/resolve and effective configuration.
+- [mcp/environment.rs](../../../core/src/mcp/environment.rs): `dotenv`, `environment_for`, substitution and validation.
+- [playwright/runtime.rs](../../../core/src/playwright/runtime.rs): launch planning and the existing handoff.
 
 ## Contract
 
@@ -21,7 +21,7 @@ Reuse the foundation's handoff/flush and entry-point lifecycle. Do not replace e
 
 ## Test-first acceptance
 
-Extend [mcp_config.rs tests](../../../core/rust/tests/mcp_config.rs), [mcp_runtime.rs tests](../../../core/rust/tests/mcp_runtime.rs), [playwright.rs tests](../../../core/rust/tests/playwright.rs), and [runtime_logging.rs](../../../core/rust/tests/runtime_logging.rs) as appropriate.
+Extend [mcp_config.rs tests](../../../core/tests/mcp_config.rs), [mcp_runtime.rs tests](../../../core/tests/mcp_runtime.rs), [playwright.rs tests](../../../core/tests/playwright.rs), and [runtime_logging.rs](../../../core/tests/runtime_logging.rs) as appropriate.
 
 Independent fixtures specify exact input configuration/dotenv, expected precedence, child environment and returned errors. Cover a valid launch plan, overrides, disabled server, missing/malformed env, reserved metadata, wrong location and diagnostic failure. Assert original protocol/stdout/codes and configuration semantics, plus exact captured bytes and absence of invented post-exec completion.
 

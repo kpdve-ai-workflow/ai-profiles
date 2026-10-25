@@ -45,9 +45,9 @@ skipów tylko po to, by uzyskać GREEN.
 
 Mockowane wywołanie procesu nie dowodzi działania prawdziwego programu.
 Kontrola orkiestracji nie zastępuje rzeczywistej integracji. W Rust samo dodanie
-pliku do `core/rust/tests/` nie gwarantuje wykonania: `core/rust/Cargo.toml`
+pliku do `core/tests/` nie gwarantuje wykonania: `core/Cargo.toml`
 ustawia `autotests = false`, a pliki są jawnie dołączane jako moduły testowe
-w `core/rust/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
+w `core/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
 uruchomienie nowych testów, nie tylko sukces całego polecenia.
 
 ### Wymagana weryfikacja przed akceptacją
@@ -59,7 +59,7 @@ Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
 
 | Zakres zmiany | Weryfikacja przed akceptacją |
 | --- | --- |
-| Zachowanie `core/rust` | `make validate-rust-migration` |
+| Zachowanie `core` | `make validate-rust-migration` |
 | Integracja/obraz Playwright | `make test-playwright` |
 | Wspólne zmiany obejmujące oba obszary | `make test-all` |
 | Orkiestracja VM | `bash tests/vm/check.sh` oraz `make test-all` |
@@ -363,7 +363,7 @@ Staging jest usuwany także po błędach. Nie używamy `--copy-links` ani
 `--delete-excluded`. Usunięte źródła znikają z workspace.
 
 Na dysku Incus zostają: `/home/tester/.cargo` (registry/git/toolchain),
-`/home/tester/ai-profiles/core/rust/target` (debug/release) i obrazy/warstwy Docker.
+`/home/tester/ai-profiles/core/target` (debug/release) i obrazy/warstwy Docker.
 Build pozostaje w miejscu wymaganym przez wykrywanie payloadów repozytorium.
 **Wyniki testów nigdy nie służą do pomijania wykonania**; obraz Playwright jest
 budowany przy każdym żądaniu (Docker może wykorzystać warstwy).
@@ -391,7 +391,7 @@ Nazwę VM znajdziesz w `artifacts/<run>/instance` lub `incus list`. Diagnostyka:
 incus exec NAZWA_VM -- cloud-init status --long
 incus exec NAZWA_VM -- cat /var/log/cloud-init-output.log
 incus exec NAZWA_VM -- df -h /home/tester
-incus exec NAZWA_VM -- du -sh /home/tester/.cargo /home/tester/ai-profiles/core/rust/target /home/tester/test-runs
+incus exec NAZWA_VM -- du -sh /home/tester/.cargo /home/tester/ai-profiles/core/target /home/tester/test-runs
 incus exec NAZWA_VM -- docker system df
 ```
 

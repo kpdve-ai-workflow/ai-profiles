@@ -7,7 +7,7 @@ The governing [repository testing policy](../../docs/testing.md) takes precedenc
 For each selected behavior-changing task:
 
 1. Read its specification and derive cases from the requirement and an independent oracle, not current output.
-2. Add the narrowly relevant tests, register modules explicitly in [lib.rs](../../core/rust/src/lib.rs), and obtain justified RED in the required VM before production changes.
+2. Add the narrowly relevant tests, register modules explicitly in [lib.rs](../../core/src/lib.rs), and obtain justified RED in the required VM before production changes.
 3. Implement the bounded change; obtain GREEN and required regression evidence.
 4. If behavior already exists and a test starts GREEN, check its ability to detect a credible regression; do not break working code to force RED.
 5. Stop dependent work for unavailable verification, an ambiguous oracle, or an unresolved contradiction. Preserve changes and report the blocker.
@@ -19,7 +19,7 @@ Use `test-gap-discovery`. Never weaken assertions, add skips, replace the integr
 - Targeted Cargo commands in concept specs are **guest-side commands only**, executed as the test user through the existing VM mechanisms/lock/isolation policy. They are not host commands or new Make targets.
 - Use one full required gate at the end of a coherent task, not after every edit. Do not additionally run `make test` when the selected gate already includes it.
 - Rust behavior: `make validate-rust-migration`. Playwright integration/image: `make test-playwright`; combined work: `make test-all`. VM orchestration changes additionally require the documented host check.
-- Preserve Rust 1.85 compatibility. At overall objective acceptance, verify actual `rustc`/Cargo 1.85.0 with `cargo build --manifest-path core/rust/Cargo.toml --locked --release --bins` and `cargo test --manifest-path core/rust/Cargo.toml --locked --all-targets` in the VM. Earlier evidence cannot be claimed for changed code. Tasks that change dependencies or use compiler-sensitive APIs need appropriate MSRV evidence before acceptance.
+- Preserve Rust 1.85 compatibility. At overall objective acceptance, verify actual `rustc`/Cargo 1.85.0 with `cargo build --manifest-path core/Cargo.toml --locked --release --bins` and `cargo test --manifest-path core/Cargo.toml --locked --all-targets` in the VM. Earlier evidence cannot be claimed for changed code. Tasks that change dependencies or use compiler-sensitive APIs need appropriate MSRV evidence before acceptance.
 - Fixtures must use disposable checkout/project layouts and synthetic HOME/env/data. Do not write test logs into the working checkout, real HOME, or real databases; do not export diagnostic payloads containing user data as test reports.
 - Record exact commands, outcomes, compiler versions and artifact paths on the task's entry in `roadmap.md`. `IMPLEMENTED` is not equivalent to verified completion.
 

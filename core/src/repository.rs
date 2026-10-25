@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub(crate) fn is_source_root(path: &Path) -> bool {
-    ["core/rust/src", "profiles", "skills", "mcp/servers"]
+    ["core/src", "profiles", "skills", "mcp/servers"]
         .into_iter()
         .all(|relative| path.join(relative).is_dir())
 }

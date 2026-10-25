@@ -22,7 +22,7 @@ make test
 ```
 
 Bez Make zbuduj binaria przez `make rust-build`, a następnie używaj
-`core/rust/target/release/ai-profile help`.
+`core/target/release/ai-profile help`.
 Po instalacji, aktualizacji lub zmianie profilu uruchom ponownie narzędzie,
 w którym korzystasz z profilu.
 

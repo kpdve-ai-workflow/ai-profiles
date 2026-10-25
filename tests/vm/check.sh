@@ -79,13 +79,13 @@ flock -u 8
 
 # Rzeczywisty rsync: prywatność stagingu, zmiany/delecje, symlinki i cache.
 src=$scratch/source; stage=$scratch/stage; dest=$scratch/dest
-mkdir -p "$src/core/rust/target" "$src/.git" "$src/.opencode" "$src/node_modules" "$stage" "$dest/core/rust/target"
+mkdir -p "$src/core/target" "$src/.git" "$src/.opencode" "$src/node_modules" "$stage" "$dest/core/target"
 echo secret > "$src/.env.local"
 echo secret > "$src/base-auth.json"
 echo secret > "$src/playwright-auth.json"
 echo private > "$src/.git/config"
-echo host-build > "$src/core/rust/target/host"
-echo cache > "$dest/core/rust/target/cache"
+echo host-build > "$src/core/target/host"
+echo cache > "$dest/core/target/cache"
 echo stale > "$dest/removed"
 echo modified > "$src/new file"
 echo context > "$src/.dockerignore"
@@ -94,23 +94,23 @@ chmod 755 "$src/executable"
 echo unrelated > "$scratch/private"
 ln -s "$scratch/private" "$src/link"
 rsync -a --no-owner --no-group --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
-[[ ! -e $stage/.env.local && ! -e $stage/base-auth.json && ! -e $stage/playwright-auth.json && ! -e $stage/.git && ! -e $stage/core/rust/target ]]
+[[ ! -e $stage/.env.local && ! -e $stage/base-auth.json && ! -e $stage/playwright-auth.json && ! -e $stage/.git && ! -e $stage/core/target ]]
 [[ -L $stage/link && $(readlink "$stage/link") == "$scratch/private" ]]
 mkdir "$scratch/unpacked"
 tar -C "$stage" -cf "$scratch/source.tar" .
 tar --no-same-owner -xf "$scratch/source.tar" -C "$scratch/unpacked"
 [[ -L $scratch/unpacked/link && -x $scratch/unpacked/executable && -f $scratch/unpacked/.dockerignore ]]
 rsync -a --delete --no-owner --no-group --exclude-from="$root/tests/vm/excludes" -- "$stage/" "$dest/"
-[[ -f $dest/core/rust/target/cache && ! -e $dest/removed && -x $dest/executable && -f $dest/.dockerignore && -L $dest/link ]]
+[[ -f $dest/core/target/cache && ! -e $dest/removed && -x $dest/executable && -f $dest/.dockerignore && -L $dest/link ]]
 rm "$src/new file"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$stage/" "$dest/"
-[[ ! -e $dest/'new file' && -f $dest/core/rust/target/cache ]]
+[[ ! -e $dest/'new file' && -f $dest/core/target/cache ]]
 # Usunięcie również katalogów nadrzędnych źródeł nie usuwa guest target.
 rm -rf -- "$src/core"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$stage/" "$dest/"
-[[ -f $dest/core/rust/target/cache ]]
+[[ -f $dest/core/target/cache ]]
 
 # Exercise the exact production selector: nested and top-level reports are
 # included, while private files, unsupported extensions and symlinks are not.

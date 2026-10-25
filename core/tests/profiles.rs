@@ -8,7 +8,7 @@ use crate::{
 
 fn source() -> (tempfile::TempDir, RepositoryContext) {
     let temp = tempfile::tempdir().unwrap();
-    for path in ["core/rust/src", "profiles", "skills", "mcp/servers"] {
+    for path in ["core/src", "profiles", "skills", "mcp/servers"] {
         std::fs::create_dir_all(temp.path().join(path)).unwrap();
     }
     let context = RepositoryContext::from_sources(PathBuf::from(temp.path())).unwrap();

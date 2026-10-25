@@ -99,11 +99,11 @@ PASSED: format
    Compiling url v2.5.8
    Compiling rustls-webpki v0.103.16
    Compiling ureq v3.4.2
-   Compiling ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core/rust)
+   Compiling ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core)
     Finished `release` profile [optimized] target(s) in 31.10s
 PASSED: release-build
 == clippy ==
-    Checking ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core/rust)
+    Checking ai-profiles-core v0.1.0 (/home/kzielinski/private/ai-profiles/core)
 error[E0252]: the name `OsString` is defined multiple times
  --> src/profile_management/../../tests/cli.rs:3:5
   |

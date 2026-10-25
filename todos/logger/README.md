@@ -1,6 +1,6 @@
 # Core Rust diagnostic logging
 
-This is the documentation entry point and global roadmap router for local diagnostic logging in `core/rust`. The objective is to reconstruct operations, decisions, data flow, failures, and retained state without changing application behavior.
+This is the documentation entry point and global roadmap router for local diagnostic logging in `core`. The objective is to reconstruct operations, decisions, data flow, failures, and retained state without changing application behavior.
 
 **Current progress and the next eligible task:** [roadmap.md](roadmap.md). There is no second execution queue in this README.
 

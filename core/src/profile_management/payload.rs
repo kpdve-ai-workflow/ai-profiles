@@ -595,7 +595,7 @@ fn insert_native(
 ) -> Result<(), PayloadError> {
     let source = file_path(
         context.sources.as_path(),
-        &format!("core/rust/target/release/{binary}"),
+        &format!("core/target/release/{binary}"),
     )?;
     let metadata =
         fs::metadata(&source).map_err(|_| PayloadError::MissingNativeBinary(source.clone()))?;
