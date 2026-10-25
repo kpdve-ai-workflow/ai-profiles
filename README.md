@@ -42,8 +42,9 @@ Każdy klient może mieć inny profil i wersję; operacja dla jednego nie zmieni
 plików ani rekordu pozostałych. Stan formatu 2: `.ai-profiles/state.json`;
 lokalne nadpisania MCP: `.ai-profiles/<klient>/local.json` (plik użytkownika).
 
-Profil WordPress domyślnie włącza Novamirę, pobiera zweryfikowany ZIP 1.12.12
-i przygotowuje wspólny bundle `.ai-profiles/mcp/novamira/`, w tym pusty
+Profil WordPress domyślnie włącza Novamirę i przygotowuje wspólny bundle
+`.ai-profiles/mcp/novamira/` z dołączonym do repozytorium, zweryfikowanym ZIP-em
+1.12.12, w tym pusty
 `.env.novamira` z prawami `0600`, bez nadpisywania istniejącego pliku.
 Uzupełnij endpoint, login WordPressa i **hasło aplikacyjne** (nie hasło wp-admin),
 Zainstaluj plugin dostarczonym `install-plugin`, aktywuj go i AI Abilities ręcznie,

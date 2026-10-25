@@ -60,7 +60,10 @@ fn playwright_keeps_private_inputs_and_reports_inside_ai_profiles() {
     assert!(project.path().join(".ai-profiles/reports").is_dir());
     assert!(!project.path().join("reports").exists());
     assert!(!project.path().join(".private").exists());
-    assert_eq!(plan.environment[OsStr::new("AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE")], credentials.into_os_string());
+    assert_eq!(
+        plan.environment[OsStr::new("AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE")],
+        credentials.into_os_string()
+    );
 }
 
 #[test]

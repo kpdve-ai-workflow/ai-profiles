@@ -25,14 +25,23 @@ struct Adapter {
 }
 
 #[derive(Clone, Copy)]
-enum Fixture { Synthetic, Docker }
+enum Fixture {
+    Synthetic,
+    Docker,
+}
 
 impl Adapter {
     fn start(command: Value, env_contents: &str, extra: Value, server: &str) -> Self {
         Self::start_with(command, env_contents, extra, server, Fixture::Synthetic)
     }
 
-    fn start_with(command: Value, env_contents: &str, extra: Value, server: &str, fixture: Fixture) -> Self {
+    fn start_with(
+        command: Value,
+        env_contents: &str,
+        extra: Value,
+        server: &str,
+        fixture: Fixture,
+    ) -> Self {
         // cargo test --all-targets does not itself build an executable release
         // payload. Build once so `make test` works on a fresh VM and never tests
         // a stale adapter left by an earlier verification run.
@@ -58,15 +67,16 @@ impl Adapter {
         });
         let project = tempfile::tempdir().unwrap();
         if matches!(fixture, Fixture::Docker) {
-            let archive = crate::profile_management::credentials::archive_for(project.path()).unwrap();
-            crate::profile_management::credentials::prepare(project.path(), &archive).unwrap();
+            crate::profile_management::credentials::prepare(project.path()).unwrap();
         }
         let root = project.path().join(".ai-profiles/opencode");
         fs::create_dir_all(&root).unwrap();
         let executable = root.join("ai-profile-mcp");
         let release = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/ai-profile-mcp");
         fs::copy(release, &executable).expect("build release binaries in VM before process tests");
-        let env_path = project.path().join(".ai-profiles/mcp/novamira/.env.novamira");
+        let env_path = project
+            .path()
+            .join(".ai-profiles/mcp/novamira/.env.novamira");
         fs::create_dir_all(env_path.parent().unwrap()).unwrap();
         fs::write(env_path, env_contents).unwrap();
         let mut entry = json!({"type":"local","command":command,"env_file":".ai-profiles/mcp/novamira/.env.novamira"});
@@ -328,15 +338,32 @@ fn novamira_real_pinned_bridge_reports_http_auth_distinctly_and_forwards_tools()
 
 #[test]
 fn novamira_distributed_docker_bridge_auth_timeout_tools_and_container_cleanup() {
-    let build = std::process::Command::new("docker").args(["build", "-t", "ai-profiles-novamira:0.1.0"])
+    let build = std::process::Command::new("docker")
+        .args(["build", "-t", "ai-profiles-novamira:0.1.0"])
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mcp/images/novamira"))
-        .output().unwrap();
-    assert!(build.status.success(), "Docker build failed: {}", String::from_utf8_lossy(&build.stderr));
+        .output()
+        .unwrap();
+    assert!(
+        build.status.success(),
+        "Docker build failed: {}",
+        String::from_utf8_lossy(&build.stderr)
+    );
     check_real_bridge(Fixture::Docker);
-    let containers = std::process::Command::new("docker").args(["ps", "--filter", "ancestor=ai-profiles-novamira:0.1.0", "--format", "{{.ID}}"])
-        .output().unwrap();
+    let containers = std::process::Command::new("docker")
+        .args([
+            "ps",
+            "--filter",
+            "ancestor=ai-profiles-novamira:0.1.0",
+            "--format",
+            "{{.ID}}",
+        ])
+        .output()
+        .unwrap();
     assert!(containers.status.success());
-    assert!(containers.stdout.is_empty(), "adapter shutdown left a live bridge container");
+    assert!(
+        containers.stdout.is_empty(),
+        "adapter shutdown left a live bridge container"
+    );
 }
 
 fn check_real_bridge(fixture: Fixture) {

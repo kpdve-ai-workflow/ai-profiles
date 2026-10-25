@@ -311,8 +311,15 @@ fn load_local_at(
         let Some(fields) = entry.as_object() else {
             return Err(McpConfigError::InvalidOverrideFields(name.clone()));
         };
-        if name == "novamira" && ["env_file", "command", "cwd"].iter().any(|key| fields.contains_key(*key)) {
-            return Err(McpConfigError::InvalidOverrideFields("novamira: command/cwd/env_file mają stałe lokalizacje w .ai-profiles/mcp/novamira".into()));
+        if name == "novamira"
+            && ["env_file", "command", "cwd"]
+                .iter()
+                .any(|key| fields.contains_key(*key))
+        {
+            return Err(McpConfigError::InvalidOverrideFields(
+                "novamira: command/cwd/env_file mają stałe lokalizacje w .ai-profiles/mcp/novamira"
+                    .into(),
+            ));
         }
         if fields
             .keys()

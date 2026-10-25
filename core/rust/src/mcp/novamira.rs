@@ -85,8 +85,11 @@ impl Drop for Bridge {
         while self.0.try_wait().is_ok_and(|status| status.is_none()) && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(20));
         }
-        let _ = Command::new("kill").args(["-KILL", "--", &group])
-            .stdout(Stdio::null()).stderr(Stdio::null()).status();
+        let _ = Command::new("kill")
+            .args(["-KILL", "--", &group])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
         let _ = self.0.kill();
         let _ = self.0.wait();
     }

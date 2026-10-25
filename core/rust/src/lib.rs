@@ -33,11 +33,11 @@ mod mcp_config_tests;
 #[path = "../tests/mcp_runtime.rs"]
 mod mcp_runtime_tests;
 #[cfg(test)]
-#[path = "../tests/novamira.rs"]
-mod novamira_tests;
-#[cfg(test)]
 #[path = "../tests/novamira_bundle.rs"]
 mod novamira_bundle_tests;
+#[cfg(test)]
+#[path = "../tests/novamira.rs"]
+mod novamira_tests;
 #[cfg(test)]
 #[path = "../tests/playwright.rs"]
 mod playwright_tests;

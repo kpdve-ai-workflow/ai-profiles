@@ -168,7 +168,9 @@ fn novamira_credentials_are_private_unmanaged_and_survive_client_lifecycle() {
         Client::OpenCode,
         Some("wordpress"),
     );
-    let env = project.path().join(".ai-profiles/mcp/novamira/.env.novamira");
+    let env = project
+        .path()
+        .join(".ai-profiles/mcp/novamira/.env.novamira");
     assert_eq!(fs::read_to_string(&env).unwrap(), "# Adres endpointu Novamiry, np. https://twoja-witryna/wp-json/mcp/novamira\nWP_API_URL=\n# Login konta WordPress, które wygenerowało hasło aplikacyjne\nWP_API_USERNAME=\n# Hasło aplikacyjne WordPressa — NIE hasło do panelu wp-admin\nWP_API_PASSWORD=\"\"\n");
     assert_eq!(
         fs::metadata(&env).unwrap().permissions().mode() & 0o777,
@@ -269,7 +271,9 @@ fn novamira_env_collisions_fail_without_following_links_or_changing_project() {
         let outside = tempfile::NamedTempFile::new().unwrap();
         fs::write(outside.path(), b"unchanged").unwrap();
         fs::create_dir_all(project.path().join(".ai-profiles/mcp/novamira")).unwrap();
-        let path = project.path().join(".ai-profiles/mcp/novamira/.env.novamira");
+        let path = project
+            .path()
+            .join(".ai-profiles/mcp/novamira/.env.novamira");
         match kind {
             "symlink" => std::os::unix::fs::symlink(outside.path(), &path).unwrap(),
             "dangling" => {
@@ -1106,7 +1110,12 @@ fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() 
         b"report survives uninstall"
     );
     assert_eq!(
-        fs::read(project.path().join(".ai-profiles/.private/playwright-basic-auth.json")).unwrap(),
+        fs::read(
+            project
+                .path()
+                .join(".ai-profiles/.private/playwright-basic-auth.json")
+        )
+        .unwrap(),
         b"synthetic secret"
     );
 }
@@ -1212,7 +1221,11 @@ fn playwright_update_manages_launcher_and_preserves_project_data() {
         &json_bytes(&state).unwrap(),
     );
     put(project.path(), "reports/wcag/report.md", b"keep report");
-    put(project.path(), ".ai-profiles/.private/auth.json", b"keep authentication");
+    put(
+        project.path(),
+        ".ai-profiles/.private/auth.json",
+        b"keep authentication",
+    );
 
     apply_profile(&context, project.path(), "wordpress").unwrap();
     assert!(project

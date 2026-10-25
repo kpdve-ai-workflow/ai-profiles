@@ -42,9 +42,10 @@ Instalacja nie łączy się z WordPressem i działa bez sekretów. Przygotowuje 
 szablon `.ai-profiles/mcp/novamira/.env.novamira` od razu z prawami `0600`; istniejącego pliku nie zmienia.
 Do czasu uzupełnienia danych start MCP zwróci czytelny błąd, bez próby logowania
 pustymi wartościami. Figma jest skonfigurowana, ale wymaga autoryzacji.
-Instalator pobiera pełny ZIP Novamiry z oficjalnego GitHub Releases i sprawdza
-SHA-256. Nie instaluje pluginu w WordPressie ani hostowego Node/npm. Do instalacji
-pluginu służy osobno uruchamiany skrypt; aktywacja i AI Abilities pozostają ręczne.
+Pełny ZIP Novamiry 1.12.12 jest dołączony do repozytorium i kopiowany do bundle’a;
+instalacja profilu nie pobiera ZIP-a z sieci. Nie instaluje pluginu w WordPressie
+ani hostowego Node/npm. Do instalacji pluginu służy osobno uruchamiany skrypt;
+aktywacja i AI Abilities pozostają ręczne.
 Skille dotyczące Sage/ACF stosuj tylko do pasującej architektury projektu;
 zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfiguracji motywu.
 
@@ -59,8 +60,8 @@ zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfigurac
 - Dla lokalnego HTTPS: publiczny CA w `.ai-profiles/mcp/novamira/.private/ca.crt`,
   bez symlinków, czytelny dla procesu w kontenerze. Nigdy nie kopiuj klucza CA
   i nie wyłączaj weryfikacji TLS. Publiczne HTTPS używa zaufania obrazu.
-- Dostęp do GitHub podczas pobierania ZIP-a oraz do rejestrów Docker/npm podczas
-  ręcznego buildu obrazu. Instalacja profilu nie buduje obrazu i nie uruchamia MCP.
+- Dostęp do rejestrów Docker/npm podczas ręcznego buildu obrazu. Instalacja
+  profilu nie pobiera ZIP-a, nie buduje obrazu i nie uruchamia MCP.
 
 Przypięta paczka to Novamira **1.12.12**, wymagająca WordPress **6.9+** i PHP **8.0+**.
 Historyczny audyt

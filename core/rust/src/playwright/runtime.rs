@@ -277,7 +277,8 @@ fn installed_identity(executable: &Path) -> Result<(PathBuf, PathBuf), Playwrigh
 }
 
 fn prepare_reports(project: &Path) -> Result<(), PlaywrightError> {
-    let path = file_path(project, ".ai-profiles/reports").map_err(|_| PlaywrightError::InvalidReports)?;
+    let path =
+        file_path(project, ".ai-profiles/reports").map_err(|_| PlaywrightError::InvalidReports)?;
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => Ok(()),
         Ok(_) => Err(PlaywrightError::InvalidReports),

@@ -110,7 +110,7 @@ ic exec "$name" -- tar --no-same-owner -xf "$guest_stage/source.tar" -C "$guest_
 ic exec "$name" -- rsync -a --delete --no-owner --no-group --chown=1000:1000 \
     --exclude-from="$guest_stage/source/tests/vm/excludes" -- "$guest_stage/source/" /home/tester/ai-profiles/
 cleanup
-[[ $mode != sync ]] || exit
+[[ $mode != sync ]] || exit 0
 printf '%s\n' "$name" > "$artifact/instance"
 ic config get "$name" user.ai-profiles.image > "$artifact/image-fingerprint"
 echo "Artefakty: $artifact"

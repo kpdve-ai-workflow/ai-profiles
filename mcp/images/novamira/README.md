@@ -4,7 +4,8 @@ Wspólny katalog projektu: `.ai-profiles/mcp/novamira/`.
 ZIP: oficjalny release `use-novamira/novamira` 1.12.12, pełna paczka z vendor/.
 SHA-256: `ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78`.
 
-Instalator profilu pobiera i weryfikuje ZIP, ale nie dotyka WordPressa.
+ZIP jest częścią repozytorium i instalator profilu kopiuje go do bundle’a;
+instalacja profilu nie wymaga pobierania go z sieci ani nie dotyka WordPressa.
 Sam uruchom jedną z komend w projekcie:
 
 ```sh
