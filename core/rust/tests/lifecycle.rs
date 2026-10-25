@@ -1,4 +1,8 @@
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{
+    fs,
+    os::unix::fs::{FileTypeExt, PermissionsExt},
+    path::Path,
+};
 
 use serde_json::json;
 
@@ -145,7 +149,7 @@ fn scoped_action(
 }
 
 #[test]
-fn novamira_credentials_are_private_unmanaged_and_survive_client_lifecycle() {
+fn novamira_credentials_are_user_owned_optional_for_install_and_survive_lifecycle() {
     use crate::model::{Client, ProfileAction as A};
     let (source, context) = native_source();
     put(
@@ -168,14 +172,8 @@ fn novamira_credentials_are_private_unmanaged_and_survive_client_lifecycle() {
         Client::OpenCode,
         Some("wordpress"),
     );
-    let env = project
-        .path()
-        .join(".ai-profiles/mcp/novamira/.env.novamira");
-    assert_eq!(fs::read_to_string(&env).unwrap(), "# Adres endpointu Novamiry, np. https://twoja-witryna/wp-json/mcp/novamira\nWP_API_URL=\n# Login konta WordPress, które wygenerowało hasło aplikacyjne\nWP_API_USERNAME=\n# Hasło aplikacyjne WordPressa — NIE hasło do panelu wp-admin\nWP_API_PASSWORD=\"\"\n");
-    assert_eq!(
-        fs::metadata(&env).unwrap().permissions().mode() & 0o777,
-        0o600
-    );
+    let env = project.path().join(".env.novamira");
+    assert!(!env.exists(), "install must not create a credential file");
     let config = read_json(&project.path().join("opencode.json")).unwrap();
     assert_eq!(config["mcp"]["novamira"]["disabled"], false);
     let secret = b"WP_API_PASSWORD=synthetic-never-store-this\n";
@@ -210,13 +208,13 @@ fn novamira_credentials_are_private_unmanaged_and_survive_client_lifecycle() {
     let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
     assert_eq!(
         state["clients"]["opencode"]["mcp_base"]["novamira"]["env_file"],
-        ".ai-profiles/mcp/novamira/.env.novamira"
+        ".env.novamira"
     );
     assert!(!state.to_string().contains("synthetic-never-store-this"));
     assert!(!state["clients"]["opencode"]["files"]
         .as_object()
         .unwrap()
-        .contains_key(".ai-profiles/mcp/novamira/.env.novamira"));
+        .contains_key(".env.novamira"));
     // Moving away from Novamira must leave this user-owned file untouched.
     put(
         source.path(),
@@ -253,7 +251,7 @@ fn novamira_credentials_are_private_unmanaged_and_survive_client_lifecycle() {
 }
 
 #[test]
-fn novamira_env_collisions_fail_without_following_links_or_changing_project() {
+fn novamira_credential_collisions_do_not_block_install_or_get_modified() {
     use crate::model::{Client, ClientSelection, ProfileAction as A};
     let (source, context) = native_source();
     put(
@@ -271,9 +269,7 @@ fn novamira_env_collisions_fail_without_following_links_or_changing_project() {
         let outside = tempfile::NamedTempFile::new().unwrap();
         fs::write(outside.path(), b"unchanged").unwrap();
         fs::create_dir_all(project.path().join(".ai-profiles/mcp/novamira")).unwrap();
-        let path = project
-            .path()
-            .join(".ai-profiles/mcp/novamira/.env.novamira");
+        let path = project.path().join(".env.novamira");
         match kind {
             "symlink" => std::os::unix::fs::symlink(outside.path(), &path).unwrap(),
             "dangling" => {
@@ -289,17 +285,26 @@ fn novamira_env_collisions_fail_without_following_links_or_changing_project() {
             }
             _ => unreachable!(),
         }
-        let result = crate::profile_management::scoped::run(
+        crate::profile_management::scoped::run(
             &context,
             project.path(),
             A::Install,
             ClientSelection::One(Client::OpenCode),
             Some("wordpress"),
-        );
-        assert!(result.is_err(), "collision {kind} must fail");
-        assert!(!project.path().join("opencode.json").exists());
-        assert!(!project.path().join(".ai-profiles/state.json").exists());
+        )
+        .unwrap();
+        assert!(project.path().join("opencode.json").exists());
+        assert!(project.path().join(".ai-profiles/state.json").exists());
         assert_eq!(fs::read(outside.path()).unwrap(), b"unchanged");
+        match kind {
+            "symlink" | "dangling" => assert!(fs::symlink_metadata(&path)
+                .unwrap()
+                .file_type()
+                .is_symlink()),
+            "directory" => assert!(path.is_dir()),
+            "fifo" => assert!(fs::symlink_metadata(&path).unwrap().file_type().is_fifo()),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -1016,6 +1021,7 @@ fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() 
     disable_native_activation(project.path());
     let original_ignore = b"# user bytes\r\n/private-data\r\n";
     put(project.path(), ".gitignore", original_ignore);
+    put(project.path(), "base-auth.json", b"synthetic secret");
     for client in Client::ALL {
         scoped_action(
             &context,
@@ -1063,8 +1069,8 @@ fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() 
     assert!(ignore.starts_with(original_ignore));
     assert_eq!(
         ignore
-            .windows(b"/.ai-profiles/.private/playwright-basic-auth.json".len())
-            .filter(|window| *window == b"/.ai-profiles/.private/playwright-basic-auth.json")
+            .windows(b"/base-auth.json".len())
+            .filter(|window| *window == b"/base-auth.json")
             .count(),
         1
     );
@@ -1088,11 +1094,6 @@ fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() 
         "reports/keep.json",
         b"report survives uninstall",
     );
-    put(
-        project.path(),
-        ".ai-profiles/.private/playwright-basic-auth.json",
-        b"synthetic secret",
-    );
     scoped_action(
         &context,
         project.path(),
@@ -1110,12 +1111,7 @@ fn playwright_scoped_lifecycle_owns_launcher_but_not_ignore_rule_or_user_data() 
         b"report survives uninstall"
     );
     assert_eq!(
-        fs::read(
-            project
-                .path()
-                .join(".ai-profiles/.private/playwright-basic-auth.json")
-        )
-        .unwrap(),
+        fs::read(project.path().join("base-auth.json")).unwrap(),
         b"synthetic secret"
     );
 }
@@ -1221,11 +1217,7 @@ fn playwright_update_manages_launcher_and_preserves_project_data() {
         &json_bytes(&state).unwrap(),
     );
     put(project.path(), "reports/wcag/report.md", b"keep report");
-    put(
-        project.path(),
-        ".ai-profiles/.private/auth.json",
-        b"keep authentication",
-    );
+    put(project.path(), "auth.json", b"keep authentication");
 
     apply_profile(&context, project.path(), "wordpress").unwrap();
     assert!(project
@@ -1246,7 +1238,7 @@ fn playwright_update_manages_launcher_and_preserves_project_data() {
         b"keep report"
     );
     assert_eq!(
-        fs::read(project.path().join(".ai-profiles/.private/auth.json")).unwrap(),
+        fs::read(project.path().join("auth.json")).unwrap(),
         b"keep authentication"
     );
 }

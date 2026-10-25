@@ -598,7 +598,7 @@ pub(crate) enum McpConfigError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum EnvironmentError {
-    #[error("Cannot read env file: {filename}")]
+    #[error("Cannot read env file: {filename}. Create it in the project root with the required MCP values.")]
     ReadEnvFile { filename: String },
     #[error("Invalid env entry at line {line}")]
     InvalidEntry { line: usize },

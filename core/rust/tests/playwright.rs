@@ -51,9 +51,9 @@ fn env(entries: &[(&str, &OsStr)]) -> HashMap<OsString, OsString> {
 fn playwright_keeps_private_inputs_and_reports_inside_ai_profiles() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let private = project.path().join(".ai-profiles/.private");
-    fs::create_dir(&private).unwrap();
-    let credentials = private.join("playwright-basic-auth.json");
+    let private = project.path().to_path_buf();
+
+    let credentials = private.join("base-auth.json");
     fs::write(&credentials, b"synthetic").unwrap();
     fs::set_permissions(&credentials, fs::Permissions::from_mode(0o600)).unwrap();
     let plan = prepare_launch(&launcher, project.path().as_os_str(), &HashMap::new()).unwrap();
@@ -130,9 +130,9 @@ fn default_basic_auth_is_optional_and_attached_only_for_a_valid_private_file() {
         .to_string_lossy()
         .contains("compose.basic-auth.yaml"));
 
-    let private = project.path().join(".ai-profiles/.private");
-    fs::create_dir(&private).unwrap();
-    let credentials = private.join("playwright-basic-auth.json");
+    let private = project.path().to_path_buf();
+
+    let credentials = private.join("base-auth.json");
     fs::write(
         &credentials,
         br#"{"username":"synthetic","password":"secret","origin":"http://127.0.0.1"}"#,
@@ -154,29 +154,36 @@ fn default_basic_auth_is_optional_and_attached_only_for_a_valid_private_file() {
 fn explicit_missing_or_unsafe_credentials_do_not_fall_back_to_default() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let private = project.path().join(".ai-profiles/.private");
-    fs::create_dir(&private).unwrap();
-    let default = private.join("playwright-basic-auth.json");
+    let private = project.path().to_path_buf();
+
+    let default = private.join("base-auth.json");
     fs::write(&default, b"synthetic").unwrap();
     fs::set_permissions(&default, fs::Permissions::from_mode(0o600)).unwrap();
 
     let explicit = env(&[(
         "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE",
-        OsStr::new(".ai-profiles/.private/missing.json"),
+        OsStr::new("missing.json"),
     )]);
     assert!(prepare_launch(&launcher, project.path().as_os_str(), &explicit).is_err());
 
     fs::set_permissions(&default, fs::Permissions::from_mode(0o644)).unwrap();
     assert!(prepare_launch(&launcher, project.path().as_os_str(), &HashMap::new()).is_err());
+    fs::set_permissions(&default, fs::Permissions::from_mode(0o600)).unwrap();
+
+    let missing_storage = env(&[(
+        "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE",
+        OsStr::new("missing-storage.json"),
+    )]);
+    assert!(prepare_launch(&launcher, project.path().as_os_str(), &missing_storage).is_err());
 }
 
 #[test]
 fn explicit_credentials_override_default_but_symlinks_and_reports_paths_are_rejected() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let private = project.path().join(".ai-profiles/.private");
-    fs::create_dir(&private).unwrap();
-    let default = private.join("playwright-basic-auth.json");
+    let private = project.path().to_path_buf();
+
+    let default = private.join("base-auth.json");
     fs::write(&default, b"synthetic default").unwrap();
     fs::set_permissions(&default, fs::Permissions::from_mode(0o600)).unwrap();
     let explicit = private.join("override.json");
@@ -184,7 +191,7 @@ fn explicit_credentials_override_default_but_symlinks_and_reports_paths_are_reje
     fs::set_permissions(&explicit, fs::Permissions::from_mode(0o600)).unwrap();
     let inherited = env(&[(
         "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE",
-        OsStr::new(".ai-profiles/.private/override.json"),
+        OsStr::new("override.json"),
     )]);
     let plan = prepare_launch(&launcher, project.path().as_os_str(), &inherited).unwrap();
     assert_eq!(
@@ -213,31 +220,35 @@ fn explicit_credentials_override_default_but_symlinks_and_reports_paths_are_reje
     let external = project.path().join("outside.json");
     fs::write(&external, b"synthetic").unwrap();
     fs::set_permissions(&external, fs::Permissions::from_mode(0o600)).unwrap();
-    fs::remove_file(private.join("playwright-basic-auth.json")).unwrap();
-    std::os::unix::fs::symlink(&external, private.join("playwright-basic-auth.json")).unwrap();
+    fs::remove_file(private.join("base-auth.json")).unwrap();
+    std::os::unix::fs::symlink(&external, private.join("base-auth.json")).unwrap();
     assert!(prepare_launch(&launcher, project.path().as_os_str(), &HashMap::new()).is_err());
 }
 
 #[test]
-fn symlinked_private_directory_and_unreadable_credentials_are_rejected() {
+fn symlinked_project_path_and_unreadable_credentials_are_rejected() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
     let external = project.path().join("external-private");
     fs::create_dir(&external).unwrap();
-    let credentials = external.join("playwright-basic-auth.json");
+    let credentials = external.join("base-auth.json");
     fs::write(&credentials, b"synthetic").unwrap();
     fs::set_permissions(&credentials, fs::Permissions::from_mode(0o600)).unwrap();
-    std::os::unix::fs::symlink(&external, project.path().join(".ai-profiles/.private")).unwrap();
-    assert!(prepare_launch(&launcher, project.path().as_os_str(), &HashMap::new()).is_err());
-
-    fs::remove_file(project.path().join(".ai-profiles/.private")).unwrap();
+    let link = project.path().join("linked");
+    std::os::unix::fs::symlink(&external, &link).unwrap();
+    let inherited = env(&[(
+        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE",
+        OsStr::new("linked/base-auth.json"),
+    )]);
+    assert!(prepare_launch(&launcher, project.path().as_os_str(), &inherited).is_err());
+    fs::remove_file(link).unwrap();
     fs::remove_file(credentials).unwrap();
     fs::remove_dir(&external).unwrap();
-    let private = project.path().join(".ai-profiles/.private");
-    fs::create_dir(&private).unwrap();
-    fs::write(private.join("playwright-basic-auth.json"), b"synthetic").unwrap();
+    let private = project.path().to_path_buf();
+
+    fs::write(private.join("base-auth.json"), b"synthetic").unwrap();
     fs::set_permissions(
-        private.join("playwright-basic-auth.json"),
+        private.join("base-auth.json"),
         fs::Permissions::from_mode(0o200),
     )
     .unwrap();
@@ -248,9 +259,9 @@ fn symlinked_private_directory_and_unreadable_credentials_are_rejected() {
 fn compose_overlays_precede_and_do_not_reorder_or_duplicate_user_files() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let private = project.path().join(".ai-profiles/.private");
-    fs::create_dir(&private).unwrap();
-    let credentials = private.join("playwright-basic-auth.json");
+    let private = project.path().to_path_buf();
+
+    let credentials = private.join("base-auth.json");
     fs::write(&credentials, b"synthetic").unwrap();
     fs::set_permissions(&credentials, fs::Permissions::from_mode(0o600)).unwrap();
     let state = private.join("storage.json");
@@ -263,7 +274,7 @@ fn compose_overlays_precede_and_do_not_reorder_or_duplicate_user_files() {
         ("AI_PROFILE_PLAYWRIGHT_CA_CERT", OsStr::new("public-ca.pem")),
         (
             "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE",
-            OsStr::new(".ai-profiles/.private/storage.json"),
+            OsStr::new("storage.json"),
         ),
     ]);
 

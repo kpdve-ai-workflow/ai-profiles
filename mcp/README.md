@@ -45,21 +45,42 @@ i adapter. Przykładowa struktura:
 {
   "mcp": {
     "postgres": {
-      "env_file": ".ai-profiles/mcp/postgres/.env.stage",
+      "env_file": ".env.stage",
       "environment": {"DATABASE_URI": "{env:STAGE_DATABASE_URL}"}
     }
   }
 }
 ```
 
-`env_file` jest opcjonalną ścieżką względną pod `.ai-profiles/`, bez `..` i symlinków,
-dostępna tylko dla lokalnych MCP. Przechowuj pliki sekretów poza Gitem, dodając
+`env_file` jest opcjonalną ścieżką względną od katalogu głównego projektu, bez
+`..` i symlinków, dostępna tylko dla lokalnych MCP. Użytkownik tworzy plik sam;
+install/update/switch nie wymagają jego obecności. Przechowuj pliki sekretów poza Gitem, dodając
 je do projektowego `.gitignore`; konfiguruj sekrety przez referencje środowiskowe,
 nie wpisując ich w JSON. Kolejność wartości to środowisko odziedziczone, wskazany
 plik env, a następnie mapowanie `environment`. Parser pliku env obsługuje
 pojedyncze `KEY=value`, cudzysłowy, komentarze i `export`; nie wykonuje powłoki,
 nie interpoluje `$VAR`/`${VAR}` i nie obsługuje wartości wieloliniowych.
 Brak wymaganego pliku lub zmiennej zatrzymuje start MCP.
+
+Poświadczenia tworzy wyłącznie użytkownik w katalogu projektu. W profilach
+WordPress standardową nazwą dla MariaDB jest `<PROJECT>/.env.mariadb` (gdy MCP
+jest włączony); dla PostgreSQL można wskazać `<PROJECT>/.env.postgres` przez
+lokalne `env_file` (opcjonalny sposób dostarczenia `DATABASE_URI`). Samodzielnie
+utwórz plik lokalnym edytorem, ustaw `chmod 600 <nazwa>`, dodaj do `.gitignore`
+i nie udostępniaj przez HTTP. Przykładowa zawartość PostgreSQL (fikcyjna):
+
+```dotenv
+DATABASE_URI=postgresql://example_user:example_password@db.example.test:5432/example_db
+```
+
+MariaDB używa `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`;
+konkretny przykład znajduje się w [instrukcji WordPress](../profiles/wordpress/README.md).
+PostgreSQL bez pliku może otrzymać URI z odziedziczonego środowiska. Figma jest
+zdalnym OAuth MCP i nie wymaga pliku poświadczeń w projekcie. Playwright używa
+opcjonalnego `base-auth.json` i opcjonalnego `playwright-auth.json` (cookies/storage
+state); Novamira wymaga `.env.novamira` do startu. Szczegóły i formaty są w
+[instrukcji Playwright](images/playwright/README.md#http-basic-auth) i
+[instrukcji Novamira](../profiles/wordpress/README.md#5-zapisz-lokalne-połączenie).
 
 Obiekty ustawień scalają się po kluczach, tablice (np. `command`) są zastępowane
 w całości. Można nadpisać m.in. `command`, `environment`, `cwd`, `enabled`/
@@ -108,16 +129,17 @@ nie zastępują jej końcowej wartości. Użytkownik nie musi jej konfigurować.
 ### Novamira
 
 Novamira ma centralnie `disabled: false`. Bundle jest wspólny dla klientów:
-`.ai-profiles/mcp/novamira/`, z Dockerfile, Compose, launcherem, `install-plugin`,
-`downloads/novamira.zip`, `.private/` i `.env.novamira`. Instalator pobiera pełną
+`.ai-profiles/mcp/novamira/`, z Dockerfile, Compose, launcherem, `install-plugin`
+i `downloads/novamira.zip`. Instalator kopiuje pełną
 paczkę 1.12.12 z oficjalnego GitHub Releases i weryfikuje przypięty SHA-256.
 Nie instaluje jej w WordPressie i nie buduje obrazu Docker podczas instalacji profilu.
-Nowy env powstaje z prawami `0600`. Istniejące sekrety nie są odczytywane,
-hashowane, nadpisywane ani usuwane; symlinki i kolizje blokują operację.
+Plik `.env.novamira` nie jest dostarczany ani tworzony. Użytkownik sam tworzy go
+w katalogu głównym projektu z prawami `0600`; brak pliku nie blokuje lifecycle,
+a start MCP wskazuje dokładną nazwę brakującego pliku.
 Nie dodajemy reguły `.gitignore` dla Novamiry: użytkownik musi sam zabezpieczyć
-bundle przed ujawnieniem sekretów przez Git i HTTP. Wspólne receptury są
-przygotowywane jednokrotnie; inna zawartość blokuje nadpisanie. Bundle, ZIP,
-env i prywatne pliki pozostają po uninstall, również ostatniego klienta.
+plik przed ujawnieniem sekretów przez Git i HTTP. Wspólne receptury są
+przygotowywane jednokrotnie; inna zawartość blokuje nadpisanie. Bundle i ZIP
+pozostają po uninstall, również ostatniego klienta.
 
 Przebieg: instalacja profilu → `install-plugin --wordpress KATALOG` lub `--ddev`
 → ręczna aktywacja pluginu i AI Abilities → hasło aplikacyjne i uzupełnienie env
@@ -126,11 +148,12 @@ Przebieg: instalacja profilu → `install-plugin --wordpress KATALOG` lub `--dde
 nie zastępuje istniejącego pluginu ani nie aktywuje go. Nie uruchamia DDEV.
 Host nie potrzebuje Node/npm; most 0.4.0 jest wewnątrz obrazu.
 Kontener używa Linux host networking, montuje RO pliki hosts/resolv.conf i tylko
-opcjonalny publiczny CA `.private/ca.crt` z katalogu bundle, nigdy projektu ani env.
+opcjonalny publiczny CA `.ai-profiles/mcp/novamira/.private/ca.crt` z katalogu bundle.
 Poświadczenia są przekazywane przez environment, bez wartości w argumentach.
 Puste dane blokują start MCP przed próbą logowania. Nie ma obowiązkowego
 local.json ani polecenia aktywacji MCP. Lokalny disabled/timeout jest obsługiwany,
-ale command/cwd/env_file Novamiry są stałe, bez ścieżek poza `.ai-profiles/`.
+ale command/cwd/env_file Novamiry są stałe. Inne lokalne `env_file` są
+ścieżkami względnymi od katalogu projektu.
 
 Osłona Novamiry w adapterze Rust odrzuca zastępczą inicjalizację mostu
 `@automattic/mcp-wordpress-remote@0.4.0`, gdy obecne jest
@@ -212,9 +235,9 @@ zależności przechodnich w przyszłych rebuildach.
 
 Po aktualizacji dostarczonej receptury użytkownik jawnie ponawia build w projekcie.
 Aktualizacja i uninstall nie zarządzają lokalnymi obrazami ani raportami.
-React 4.0.0 i WordPress 3.0.0 umieszczają raporty pod `.ai-profiles/reports/`,
-prywatne pliki pod `.ai-profiles/.private/`, bez migracji i fallbacku do starych
-lokalizacji. Sieć pozostaje `host`; starych danych użytkownika nie usuwamy.
+React 4.0.0 i WordPress 3.0.0 umieszczają raporty pod `.ai-profiles/reports/`;
+plikami poświadczeń zarządza użytkownik w katalogu głównym projektu, bez migracji
+i fallbacku do starych lokalizacji. Sieć pozostaje `host`.
 Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwright/README.md).
 
 ### Sieć, certyfikaty i artefakty
@@ -278,25 +301,30 @@ zaufania hosta. Niestandardowy CA wymaga jawnego publicznego pliku przez
 firmowego CA. Po zmianie środowiska/ustawień zrestartuj klienta/MCP.
 
 Uwierzytelniony audyt może użyć `AI_PROFILE_PLAYWRIGHT_STORAGE_STATE` wskazującego
-prywatny plik storage state o prawach `0600`. Launcher sam włącza `compose.auth.yaml`.
-Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
-nie należy do raportów ani stanu instalacji.
+opcjonalny storage state cookies/localStorage. Użytkownik tworzy go samodzielnie
+w katalogu projektu, w formacie Playwright `{"cookies":[],"origins":[]}`,
+z prawami `0600`; plik jest montowany RO i nie należy do raportów ani stanu instalacji.
 
-HTTP Basic Auth jest opcjonalny: utwórz lokalnie
-`.ai-profiles/.private/playwright-basic-auth.json` z wymaganymi `username`, `password` i
-`origin`, o prawach `0600` lub bardziej restrykcyjnych, bez symlinków.
+HTTP Basic Auth jest opcjonalny: samodzielnie utwórz `<PROJECT>/base-auth.json`
+z wymaganymi `username`, `password` i `origin`, o prawach `0600` lub bardziej
+restrykcyjnych, bez symlinków. Przykład (fikcyjne wartości):
+
+```json
+{"username":"przykladowy-login","password":"fikcyjne-haslo","origin":"https://serwis.example:8443"}
+```
 
 Po utworzeniu pliku ustaw uprawnienia, uruchamiając w docelowym projekcie:
 
 ```sh
-chmod 600 .ai-profiles/.private/playwright-basic-auth.json
+chmod 600 base-auth.json
 ```
 
 W `origin` podaj protokół, host i opcjonalny port, bez ścieżki ani końcowego `/`,
 np. `https://serwis.example:8443`.
 
 Launcher automatycznie dołącza rozszerzenie; bez pliku nie włącza Basic Auth.
-Instalacja/update/switch dodaje tylko regułę `/.ai-profiles/.private/playwright-basic-auth.json`
+Nie commituj pliku ani nie udostępniaj go przez HTTP.
+Instalacja/update/switch dodaje tylko regułę `/base-auth.json`
 do `.gitignore`; nie odśledza już wersjonowanego sekretu. Reguła i prywatny plik
 pozostają po uninstall. JSON jest montowany
 tylko do odczytu. Entrypoint przekazuje dane do

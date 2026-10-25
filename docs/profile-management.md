@@ -215,16 +215,20 @@ Adapter uruchamia dostarczony `playwright-launcher`, który automatycznie tworzy
 `.ai-profiles/reports/` i przygotowuje kontener, bez konfiguracji VPN lub hosta.
 Nie ma automatycznego buildu/pull ani zależności od publikacji GHCR.
 Zależności Playwright są w obrazie, bez hostowego Node. Opcjonalny Basic Auth
-wymaga tylko prywatnego `.ai-profiles/.private/playwright-basic-auth.json` z `username`,
-`password`, `origin` i prawami `0600`; Compose/local.json nie wymagają edycji.
+używa `<PROJECT>/base-auth.json` z `username`, `password`, `origin` i prawami
+`0600`; bez pliku działa bez uwierzytelniania. Opcjonalne cookies/storage state
+także wskazuj jako plik w katalogu projektu, z prawami `0600`. Compose nie wymaga edycji.
 Po przygotowaniu zrestartuj klienta i zatwierdź wymagane natywne zgody projektu/MCP.
 
-React 4.0.0 i WordPress 3.0.0 używają `.ai-profiles/reports/` i
-`.ai-profiles/.private/` bez migracji starych lokalizacji. Sieć pozostaje `host`.
+React 4.0.0 i WordPress 3.0.0 używają `.ai-profiles/reports/`; poświadczenia
+użytkownik tworzy w katalogu głównym projektu, bez migracji starych lokalizacji.
+Sieć pozostaje `host`.
 WordPress dodatkowo przygotowuje `.ai-profiles/mcp/novamira/` z oficjalnym ZIP-em,
 skryptem instalacji pluginu i mostem w Dockerze. Ścieżki Novamiry są stałe;
-wszystkie `env_file` MCP muszą być pod `.ai-profiles/`.
-Ograniczenie `env_file` dotyczy też profili Golang 4.0.0 i dotnet 2.0.0.
+wszystkie `env_file` MCP są ścieżkami względnymi od katalogu głównego projektu.
+`<PROJECT>/.env.novamira` jest wymagany wyłącznie przy uruchamianiu Novamiry;
+użytkownik tworzy go samodzielnie, instalator go nie dostarcza. `env_file` MCP
+może wskazywać ścieżkę względną od katalogu projektu.
 Uninstall nie usuwa credentials ani reguły `.gitignore`, którą instalator dodaje
 dla domyślnego pliku Basic Auth. Instrukcja i wyjątki (CA, uprawnienia, HTTP 401)
 są w `.ai-profiles/<klient>/mcp/playwright/README.md`;

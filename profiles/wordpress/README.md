@@ -24,7 +24,7 @@ Instalacja dostarcza:
 - definicje MCP `novamira`, `figma`, `mariadb` i `playwright` w zarządzanej konfiguracji wskazanego klienta;
 - adapter Rust `{{AI_PROFILE_ROOT}}/ai-profile-mcp`, który uruchamia most Novamira;
 - wspólny bundle `.ai-profiles/mcp/novamira/`: Dockerfile, Compose, launcher,
-  `install-plugin`, zweryfikowany ZIP, pusty `.env.novamira` i prywatny katalog;
+  `install-plugin` i zweryfikowany ZIP; bez plików poświadczeń;
 - launcher Rust `{{AI_PROFILE_MCP}}/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
 - launcher Rust i kontekst ręcznego buildu Playwright w `{{AI_PROFILE_MCP}}/playwright/`;
@@ -38,10 +38,9 @@ podczas instalacji dla wybranego klienta. Dla nowych instalacji root to
 `.ai-profiles/<klient>`. Możesz wybrać CLIENT=claude lub CLIENT=codex bez OpenCode.
 
 **Novamira jest domyślnie włączona**, a MariaDB początkowo wyłączona.
-Instalacja nie łączy się z WordPressem i działa bez sekretów. Przygotowuje pusty
-szablon `.ai-profiles/mcp/novamira/.env.novamira` od razu z prawami `0600`; istniejącego pliku nie zmienia.
-Do czasu uzupełnienia danych start MCP zwróci czytelny błąd, bez próby logowania
-pustymi wartościami. Figma jest skonfigurowana, ale wymaga autoryzacji.
+Instalacja nie łączy się z WordPressem i działa bez sekretów. Nie tworzy
+`.env.novamira`; brak pliku nie blokuje instalacji. Przy uruchomieniu Novamira
+wskaże nazwę pliku do samodzielnego utworzenia. Figma wymaga autoryzacji.
 Pełny ZIP Novamiry 1.12.12 jest dołączony do repozytorium i kopiowany do bundle’a;
 instalacja profilu nie pobiera ZIP-a z sieci. Nie instaluje pluginu w WordPressie
 ani hostowego Node/npm. Do instalacji pluginu służy osobno uruchamiany skrypt;
@@ -129,25 +128,22 @@ W katalogu **projektu WordPressa**, przed wpisaniem sekretów, samodzielnie zabe
 plik przed przypadkowym commitem, np. dodając do `.gitignore`:
 
 ```gitignore
-/.ai-profiles/mcp/novamira/.env.novamira
+/.env.novamira
 ```
 
 Jeśli plik z sekretami był już śledzony przez Git, samo `.gitignore` nie wystarczy.
 Usuń go z indeksu i unieważnij ujawnione hasło. Nie zapisuj sekretów w przykładach
 wewnątrz `{{AI_PROFILE_ROOT}}/plugin/skills/`: są to zarządzane pliki profilu.
 
-Instalator **nie dodaje** tej reguły ani innego mechanizmu ignorowania.
-Szablon jest już przygotowany w `.ai-profiles/mcp/novamira/.env.novamira`.
-To plik użytkownika, nie zarządzany payload: update, switch, instalacja kolejnego
-klienta i uninstall go nie nadpisują ani nie usuwają. Symlink lub kolizja
-z katalogiem/innym typem pliku blokuje przygotowanie profilu.
-Sprawdź prawa istniejącego pliku przed wpisaniem sekretów (nowy ma `0600`).
-Uzupełnij go lokalnie w edytorze:
+Instalator **nie dodaje** tej reguły ani innego mechanizmu ignorowania. Samodzielnie
+utwórz w katalogu głównym projektu plik `.env.novamira`, ustaw mu prawa `0600`
+i wpisz dane lokalnym edytorem. Jest obowiązkowy do uruchomienia Novamiry,
+ale nie do install/update/switch. Przykład poprawnej zawartości (fikcyjne wartości):
 
 ```dotenv
-WP_API_URL=https://moj-projekt.ddev.site/wp-json/mcp/novamira
-WP_API_USERNAME=twoj-login-wordpress
-WP_API_PASSWORD="wygenerowane haslo aplikacyjne"
+WP_API_URL=https://wordpress.example.test/wp-json/mcp/novamira
+WP_API_USERNAME=przykladowy-login
+WP_API_PASSWORD="xxxx xxxx xxxx xxxx xxxx xxxx"
 ```
 
 Podaj pełny adres z `/wp-json/mcp/novamira`, **nie `/novamira-oauth`**,
@@ -155,13 +151,15 @@ oraz login konta, na którym wygenerowano hasło. Cudzysłowy pozwalają zachowa
 Plik nie jest skryptem powłoki — nie wpisuj do niego komend ani interpolacji `$VAR`.
 
 Nie musisz tworzyć `{{AI_PROFILE_LOCAL}}` ani aktywować MCP: domyślna definicja
-wskazuje `.ai-profiles/mcp/novamira/.env.novamira` i `disabled: false`.
+wskazuje `.env.novamira` i `disabled: false`.
 Ścieżki Novamiry są stałe: lokalne nadpisania `env_file`, `command` i `cwd` są
 odrzucane. Możesz nadal świadomie wyłączyć MCP lub zmienić timeout w lokalnym
-pliku klienta. Inne lokalne pliki env MCP również muszą być pod `.ai-profiles/`.
+pliku klienta. Inne lokalne pliki `env_file` MCP mogą być wskazane ścieżką
+względną od katalogu głównego projektu.
 Nie potrzebujesz ręcznego eksportowania zmiennych do sesji OpenCode.
-Upewnij się, że serwer WWW blokuje dostęp HTTP do plików `.env*`, `.ai-profiles/` i `.opencode/`.
-Uprawnienia `600` i `.gitignore` nie zastępują konfiguracji serwera WWW.
+Nie commituj pliku ani nie udostępniaj go przez HTTP; skonfiguruj serwer WWW,
+by blokował dostęp do `.env*` i konfiguracji projektu. Uprawnienia `0600`
+i `.gitignore` nie zastępują ochrony HTTP.
 
 ## 6. Uruchom połączenie w wybranym kliencie
 
@@ -274,17 +272,24 @@ awarii asyncmy na natywnym ARM64. Inna architektura hosta wymaga emulacji Docker
 
 ### Połączenie per projekt
 
+Plik `<PROJECT>/.env.mariadb` jest wymagany tylko wtedy, gdy włączasz MariaDB.
+Utwórz go samodzielnie (powyższe polecenia); instalator go nie dostarcza,
+nie kopiuje ani nie usuwa. Wymagane pola to `DB_HOST`, `DB_PORT`, `DB_NAME`,
+`DB_USER` i `DB_PASSWORD`. Uprawnienia `0600`; nie commituj go ani nie udostępniaj
+przez HTTP.
+
 W głównym katalogu projektu dodaj do `.gitignore`:
 
 ```gitignore
-/.ai-profiles/mcp/mariadb/.env.mariadb
+/.env.mariadb
 ```
 
 Utwórz plik i ustaw prawa przed wpisaniem hasła:
 
 ```bash
-mkdir -p .ai-profiles/mcp/mariadb
-(umask 077; touch .ai-profiles/mcp/mariadb/.env.mariadb)
+umask 077
+touch .env.mariadb
+chmod 600 .env.mariadb
 ```
 
 Przykład dla DDEV z portem bazy opublikowanym na hoście:
@@ -292,9 +297,9 @@ Przykład dla DDEV z portem bazy opublikowanym na hoście:
 ```dotenv
 DB_HOST=127.0.0.1
 DB_PORT=62335
-DB_NAME=twoja_baza
-DB_USER=twoj_uzytkownik_bazy
-DB_PASSWORD="twoje haslo do bazy"
+DB_NAME=przykladowa_baza
+DB_USER=przykladowy_uzytkownik
+DB_PASSWORD="fikcyjne haslo do bazy"
 ```
 
 **62335 jest przykładem z konfiguracji WFOŚiGW**, nie globalnym domyślnym portem.
@@ -313,7 +318,7 @@ Do istniejącego `{{AI_PROFILE_LOCAL}}` dodaj wpis `mariadb` wewnątrz `mcp`:
   "mcp": {
     "mariadb": {
       "disabled": false,
-      "env_file": ".ai-profiles/mcp/mariadb/.env.mariadb"
+      "env_file": ".env.mariadb"
     }
   }
 }
@@ -564,8 +569,9 @@ docker build --tag ai-profiles-playwright:0.2.0 {{AI_PROFILE_MCP}}/playwright
 Do użycia potrzebny jest Docker Engine i plugin Compose, bez hostowego
 Node/npm/Chromium na potrzeby Playwright (Novamira ma osobne wymagania).
 Nie ma automatycznego buildu/pull ani publikacji GHCR.
-Opcjonalnie zapisz lokalnym edytorem `.ai-profiles/.private/playwright-basic-auth.json`
-o prawach `0600` lub bardziej restrykcyjnych, bez symlinków:
+Basic Auth jest opcjonalny. Samodzielnie utwórz w katalogu głównym projektu
+`base-auth.json` lokalnym edytorem i ustaw `chmod 600 base-auth.json`.
+Przykładowa zawartość (fikcyjne wartości):
 
 ```json
 {
@@ -575,10 +581,11 @@ o prawach `0600` lub bardziej restrykcyjnych, bez symlinków:
 }
 ```
 
-Wszystkie trzy pola są wymagane; origin to schemat/host/port bez ścieżki i ogranicza
-wysyłanie credentials do tego serwisu. Instalator dopisuje regułę
-`/.ai-profiles/.private/playwright-basic-auth.json` do `.gitignore`, ale nie odśledza już
-wersjonowanych plików. Nie podawaj sekretów agentowi ani nie zapisuj ich w raportach.
+Wymagane pola: login `username`, hasło `password` i `origin` w formacie
+`https://host:port` (bez ścieżki, query i fragmentu). Instalator dopisuje regułę
+`/base-auth.json` do `.gitignore`, ale nie odśledza już
+wersjonowanych plików. Nie commituj pliku ani nie udostępniaj przez HTTP; nie
+podawaj sekretów agentowi ani nie zapisuj ich w raportach.
 Brak pliku oznacza brak Basic Auth. Zrestartuj klienta i zatwierdź jego natywne
 zgody projektu/MCP, jeśli wymagane.
 
@@ -599,7 +606,7 @@ Jawne nazwy screenshotów to `.ai-profiles/reports/...`; `screenshot.png` w korz
 
 WordPress **3.0.0** wprowadza nowy układ bez automatycznej migracji i fallbacku
 do starych lokalizacji: Novamira w `.ai-profiles/mcp/novamira/`, prywatne dane
-Playwright w `.ai-profiles/.private/`, raporty w `.ai-profiles/reports/`.
+Playwright w `(katalog projektu)/`, raporty w `.ai-profiles/reports/`.
 Nie przenosimy ani nie usuwamy starych poświadczeń. Nowe instalacje wykonują
 opisany wyżej flow. Wspólny bundle Novamiry jest zachowany po uninstall; różniące
 się receptury lub ZIP blokują nadpisanie. Ręczne zmiany zarządzanych wpisów

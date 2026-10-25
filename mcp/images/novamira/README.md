@@ -19,11 +19,21 @@ lub `development` i brak istniejącej wtyczki Novamira. Skrypt nie aktualizuje a
 nie nadpisuje istniejącej instalacji. Weryfikuje ZIP i używa WordPressowego
 instalatora, który respektuje WP_PLUGIN_DIR. Nie aktywuje wtyczki sieciowo ani lokalnie.
 
-W panelu **docelowej witryny** aktywuj plugin i AI Abilities. Wygeneruj hasło
-aplikacyjne WordPressa i uzupełnij `.env.novamira` w tym katalogu: URL endpointu,
-login WordPressa i hasło aplikacyjne, NIE hasło wp-admin. Nowy plik ma prawa 0600.
-Nie wpisuj sekretów w JSON, poleceniach ani czacie. Samodzielnie zabezpiecz
-`.ai-profiles/` przed commitowaniem i udostępnieniem HTTP; nie dodajemy reguł ignorowania.
+W panelu **docelowej witryny** aktywuj plugin i AI Abilities. Wygeneruj
+**hasło aplikacyjne WordPressa** (nie hasło wp-admin). Użytkownik samodzielnie
+tworzy `<PROJECT>/.env.novamira`, nadaje mu `chmod 600 .env.novamira` i lokalnie
+wprowadza dane. Plik jest wymagany do uruchomienia MCP, ale nie do instalacji.
+Przykładowa zawartość (fikcyjne dane):
+
+```dotenv
+WP_API_URL=https://wordpress.example.test/wp-json/mcp/novamira
+WP_API_USERNAME=przykladowy-login
+WP_API_PASSWORD="xxxx xxxx xxxx xxxx xxxx xxxx"
+```
+
+Wymagane pola to URL endpointu, login konta WordPress i jego hasło aplikacyjne.
+Nie commituj pliku ani nie udostępniaj przez HTTP; nie wpisuj sekretów w
+komendach, JSON klienta ani czacie. Instalator nie tworzy ani nie kopiuje pliku.
 
 Zbuduj obraz (bez sekretów, ZIP-a, prywatnych plików i projektu w kontekście):
 
@@ -43,9 +53,10 @@ katalogu (bez symlinków, nigdy klucz prywatny). Launcher montuje ten jeden plik
 RO. Nie wyłączaj TLS. Pusty env i błędy inicjalizacji są zgłaszane przez istniejącą
 obsługę MCP; HTTP 401 nie jest mylone z błędem TLS, DNS czy brakiem narzędzi.
 
-Ścieżki zasobów Novamiry są stałe; lokalne command/cwd/env_file nie są obsługiwane.
-Lokalne disabled/timeout pozostają dostępne. Nie ma migracji starych lokalizacji.
+Poświadczenia są w katalogu głównym projektu, niezależnie od katalogu roboczego
+terminala i położenia launchera. Ścieżki zasobów Novamiry są stałe; lokalne
+command/cwd/env_file nie są obsługiwane. Nie ma migracji starych lokalizacji.
 Wspólny bundle jest przygotowywany jednokrotnie, a różniąca się zawartość receptur
 lub ZIP-a blokuje operację zamiast nadpisania. Kolejny klient używa tego samego
-bundle bez nadpisywania sekretów. Uninstall zachowuje bundle, ZIP, env i prywatne
-pliki oraz nie usuwa pluginu WordPressa ani obrazu Docker.
+bundle bez nadpisywania sekretów. Uninstall zachowuje bundle i ZIP oraz nie usuwa
+pliku poświadczeń użytkownika, pluginu WordPressa ani obrazu Docker.

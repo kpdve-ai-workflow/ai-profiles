@@ -44,14 +44,15 @@ lokalne nadpisania MCP: `.ai-profiles/<klient>/local.json` (plik użytkownika).
 
 Profil WordPress domyślnie włącza Novamirę i przygotowuje wspólny bundle
 `.ai-profiles/mcp/novamira/` z dołączonym do repozytorium, zweryfikowanym ZIP-em
-1.12.12, w tym pusty
-`.env.novamira` z prawami `0600`, bez nadpisywania istniejącego pliku.
-Uzupełnij endpoint, login WordPressa i **hasło aplikacyjne** (nie hasło wp-admin),
+1.12.12. Instalator nie dostarcza ani nie tworzy poświadczeń.
+Utwórz w katalogu projektu `.env.novamira` z prawami `0600` i uzupełnij endpoint,
+login WordPressa oraz **hasło aplikacyjne** (nie hasło wp-admin),
 Zainstaluj plugin dostarczonym `install-plugin`, aktywuj go i AI Abilities ręcznie,
 zbuduj dostarczony obraz Docker i zrestartuj klienta/MCP. Most działa w Dockerze,
 bez hostowego Node/npm/npx. Instalator nie dodaje reguły `.gitignore` dla Novamiry:
 samodzielnie zabezpiecz plik przed commitem i dostępem przez HTTP.
-Prywatne pliki Playwright są pod `.ai-profiles/.private/`, raporty pod
+Pliki poświadczeń Playwright użytkownik tworzy w katalogu głównym projektu,
+raporty są pod
 `.ai-profiles/reports/`. Nie migrujemy automatycznie starych lokalizacji.
 
 `install CLIENT=all` dodaje brakujących klientów, pomija zgodne profile i odrzuca

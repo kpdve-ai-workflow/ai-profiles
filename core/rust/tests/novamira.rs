@@ -74,12 +74,10 @@ impl Adapter {
         let executable = root.join("ai-profile-mcp");
         let release = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/ai-profile-mcp");
         fs::copy(release, &executable).expect("build release binaries in VM before process tests");
-        let env_path = project
-            .path()
-            .join(".ai-profiles/mcp/novamira/.env.novamira");
+        let env_path = project.path().join(".env.novamira");
         fs::create_dir_all(env_path.parent().unwrap()).unwrap();
         fs::write(env_path, env_contents).unwrap();
-        let mut entry = json!({"type":"local","command":command,"env_file":".ai-profiles/mcp/novamira/.env.novamira"});
+        let mut entry = json!({"type":"local","command":command,"env_file":".env.novamira"});
         entry
             .as_object_mut()
             .unwrap()
@@ -166,10 +164,13 @@ fn assert_failure(reply: &Value, auth: bool) {
         .as_str()
         .expect("MCP error message");
     assert!(message.contains("Novamira:"));
-    assert!(message.contains(".ai-profiles/mcp/novamira/.env.novamira"));
+    assert!(message.contains(".env.novamira"));
     if auth {
-        assert!(message.contains("HTTP 401"));
-        assert!(message.contains(".ai-profiles/mcp/novamira/.env.novamira"));
+        assert!(
+            message.contains("HTTP 401"),
+            "unexpected safe diagnostic: {message}"
+        );
+        assert!(message.contains(".env.novamira"));
         assert!(message.contains("WP_API_USERNAME") && message.contains("WP_API_PASSWORD"));
         assert!(message.contains("hasła aplikacyjnego WordPressa, nie hasła do panelu"));
     } else {
@@ -423,6 +424,22 @@ fn novamira_empty_configuration_fails_before_spawning_bridge() {
     assert!(reply["error"]["message"]
         .as_str()
         .unwrap()
-        .contains(".ai-profiles/mcp/novamira/.env.novamira"));
+        .contains(".env.novamira"));
+    assert!(!adapter.stop().contains("SECRET-SENTINEL"));
+}
+
+#[test]
+fn novamira_missing_project_root_file_reports_its_name_without_spawning_bridge() {
+    let mut adapter = Adapter::start(
+        json!(["sh", "-c", "echo SECRET-SENTINEL >&2; exit 9"]),
+        "WP_API_URL=https://wordpress.example.test/wp-json/mcp/novamira\nWP_API_USERNAME=fixture\nWP_API_PASSWORD=fixture-password\n",
+        json!({"environment":{"WP_API_URL":"{env:WP_API_URL}","WP_API_USERNAME":"{env:WP_API_USERNAME}","WP_API_PASSWORD":"{env:WP_API_PASSWORD}"}}),
+        "novamira",
+    );
+    fs::remove_file(adapter._project.path().join(".env.novamira")).unwrap();
+    let reply = adapter.initialize();
+    let message = reply["error"]["message"].as_str().unwrap();
+    assert!(message.contains(".env.novamira"));
+    assert!(message.contains("utwórz w katalogu głównym projektu"));
     assert!(!adapter.stop().contains("SECRET-SENTINEL"));
 }

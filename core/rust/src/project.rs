@@ -15,7 +15,7 @@ use crate::{
 
 const STATE: &str = crate::layout::LEGACY_STATE;
 const IGNORE_LINE: &str = ".opencode/workflow-approval.json";
-const PLAYWRIGHT_AUTH_IGNORE: &[u8] = b"/.ai-profiles/.private/playwright-basic-auth.json";
+const PLAYWRIGHT_AUTH_IGNORE: &[u8] = b"/base-auth.json";
 const SCHEMA: &str = "https://opencode.ai/config.json";
 
 /// Format 2 is authoritative, even when its client map is empty. Legacy import

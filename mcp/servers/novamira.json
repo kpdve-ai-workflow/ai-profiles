@@ -2,7 +2,7 @@
   "type": "local",
   "command": [".ai-profiles/mcp/novamira/launcher"],
   "disabled": false,
-  "env_file": ".ai-profiles/mcp/novamira/.env.novamira",
+  "env_file": ".env.novamira",
   "environment": {
     "WP_API_URL": "{env:WP_API_URL}",
     "WP_API_USERNAME": "{env:WP_API_USERNAME}",

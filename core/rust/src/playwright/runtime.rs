@@ -21,7 +21,7 @@ const PROJECT_METADATA: &str = "AI_PROFILE_PROJECT_DIR";
 const COMPOSE_FILE: &str = "COMPOSE_FILE";
 const BASIC_AUTH_FILE: &str = "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE";
 const STORAGE_STATE: &str = "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE";
-const DEFAULT_BASIC_AUTH: &str = ".ai-profiles/.private/playwright-basic-auth.json";
+const DEFAULT_BASIC_AUTH: &str = "base-auth.json";
 const CA_CERT: &str = "AI_PROFILE_PLAYWRIGHT_CA_CERT";
 const CAROOT_OUTPUT_LIMIT: usize = 8192;
 
@@ -335,7 +335,7 @@ fn private_input(
     let canonical = path
         .canonicalize()
         .map_err(|_| PlaywrightError::InvalidPrivateInput)?;
-    if canonical.starts_with(reports) || !canonical.starts_with(project.join(".ai-profiles")) {
+    if canonical.starts_with(reports) || !canonical.starts_with(project) {
         return Err(PlaywrightError::InvalidPrivateInput);
     }
     Ok(canonical)

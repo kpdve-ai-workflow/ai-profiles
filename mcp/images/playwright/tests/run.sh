@@ -56,7 +56,7 @@ YAML
 # at the host-visible relative screenshot assertion, not just at mount inspection.
 AI_PROFILE_PROJECT_DIR="$project" AI_PROFILE_SMOKE_IMAGE="$image" AI_PROFILE_SMOKE_DIR="$tests" \
   AI_PROFILE_PLAYWRIGHT_CA_CERT=.ai-profiles/.private/ca.crt \
-  AI_PROFILE_PLAYWRIGHT_STORAGE_STATE=.ai-profiles/.private/auth.json \
+  AI_PROFILE_PLAYWRIGHT_STORAGE_STATE=auth.json \
   timeout --signal=TERM --kill-after=10s 180s docker compose \
   --project-directory "$project" \
   -f "${AI_PROFILE_SMOKE_COMPOSE:-$tests/../compose.yaml}" -f "$tests/../compose.ca.yaml" \
@@ -80,7 +80,7 @@ cat > "$project/.ai-profiles/opencode/local.json" <<'JSON'
   "AI_PROFILE_PROJECT_DIR":"/wrong/local-mapping",
   "AI_PROFILE_PLAYWRIGHT_NETWORK":"host",
   "AI_PROFILE_PLAYWRIGHT_CA_CERT":".ai-profiles/.private/ca.crt",
-  "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE":".ai-profiles/.private/auth.json",
+  "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE":"auth.json",
   "COMPOSE_FILE":".ai-profiles/opencode/mcp/playwright/compose.yaml:.ai-profiles/opencode/mcp/playwright/compose.ca.yaml:.ai-profiles/opencode/mcp/playwright/compose.auth.yaml:.ai-profiles/opencode/mcp/playwright/smoke-image.yaml"
 }}}}
 JSON
@@ -105,7 +105,7 @@ docker image tag "$image" ai-profiles-playwright:0.2.0
 SMOKE_AUTH_PROJECT="$auth_project" \
   SMOKE_AUTH_ADAPTER="$auth_project/.ai-profiles/opencode/ai-profile-mcp" \
   timeout --signal=TERM --kill-after=10s 240s node "$tests/auth-smoke.cjs"
-git -C "$auth_project" check-ignore --no-index -q .ai-profiles/.private/playwright-basic-auth.json
+git -C "$auth_project" check-ignore --no-index -q base-auth.json
 
 network_project="$run/network project space,comma"
 mkdir "$network_project"
@@ -132,6 +132,7 @@ mkdir "$ca_project" "$ca_fixtures"
 for ca in 'CA with spaces' 'other CA'; do
   timeout --signal=TERM --kill-after=10s 30s docker run --rm --pull=never --name "$name-fixtures" --entrypoint node \
     -e "FIXTURE_DIRECTORY=/fixtures/$ca" \
+    -e "AUTH_STATE_FILE=/fixtures/$ca/auth.json" \
     --mount "type=bind,src=$tests,dst=/smoke,readonly" \
     --volume "$ca_fixtures:/fixtures" \
     "$image" /smoke/create-fixtures.cjs

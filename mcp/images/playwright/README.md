@@ -135,18 +135,21 @@ Przykład jawnego CA i opcjonalnego storage state, bez ręcznego Compose:
     "playwright": {
       "environment": {
         "AI_PROFILE_PLAYWRIGHT_CA_CERT": ".ddev/ai-profile-ca.crt",
-        "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE": ".ai-profiles/.private/playwright-auth.json"
+        "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE": "playwright-auth.json"
       }
     }
   }
 }
 ```
 
-Można wskazać tylko potrzebne wejście. Względne ścieżki są względem katalogu
-głównego projektu; bezwzględne też są obsługiwane. Pliki muszą już istnieć.
-Storage state automatycznie włącza `compose.auth.yaml` i jest montowany tylko do odczytu
-i musi mieć prawa `0600` lub bardziej restrykcyjne. Trzymaj go poza raportami
-i Gitem. Przed użyciem dodaj prywatne pliki do projektowego `.gitignore`.
+Można wskazać tylko potrzebne wejście. Ścieżki są względem katalogu głównego
+projektu; pliki muszą już istnieć i nie mogą być symlinkami.
+Storage state to opcjonalne cookies/localStorage z Playwrighta. Samodzielnie
+utwórz `<PROJECT>/playwright-auth.json` (np. przez
+`context.storageState({ path: 'playwright-auth.json' })`) i ustaw `chmod 600
+playwright-auth.json`. Poprawny format to `{"cookies":[],"origins":[]}`;
+wstaw własne dane sesji w odpowiednich tablicach. Launcher włącza `compose.auth.yaml`
+i montuje plik RO. Nie commituj go ani nie udostępniaj przez HTTP; trzymaj poza raportami.
 
 Po zmianach lokalnych ustawień zrestartuj MCP. Po `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=<projekt>` ponów jawny
 `docker build`, jeśli zmienił się Dockerfile lub entrypoint. Aktualizacja profilu
@@ -155,8 +158,9 @@ nie przebudowuje i nie usuwa obrazów; uninstall zachowuje raporty i prywatne pl
 ### HTTP Basic Auth
 
 Basic Auth skonfiguruj niezależnie od cookies i localStorage ze storage state.
-Utwórz prywatny plik `.ai-profiles/.private/playwright-basic-auth.json` o prawach `0600`,
-zastępując przykładowe wartości lokalnie:
+Opcjonalnie samodzielnie utwórz w katalogu głównym projektu `base-auth.json`
+lokalnym edytorem i ustaw `chmod 600 base-auth.json`. Przykład poprawnej
+zawartości (fikcyjne wartości):
 
 ```json
 {
@@ -166,20 +170,19 @@ zastępując przykładowe wartości lokalnie:
 }
 ```
 
-Wszystkie trzy pola są wymagane. `origin` zawiera protokół HTTP/HTTPS, domenę
-i port serwisu (port domyślny można pominąć), bez ścieżki, końcowego `/`, query
-ani fragmentu. Musi odpowiadać adresowi używanemu przez przeglądarkę w kontenerze.
+`username` i `password` to login i hasło HTTP Basic Auth. `origin` to origin
+serwisu: protokół HTTP/HTTPS, host i opcjonalny port (tu `:8443`), bez ścieżki,
+końcowego `/`, query ani fragmentu; musi odpowiadać adresowi przeglądarki.
 Ogranicza wysyłanie danych HTTP Auth do tego origin; przekierowanie na inny
 origin nie otrzyma tych danych.
 
 Instalacja/update/switch profilu z Playwright dopisuje do `.gitignore` wyłącznie
-`/.ai-profiles/.private/playwright-basic-auth.json`. Przed wpisaniem sekretów potwierdź, że
-plik nie jest już śledzony przez Git — sama reguła nie usuwa go z indeksu.
-Zapisz JSON lokalnym edytorem z prawami `0600` lub bardziej restrykcyjnymi;
-katalog `.ai-profiles/.private` i plik nie mogą być symlinkami. Nigdy nie zapisuj go w `.ai-profiles/reports/`.
+`/base-auth.json`. Przed wpisaniem sekretów potwierdź, że plik nie jest śledzony
+przez Git — sama reguła nie usuwa go z indeksu. Nie commituj go ani nie
+udostępniaj przez HTTP. Plik i jego ścieżka nie mogą być symlinkami.
 Nie przekazuj hasła w poleceniu terminala, URL, czacie ani argumentach narzędzi.
-Plik może też leżeć poza projektem; wtedy podaj jego bezwzględną ścieżkę.
-Musi być czytelny dla UID/GID kontenera, zwykle właściciela `.ai-profiles/reports/`.
+Plik musi pozostać w katalogu projektu i być czytelny dla UID/GID kontenera,
+zwykle właściciela `.ai-profiles/reports/`.
 
 Brak pliku oznacza brak Basic Auth. Jeśli plik istnieje, launcher sam dołącza
 `compose.basic-auth.yaml`; nie edytujesz Compose ani `local.json`.
@@ -191,7 +194,7 @@ Tylko dla niestandardowej lokalizacji możesz dodać do istniejącego
   "mcp": {
     "playwright": {
       "environment": {
-        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE": ".ai-profiles/.private/inny-basic-auth.json"
+        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE": "inny-basic-auth.json"
       }
     }
   }
@@ -234,10 +237,10 @@ Dokumentacja: [HTTP authentication](https://playwright.dev/docs/network#http-aut
   `{{AI_PROFILE_LOCAL}}`. Zachowują priorytet; aktualizacja nie usuwa ich automatycznie.
 - Zmiana credentials, środowiska lub konfiguracji wymaga restartu MCP/klienta.
 
-React 4.0.0 / WordPress 3.0.0 używają `.ai-profiles/reports/` i
-`.ai-profiles/.private/`, bez migracji i fallbacku do starych lokalizacji.
+React 4.0.0 / WordPress 3.0.0 używają `.ai-profiles/reports/`; poświadczenia
+pozostają w katalogu głównym projektu, bez migracji i fallbacku do starych lokalizacji.
 Sieć pozostaje `host`. Uninstall zachowuje raporty, credentials i regułę
-`.gitignore`. Prywatne pliki wskazywane jawnie też muszą być pod `.ai-profiles/`.
+`.gitignore`. Prywatne pliki wskazywane jawnie muszą być w katalogu projektu.
 
 Sama konfiguracja ani pozytywny status profilu nie potwierdzają połączenia MCP.
 

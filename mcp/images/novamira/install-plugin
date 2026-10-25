@@ -31,4 +31,4 @@ ready=$(wp_run eval 'if (!in_array(wp_get_environment_type(), ["local", "develop
 [ "$ready" = novamira-local-install-ready ] || fail 'nie można jednoznacznie zweryfikować celu.'
 # No --force, --activate, network activation, URL edits or credential changes.
 wp_run plugin install "$archive" >/dev/null 2>&1 || fail 'instalacja pluginu nie powiodła się; nie wymuszono nadpisania.'
-echo 'Novamira: plugin zainstalowany. Aktywuj go ręcznie, włącz AI Abilities i uzupełnij .ai-profiles/mcp/novamira/.env.novamira.'
+echo 'Novamira: plugin zainstalowany. Aktywuj go ręcznie, włącz AI Abilities i utwórz w katalogu projektu plik .env.novamira.'

@@ -133,19 +133,16 @@ async function stopMcp(exited) {
 }
 
 function writeCredentials(origin, secret) {
-  const directory = `${project}/.ai-profiles/.private`;
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  fs.chmodSync(directory, 0o700);
-  fs.writeFileSync(`${directory}/playwright-basic-auth.json`, JSON.stringify({
+  fs.writeFileSync(`${project}/base-auth.json`, JSON.stringify({
     username, password: secret, origin,
   }), { mode: 0o600 });
-  fs.chmodSync(`${directory}/playwright-basic-auth.json`, 0o600);
+  fs.chmodSync(`${project}/base-auth.json`, 0o600);
 }
 
 async function main() {
   assert.ok(!fs.existsSync(`${project}/.ai-profiles/reports`), 'fixture must not pre-create reports');
   assert.ok(!fs.existsSync(`${project}/.ai-profiles/opencode/local.json`), 'fixture must not use local.json');
-  assert.ok(!fs.existsSync(`${project}/.ai-profiles/.private/playwright-basic-auth.json`), 'fixture starts without credentials');
+  assert.ok(!fs.existsSync(`${project}/base-auth.json`), 'fixture starts without credentials');
   assert.ok(fs.existsSync(`${project}/.ai-profiles/opencode/mcp/playwright/playwright-launcher`));
 
   authServer = http.createServer((req, res) => {

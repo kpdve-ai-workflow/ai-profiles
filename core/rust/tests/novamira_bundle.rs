@@ -51,21 +51,13 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         "launcher",
         "install-plugin",
         "downloads/novamira.zip",
-        ".env.novamira",
     ] {
         assert!(root.join(name).is_file(), "missing bundle file {name}");
     }
-    assert!(root.join(".private").is_dir());
+    assert!(!root.join(".env.novamira").exists());
     assert!(!project.path().join(".env.novamira").exists());
+    assert!(!root.join(".private").exists());
     assert!(!project.path().join("wp-content").exists());
-    assert_eq!(
-        fs::metadata(root.join(".env.novamira"))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777,
-        0o600
-    );
     assert_eq!(
         crate::codec::sha(&fs::read(root.join("downloads/novamira.zip")).unwrap()),
         "ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78"
@@ -75,7 +67,7 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         .contains("@automattic/mcp-wordpress-remote@0.4.0"));
     let config = fs::read(project.path().join("opencode.json")).unwrap();
     fs::write(
-        root.join(".env.novamira"),
+        project.path().join(".env.novamira"),
         "WP_API_PASSWORD=synthetic-private-sentinel\n",
     )
     .unwrap();
@@ -101,7 +93,7 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         assert!(invoke("uninstall", client).status.success());
     }
     assert_eq!(
-        fs::read_to_string(root.join(".env.novamira")).unwrap(),
+        fs::read_to_string(project.path().join(".env.novamira")).unwrap(),
         "WP_API_PASSWORD=synthetic-private-sentinel\n"
     );
     assert!(root.join("downloads/novamira.zip").exists());

@@ -81,6 +81,8 @@ flock -u 8
 src=$scratch/source; stage=$scratch/stage; dest=$scratch/dest
 mkdir -p "$src/core/rust/target" "$src/.git" "$src/.opencode" "$src/node_modules" "$stage" "$dest/core/rust/target"
 echo secret > "$src/.env.local"
+echo secret > "$src/base-auth.json"
+echo secret > "$src/playwright-auth.json"
 echo private > "$src/.git/config"
 echo host-build > "$src/core/rust/target/host"
 echo cache > "$dest/core/rust/target/cache"
@@ -92,7 +94,7 @@ chmod 755 "$src/executable"
 echo unrelated > "$scratch/private"
 ln -s "$scratch/private" "$src/link"
 rsync -a --no-owner --no-group --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
-[[ ! -e $stage/.env.local && ! -e $stage/.git && ! -e $stage/core/rust/target ]]
+[[ ! -e $stage/.env.local && ! -e $stage/base-auth.json && ! -e $stage/playwright-auth.json && ! -e $stage/.git && ! -e $stage/core/rust/target ]]
 [[ -L $stage/link && $(readlink "$stage/link") == "$scratch/private" ]]
 mkdir "$scratch/unpacked"
 tar -C "$stage" -cf "$scratch/source.tar" .

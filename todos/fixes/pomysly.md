@@ -38,58 +38,6 @@ Docelowo trzeba też odizolować konfigurację Codexa w teście Playwright, żeb
   Error: EROFS: read-only file system, open '/var/home/kpdve/it/personal/react/google-check.png'
 - po instalacji i uruchomieniu swiezej instancji harness jest connection jako failed ( problem z initial polaczeniem ) zeby zadzialalo musze recznie zrobic disconnect i connect
 
-## Novamira
-### DO WDROŻENIA
-1. Instalacja profilu
-make install CLIENT=opencode PROFILE=wordpress PROJECT=/sciezka/do/projektu
-ai-profiles:
-- przygotowuje konfigurację klienta;
-- pobiera pełny ZIP Novamiry ze źródła wskazanego przez https://novamira.ai/download/;
-- weryfikuje ustaloną wersję i integralność paczki;
-- dostarcza skrypt instalacji pluginu oraz pliki mostu MCP w Dockerze;
-- tworzy pusty .env.novamira z prawami 0600, bez nadpisywania istniejącego pliku.
-2. Układ plików
-.ai-profiles/
-└── mcp/
-    └── novamira/
-        ├── Dockerfile
-        ├── compose.yaml
-        ├── launcher
-        ├── install-plugin
-        ├── .env.novamira
-        ├── .private/
-        └── downloads/
-            └── novamira.zip
-Własne zasoby ai-profiles pozostają pod .ai-profiles/. Natywna konfiguracja klienta, np. opencode.json, pozostaje w wymaganej przez niego lokalizacji.
-3. Instalacja pluginu w WordPressie
-Użytkownik uruchamia dostarczony install-plugin. Skrypt:
-- identyfikuje wskazaną lokalną instalację WordPressa;
-- ustala faktyczny katalog wtyczek;
-- instaluje pobraną paczkę;
-- nie nadpisuje istniejącej instalacji pluginu bez jawnej decyzji.
-Roboczy plugin w katalogu WordPressa jest jedynym wyjątkiem od przechowywania zasobów Novamiry pod .ai-profiles/.
-4. Ręczne przygotowanie połączenia
-Użytkownik:
-1. Aktywuje plugin i włącza AI Abilities w WordPressie.
-2. Generuje hasło aplikacyjne WordPressa.
-3. Uzupełnia .ai-profiles/mcp/novamira/.env.novamira: endpoint, login i hasło aplikacyjne.
-4. Zabezpiecza sekrety przed commitowaniem i dostępem HTTP.
-Nie automatyzujemy konfiguracji AI Abilities ani tworzenia poświadczeń.
-5. Przygotowanie i uruchomienie mostu
-- Użytkownik buduje dostarczony obraz Docker.
-- Node i przypięty most WordPress działają wewnątrz kontenera — bez hostowego npx i jego cache.
-- Po restarcie klienta adapter uruchamia kontener MCP przez stdio.
-- Kontener łączy się z istniejącym WordPressem przez HTTP/HTTPS.
-OpenCode → adapter ai-profiles → most MCP w Dockerze → WordPress + Novamira
-Nie przenosimy WordPressa do nowego kontenera ani nie uruchamiamy automatycznie DDEV.
-6. Zasady wdrożenia
-- Bez migracji i kompatybilności ze starymi lokalizacjami.
-- Bez konfigurowalnych ścieżek zasobów ai-profiles poza .ai-profiles/.
-- Bez sekretów w obrazie Docker, argumentach procesów, logach i stanie instalacji.
-- Zachowujemy czytelne błędy inicjalizacji oraz izolację klientów.
-- Uninstall nie usuwa poświadczeń ani pluginu z WordPressa.
-- Testy obejmują pobieranie paczki, bezpieczną instalację pluginu, kontener mostu i rzeczywiste połączenie MCP w kontrolowanym środowisku.
-To opis zakresu — bez zmian kodu.
 
 # Skille do naprawy
 ## brain-to-implementer

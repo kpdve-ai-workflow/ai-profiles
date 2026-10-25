@@ -101,11 +101,11 @@ async function main() {
     res.writeHead(200, { 'Content-Type': 'text/html' }); res.end('<h1>AUTO_CA_AUTH_OK</h1>');
   }));
   const other = await listen(https.createServer(tls(`${fixtures}/other CA`), (_req, res) => { res.end('UNTRUSTED_CA'); }));
-  fs.copyFileSync(`${caroot}/auth.json`, `${privateDir}/storage.json`);
-  fs.chmodSync(`${privateDir}/storage.json`, 0o600);
-  fs.writeFileSync(`${privateDir}/playwright-basic-auth.json`, JSON.stringify({ username, password, origin: good }), { mode: 0o600 });
+  fs.copyFileSync(`${caroot}/auth.json`, `${project}/storage.json`);
+  fs.chmodSync(`${project}/storage.json`, 0o600);
+  fs.writeFileSync(`${project}/base-auth.json`, JSON.stringify({ username, password, origin: good }), { mode: 0o600 });
   // No manual CA setting or COMPOSE_FILE; storage state is still an explicit input.
-  fs.writeFileSync(`${project}/.ai-profiles/opencode/local.json`, JSON.stringify({ mcp: { playwright: { environment: { AI_PROFILE_PLAYWRIGHT_STORAGE_STATE: '.ai-profiles/.private/storage.json' } } } }));
+  fs.writeFileSync(`${project}/.ai-profiles/opencode/local.json`, JSON.stringify({ mcp: { playwright: { environment: { AI_PROFILE_PLAYWRIGHT_STORAGE_STATE: 'storage.json' } } } }));
   await start(caroot);
   await tool('browser_navigate', { url: good });
   const content = await tool('browser_evaluate', { function: "() => ({text:document.body.innerText,cookie:document.cookie.includes('smoke-session=synthetic-test-only'),axe:window.axe.version})" });

@@ -115,6 +115,15 @@ fn dotenv_is_literal_and_does_not_interpolate_shell_variables() {
         effective.get("FROM_B").map(String::as_str),
         Some("$A value")
     );
+    let missing = json!({"env_file":".env.missing"});
+    let error = environment_for(temp.path(), missing.as_object().unwrap(), &inherited)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains(".env.missing"));
+    assert!(error.contains("Create it in the project root"));
+    std::fs::write(temp.path().join(".env.bad"), "not-an-assignment\n").unwrap();
+    let malformed = json!({"env_file":".env.bad"});
+    assert!(environment_for(temp.path(), malformed.as_object().unwrap(), &inherited).is_err());
     let invalid = json!({"environment":{"MISSING":"{env:NOPE}"}});
     assert!(environment_for(
         Path::new("/nonexistent"),

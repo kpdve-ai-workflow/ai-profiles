@@ -35,7 +35,7 @@ that require human judgment. See the [W3C evaluation guidance](https://www.w3.or
 ## Test each selected page
 
 On HTTP 401, an HTTP authentication prompt, or `ERR_INVALID_AUTH_CREDENTIALS`,
-check the metadata of the optional `.ai-profiles/.private/playwright-basic-auth.json`
+check the metadata of the optional project-root `base-auth.json`
 (permissions `0600` or stricter, no symlinks). The launcher enables Basic Auth
 automatically when it exists; no Compose/local.json edits are needed.
 An explicit `AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE` in `{{AI_PROFILE_LOCAL}}`

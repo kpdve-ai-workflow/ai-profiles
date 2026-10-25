@@ -121,7 +121,7 @@ pub(crate) fn validate_servers(
 fn parse_server(
     name: &McpName,
     entry: Value,
-    project: Option<&Path>,
+    _project: Option<&Path>,
 ) -> Result<McpServerDefinition, McpConfigError> {
     let Some(object) = entry.as_object() else {
         return Err(McpConfigError::InvalidType(name.as_str().to_owned()));
@@ -216,10 +216,7 @@ fn parse_server(
                 return Err(McpConfigError::RemoteEnvFile(name.as_str().to_owned()));
             }
             let relative = value.as_str().ok_or(McpConfigError::InvalidProjectPath)?;
-            if !Path::new(relative).starts_with(".ai-profiles") {
-                return Err(McpConfigError::InvalidProjectPath);
-            }
-            project_path(project.unwrap_or(Path::new(".")), relative)?;
+            relative_project_path(relative)?;
             Some(relative.to_owned())
         }
     };
@@ -245,15 +242,7 @@ fn parse_server(
 }
 
 pub(crate) fn project_path(project: &Path, relative: &str) -> Result<PathBuf, McpConfigError> {
-    let relative_path = Path::new(relative);
-    if relative.is_empty()
-        || relative_path.is_absolute()
-        || relative_path
-            .components()
-            .any(|part| matches!(part, Component::ParentDir | Component::Prefix(_)))
-    {
-        return Err(McpConfigError::InvalidProjectPath);
-    }
+    let relative_path = relative_project_path(relative)?;
     let mut path = project.to_owned();
     for component in relative_path.components() {
         if let Component::Normal(part) = component {
@@ -264,6 +253,19 @@ pub(crate) fn project_path(project: &Path, relative: &str) -> Result<PathBuf, Mc
         }
     }
     Ok(project.join(relative_path))
+}
+
+fn relative_project_path(relative: &str) -> Result<&Path, McpConfigError> {
+    let relative_path = Path::new(relative);
+    if relative.is_empty()
+        || relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|part| matches!(part, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(McpConfigError::InvalidProjectPath);
+    }
+    Ok(relative_path)
 }
 
 pub(crate) fn definitions_to_map(definitions: &[McpServerDefinition]) -> Map<String, Value> {
@@ -317,8 +319,7 @@ fn load_local_at(
                 .any(|key| fields.contains_key(*key))
         {
             return Err(McpConfigError::InvalidOverrideFields(
-                "novamira: command/cwd/env_file mają stałe lokalizacje w .ai-profiles/mcp/novamira"
-                    .into(),
+                "novamira: command/cwd/env_file mają stałą konfigurację".into(),
             ));
         }
         if fields

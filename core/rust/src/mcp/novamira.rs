@@ -29,7 +29,7 @@ fn failure(id: &Value, message: &str) {
 }
 
 pub(super) fn configuration_failure(env_file: &str) {
-    let message = format!("Novamira: uzupełnij WP_API_URL, WP_API_USERNAME i WP_API_PASSWORD w {env_file}. Użyj hasła aplikacyjnego WordPressa, nie hasła do panelu. Sprawdź plik i konfigurację połączenia.");
+    let message = format!("Novamira: utwórz w katalogu głównym projektu plik {env_file} i uzupełnij WP_API_URL, WP_API_USERNAME i WP_API_PASSWORD. Użyj hasła aplikacyjnego WordPressa, nie hasła do panelu. Sprawdź plik i konfigurację połączenia.");
     initial_failure(&message);
 }
 
