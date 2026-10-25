@@ -1,15 +1,15 @@
 ---
 name: make-roadmap
-description: Transform one comprehensive, topic-specific global knowledge file into a traceable, concept-organized roadmap and navigable documentation architecture. Use for new projects, large knowledge-to-plan migrations, active-objective packages, or roadmap/documentation audits. Never organize output into phases or phase-numbered files.
+description: Transform one comprehensive knowledge file into a traceable roadmap with explicit numbered stage headings, bounded tasks, acceptance gates, and navigable supporting specifications. Use for new projects, large knowledge-to-plan migrations, active-objective packages, or roadmap/documentation audits when readers need to see what is complete, which stage is current, and what comes next.
 ---
 
 # Make Roadmap Architect
 
 Use this skill to turn **one global knowledge file** about any topic into a coherent, dependency-aware roadmap and a documentation system that humans and AI agents can navigate without repeatedly loading the whole source. The topic may concern software, research, operations, business processes, products, or any other substantial initiative.
 
-**Organize all generated documentation by concepts and responsibilities, never by phases.** A concept is a cohesive area of meaning or work with clear boundaries: for example, a domain model, validation rules, data flow, integration contract, operations, or testing. The exact concepts must come from the source, not from a predetermined list. Global roadmap documents and active-objective work documents both follow this rule. Dependencies between concepts express order where needed; they do not create a staged delivery framework.
+**Organize the authoritative execution roadmap by explicit numbered stages as its primary execution headings.** Use `## Stage 1: <outcome>`, `## Stage 2: <outcome>`, and so on, localized to the owner's language, with smaller tasks beneath each stage. Do not replace those headings with concept groups or hide stages in a compatibility table. Concepts and responsibilities organize the supporting specifications, not the primary execution hierarchy.
 
-The output must be more than a prioritized checklist: it needs a short roadmap router, a complete concept map, explicit dependencies, concept-specific delivery/acceptance plans, and a bounded but complete documentation package for the current objective.
+The output must be more than a prioritized checklist: it needs a first-screen stage overview, visibly numbered stage sections, bounded tasks, explicit transition/acceptance gates and dependencies, plus navigable concept specifications for the current objective. A reader must not need to infer which tasks belong to which stage.
 
 ## 1. Core contract
 
@@ -23,12 +23,12 @@ The output must be more than a prioritized checklist: it needs a short roadmap r
 2. A short global roadmap router.
 3. A concept map covering the entire known subject, with responsibilities and boundaries.
 4. Concept-oriented global roadmap files that describe intended outcomes, dependencies, deliverables, risks, and acceptance conditions.
-5. A dependency map showing prerequisites and possible parallel work without inventing phases or a universal linear order.
+5. A dependency map separating technical prerequisites from stage-transition rules and explicitly authorized parallel work.
 6. An active-objective package containing its README, bounded knowledge base, **one authoritative task-status roadmap**, coverage matrix, and concept/responsibility-based delivery documents.
 7. Decision records, conflict/uncertainty records, and links to the global knowledge source where useful.
 8. A validation report checking knowledge coverage, file ownership, links, and unresolved gaps.
 
-**Language:** write all generated documentation in English unless the owner explicitly requests otherwise. Preserve exact domain identifiers and technical terms when necessary for accuracy.
+**Language:** use the owner's requested language or the established language of the conversation/project; use English only when neither establishes a preference. Localize stage headings and task descriptions while preserving exact domain identifiers, paths, and stable task IDs.
 
 **Working modes:**
 
@@ -41,14 +41,14 @@ If the full global knowledge file is unavailable, do not fabricate content or cl
 ## 2. Non-negotiable principles
 
 1. **One canonical global knowledge source.** The supplied source file owns topic meaning, requirements, constraints, and stated behavior. Keep it intact as one file unless its owner expressly authorizes a change.
-2. **Concept-based organization only.** Derive document boundaries from coherent concepts, domain responsibilities, interfaces, and work concerns. Never generate phase plans, phase maps, phase labels, phase-numbered task IDs, or filenames such as `p0-...` and `p1-...`.
+2. **Stages first, concepts underneath.** The execution roadmap must have numbered stage headings, with each task under one stage. Preserve owner-approved stage numbers/names. Supporting specs may use responsibility-based filenames and stable concept-derived task IDs; these must not obscure the stage structure. Display numbers such as `2.1` may accompany stable IDs without replacing them.
 3. **No arbitrary fragmentation.** Split a concept only when its responsibilities are genuinely separable; combine small, tightly coupled concepts when separate files would introduce needless navigation.
 4. **Derive; do not duplicate.** Roadmap plans link to original knowledge sections. Optional topic indexes and scoped summaries remain explicitly derived and non-authoritative.
 5. **Separate knowledge, planning, execution, and rationale.** Global knowledge says *what is known*. Concept roadmaps explain *what needs to be delivered and what depends on what*. Active specifications explain *how*. ADRs preserve *why* a decision was taken.
 6. **One owner per mutable fact.** Each active objective's `roadmap.md` exclusively owns its task statuses and executable task order. ADRs own accepted decision rationale. Other files link to these sources rather than maintaining copies.
 7. **Evidence before completion.** A documented capability is not necessarily implemented. Mark work complete only when the required evidence has been verified.
 8. **No silent inventions.** Clearly distinguish sourced facts, derived structure, proposals, assumptions, unknowns, and unresolved conflicts.
-9. **Dependency-aware, not stage-driven.** Work can be parallel, cyclic, blocked, or conditionally ordered. Describe hard/soft dependencies rather than forcing all concepts into a sequence.
+9. **Explicit stage progression and dependencies.** Every stage has prerequisites, an observable outcome, completion criteria and a transition rule. Do not advance past an incomplete stage merely because later work appears technically independent. An exception requires explicit owner approval recorded in the roadmap. Separate this workflow rule from actual technical dependencies; do not invent code-level dependencies to justify numbering.
 10. **Complete bounded active scope.** Document every responsibility needed for the current objective, including prerequisites, failure paths, acceptance, and handoff—not just the next task.
 11. **Preserve history and decisions.** Do not discard existing requirements, accepted decisions, completed work, or historical plans. Archive superseded plans and mark them non-operative.
 12. **Topic-neutral architecture.** Do not assume a language, stack, company process, release cadence, or particular set of concepts without evidence.
@@ -88,7 +88,7 @@ Respect an existing project layout where appropriate. Otherwise use:
 
 **The placeholder concept files are not mandatory.** Generate only files justified by the source. Use human-readable names based on actual concepts: for example, `identity-and-access.md`, `data-contracts.md`, `error-recovery.md`, `experiment-design.md`, or `customer-feedback.md`. These are examples of naming style, **not** a predefined taxonomy.
 
-Never use chronological labels, ordinal prefixes, milestones, or disguised phases as the primary file organization. A concept may evolve or be delivered across multiple activities without becoming multiple date- or stage-specific files. An active objective may involve several concepts, but its package must remain centered on **one declared outcome**.
+Keep supporting filenames descriptive rather than creating one file per tiny step. A concept may support several stages; link its specification from each relevant task without duplicating mutable status. The primary execution roadmap still uses explicit numbered stages and tasks. An active objective remains centered on **one declared outcome**.
 
 For non-software topics, treat “implementation documents” as research specifications, operating procedures, service designs, campaign briefs, or comparable delivery documents. Preserve traceability and evidence requirements.
 
@@ -106,7 +106,7 @@ For non-software topics, treat “implementation documents” as research specif
 | `docs/roadmap/<concept>.md` | Planning for one concept: deliverables, boundaries, risks, and acceptance conditions | Duplicated domain definitions or implementation status |
 | Active `README.md` | Outcome, scope, non-goals, document route and pointer to next action | Independently maintained next-task queue |
 | Active `knowledge-base.md` | Relevant derived rules and invariants | An alternative global knowledge source |
-| Active `roadmap.md` | **Only mutable status and executable task order** for that objective | Canonical domain definitions and full design contracts |
+| Active `roadmap.md` | **Only mutable task/stage status, numbered stage headings, task placement, transition gates and executable order** for that objective | Canonical domain definitions and full design contracts |
 | Active `coverage-matrix.md` | Traceability across source, tasks, specs and evidence | A second status ledger |
 | Active `<concept>.md` | How to deliver/test an objective-specific concept or responsibility | Mutable task-status copies |
 | `adr/` and `decisions/` | Decision status, alternatives, rationale, consequences | Claims of completion without evidence |
@@ -144,7 +144,15 @@ Rules:
 
 **Ownership rule:** each sourced statement gets a single primary concept owner. Other documents may reference it, but should not claim competing authority.
 
-## 6. Generate the concept-based global roadmap
+## 6. Build stage navigation and concept specifications
+
+### Stage structure before file expansion
+
+Extract the owner's existing stages first. Preserve their numbers, names, optionality, approved boundaries and verified completion. If no stage structure exists, propose a small outcome-based structure and label its origin; do not attribute it to the owner. A single bounded task may use one stage, without inventing a multi-stage program.
+
+At the beginning of the authoritative execution roadmap, provide a short overview linking every stage to its actual `## Stage N: ...` heading. Show the current stage and distinguish implemented from verified completion. Keep summary status derived from the canonical task entries in this same file, not independently maintained in routers or specs.
+
+Each stage must state its outcome, included tasks, entry conditions, completion evidence, and rule for moving on. Put supporting technical design in concept specs. Never present a whole large stage as one mandatory implementation invocation: split genuinely separable responsibilities into bounded tasks without fragmenting every field/event into its own task.
 
 ### 6.1 Discover concepts and responsibilities
 
@@ -180,7 +188,7 @@ Use `roadmap/dependencies.md` to describe relationships among concepts:
 - **Cross-cutting obligations:** safety, privacy, quality and operational constraints across multiple concepts.
 - **Future compatibility:** constraints that should be respected now without implementing deferred work.
 
-Identify circular or uncertain dependencies explicitly and propose investigation or a decision record. Do not flatten a partial-order graph into a mandatory universal timeline. If a sequence is useful, show **only the prerequisite-backed portion**, for example:
+Identify circular or uncertain dependencies explicitly and propose investigation or a decision record. Keep the technical dependency graph accurate even when the owner chooses a stricter staged delivery order. Identify owner-approved parallel/cross-stage exceptions explicitly; technical independence alone does not authorize skipping an incomplete stage. For example:
 
 ```text
 shared contract ──> consuming integration ──> integration verification
@@ -199,10 +207,10 @@ Each `roadmap/<concept>.md` should describe:
 2. **Scope/non-goals:** boundaries and explicitly deferred concerns.
 3. **Requirements/source links:** precise source references, without copying the corpus.
 4. **Prerequisites and relationships:** required inputs and related concepts.
-5. **Work/deliverables:** bounded intended results, not prematurely detailed status tasks.
+5. **Work/deliverables:** bounded intended results and links to the stages/tasks they support, not a competing status queue.
 6. **Contracts and interfaces:** essential boundaries supported by the source.
 7. **Risks/unknowns:** uncertain requirements, open decisions, safety conditions.
-8. **Acceptance:** verifiable criteria and expected evidence, not stage-exit gates.
+8. **Acceptance:** verifiable concept criteria and expected evidence; link to the authoritative roadmap for stage-exit gates.
 9. **Ownership links:** associated active-objective specs, ADRs and shared quality rules.
 
 A large concept may have several coherent sub-concept documents; a small one may be covered by the map and a shared document. Do not produce empty files to conform to a template.
@@ -213,11 +221,11 @@ The global router, concept map, dependency graph, and concept plans show **what 
 
 Global planning may include future and optional concepts. Their appearance does not imply approval, implementation, or commitment.
 
-## 7. Build the active-objective package by concept
+## 7. Build the active-objective package with staged execution
 
 Use an objective declared by the owner, if supplied. Otherwise propose the smallest coherent objective that addresses significant uncertainty or delivers useful value and label it **PROPOSED** until approved.
 
-The package must cover the **entire objective**, including prerequisites, shared contracts, normal and error behavior, testing, acceptance and handoff. It must not cover only the next incomplete task. Its work documents must be **concept-based just like the global roadmap**, but bounded to the active outcome.
+The package must cover the **entire objective**, including prerequisites, shared contracts, normal and error behavior, testing, acceptance and handoff. It must not cover only the next incomplete task. The execution roadmap is stage-first; its supporting work documents are concept-based and bounded to the active outcome.
 
 ### 7.1 Bounded knowledge base
 
@@ -228,13 +236,18 @@ The package must cover the **entire objective**, including prerequisites, shared
 `roadmap.md` contains:
 
 - Declared outcome, boundaries and non-goals.
-- Tasks **grouped by concepts/responsibilities**, each with a stable concept-derived ID such as `DATA-001`, `VALIDATION-002`, or `REPORTING-003`.
+- A first-screen overview linking all stages, their derived progress, and the current stage.
+- A real `## Stage N: <outcome>` heading for every stage, localized to the owner's language; a table alone is insufficient.
+- For each stage: outcome, entry conditions, smaller tasks, completion criteria/evidence, and transition rule. Optional stages remain explicitly optional and approval-gated.
+- Tasks **nested under their stage**, with `### Task N.M: <outcome>` subheadings when several tasks are present and stable IDs such as `DATA-001`, `VALIDATION-002`, or `REPORTING-003`.
 - Dependencies between tasks and links to related concept specifications.
-- Exactly one status per task, with verification pointers.
+- Exactly one canonical status per task, with verification pointers. Stage summaries are derived from those task entries in this same file; a stage cannot be complete while a required task or required verification remains incomplete.
 - Acceptance criteria for tasks and the overall objective.
 - A **Next eligible action** derived from status and dependencies, rather than copied to other files.
 
-Only use concept-neutral numeric IDs (`TASK-001`) when stable concept-based IDs would be misleading. **Never** use `P0.1`, `P1.2`, similar phase codes, or temporal ID schemes.
+Preserve existing stable IDs. Display stage/task numbers for navigation without silently renumbering stable cross-reference IDs. New IDs may be concept-derived or neutral (`TASK-001`); explain mappings when migrating an existing numbering scheme.
+
+Do not silently redefine a stage to make it appear complete, move unfinished tasks to later stages, promote optional work to required scope, or use technical independence to override stage gates. Record any owner-approved change in the roadmap update log, including its effect on scope and dependencies.
 
 | Marker | Meaning |
 | --- | --- |
@@ -275,14 +288,14 @@ Each row must have **one primary document or external artifact owner**. It may h
 
 ## 8. Compact templates
 
-Expand templates only where the source warrants more detail. All placeholders below are conceptual; none denote a phase, stage, or timeline bucket.
+Expand templates only where the source warrants more detail. Execution templates use explicit stages; supporting specifications use concepts/responsibilities. Stage/task names and counts come from the approved scope, not a fixed generic lifecycle.
 
 ### 8.1 `docs/roadmap.md` — global router
 
 ```markdown
 # Global Roadmap — Router
 
-This is the entry point to the concept-based roadmap. Canonical subject knowledge:
+This is the entry point to the staged roadmap and supporting concept specifications. Canonical subject knowledge:
 [Global Knowledge](global-knowledge.md). Live task statuses and executable
 ordering belong only to the [active roadmap](<active-objective>/roadmap.md).
 
@@ -290,7 +303,10 @@ ordering belong only to the [active roadmap](<active-objective>/roadmap.md).
 <Named outcome; mark PROPOSED if not confirmed>
 [Active objective package](<active-objective>/README.md)
 
-## Concept navigation
+## Stage navigation
+Link to the stage overview in the active roadmap; do not maintain a second status table here.
+
+## Supporting concept navigation
 | Concept | Purpose | Global plan |
 | --- | --- | --- |
 | <concept-a> | <intended outcome> | [Concept A](roadmap/<concept-a>.md) |
@@ -351,21 +367,35 @@ See **Next eligible action** in [roadmap.md](roadmap.md), not another queue.
 ```markdown
 # <Objective> — Execution Roadmap
 
-## Outcome, boundaries and prerequisites
-<Source-linked summary>
+<Source-linked outcome and boundaries. State the current stage and link to Next eligible action.>
 
-## Data model
-- [ ] DATA-001 — <specific result> | Depends on: none | [Spec](data-model.md#...)
-- [?] DATA-002 — <result> | Depends on: DATA-001 | Evidence: unknown
+| Stage | Outcome and section | Derived progress |
+| --- | --- | --- |
+| 1 | [<First bounded outcome>](#stage-1-first-bounded-outcome) | Derived from its task entries |
+| 2 | [<Next bounded outcome>](#stage-2-next-bounded-outcome) | Derived from its task entries |
 
-## Validation
-- [!] VALIDATION-001 — <specific result> | Blocked by: <named dependency>
+### Status and transition rules
+<One canonical status per task. Complete required tasks and verification before closing a stage. Cross-stage exceptions need explicit owner approval.>
+
+## Stage 1: First bounded outcome
+**Outcome:** ...
+**Entry conditions:** ...
+### Task 1.1: Specific result
+- [ ] DATA-001 — <result> | Depends on: ... | [Spec](data-model.md#...)
+**Stage completion and transition:** <Observable acceptance and evidence needed before Stage 2.>
+
+## Stage 2: Next bounded outcome
+**Outcome:** ...
+**Entry conditions:** Stage 1 accepted, plus any actual technical prerequisites.
+### Task 2.1: Specific result
+- [!] VALIDATION-001 — <result> | Blocked by: <named issue> | [Spec](validation.md#...)
+**Stage completion and transition:** ...
 
 ## Objective acceptance
 - AC-001: <observable result + pass condition + evidence location>
 
 ## Next eligible action
-<First unblocked task based on dependencies and current evidence>
+<One eligible task in the current stage, or the precise action that resolves its blocker. Do not skip to a later stage without recorded owner approval.>
 
 ## Update log
 <Optional short changes; never a competing status ledger>
@@ -418,11 +448,11 @@ Never call a decision “Accepted” without evidence of approval or an existing
 4. Distinguish explicit facts from examples, options, historical information, assumptions and future ideas.
 5. Discover coherent concepts and define responsibility-based file boundaries.
 6. Create a **source-section-to-concept ownership map** and global `concept-map.md`.
-7. Build `dependencies.md` describing prerequisites and parallel work without imposing stages.
+7. Preserve or explicitly propose the numbered stage structure; build `dependencies.md` separating technical prerequisites from stage gates and authorized parallel work.
 8. Select an owner-declared active objective or propose one and mark it provisional.
 9. Draft the complete active task-to-document coverage matrix before expanding spec prose.
-10. Generate root navigation, global roadmap router, shared planning rules and source-linked concept plans.
-11. Generate active README, bounded knowledge, authoritative roadmap, coverage matrix, concept specifications, ADRs and references as appropriate.
+10. Generate root navigation, a router linking the stage overview, shared planning rules and source-linked concept specifications.
+11. Generate active README, bounded knowledge, authoritative stage-first roadmap, coverage matrix, concept specifications, ADRs and references as appropriate. Verify every stage has a real main heading and every task belongs to one stage.
 12. Resolve source conflicts when supported by evidence; otherwise record unresolved decisions and blockers.
 13. Verify source coverage, links, unique ownership, factual accuracy, status evidence, file sizes and unrelated file changes.
 
@@ -433,16 +463,16 @@ Never call a decision “Accepted” without evidence of approval or an existing
 3. Preserve verified execution statuses; regeneration is not grounds for resetting progress.
 4. Reconcile canonical facts first (only with authorization), then derived concept plans and routing.
 5. If a concept is split/merged, move content with a coverage map; preserve stable task references or make an explicit migration mapping.
-6. Recompute affected dependencies, coverage and next eligible active action.
+6. Recompute affected dependencies, stage summaries/gates, coverage and the next eligible task in the current stage. Do not change accepted stage boundaries or skip incomplete stages without owner authorization.
 7. Archive superseded material if necessary, marking it non-operative; run the full audit.
 
 ### Audit an existing architecture
 
 1. Compare every original source section with its conceptual destination.
-2. Check that global and active documents are grouped by real concepts, **not by phases, ordinal planning buckets, or chronological labels**.
+2. Check that the authoritative execution roadmap has numbered stage headings, nested bounded tasks, a first-screen overview, and explicit completion/transition gates; supporting specs remain organized by coherent responsibilities. A concept-only task list or compatibility table is not a substitute for visible stages.
 3. Check all active tasks, prerequisites and acceptance items for primary spec/evidence ownership.
 4. Flag duplicate statuses, contradictory authority, invented requirements and unsupported completion claims.
-5. Check dependencies for cycles, false sequential constraints and missing prerequisites.
+5. Check technical dependencies for cycles, invented constraints and missing prerequisites; separately check stage progression and approval for any cross-stage exception.
 6. Check broken links, orphaned documents, stale routers, mixed-responsibility files and oversized duplicates.
 7. Return risk-prioritized findings with exact file/section references; modify only what is authorized.
 
@@ -453,7 +483,7 @@ For a routine implementation or delivery task, read:
 1. Repository agent instructions, if present.
 2. Project `AGENTS.md` and root `README.md`.
 3. `docs/roadmap.md` and any relevant concept/dependency router.
-4. Active objective `README.md`, `knowledge-base.md`, and `roadmap.md`.
+4. Active objective `README.md`, `knowledge-base.md`, and `roadmap.md`; identify the current stage and selected task before loading deeper specifications.
 5. The **specific concept specification** mapped to the task in `coverage-matrix.md`.
 6. Relevant linked global knowledge **sections** and ADRs.
 
@@ -466,10 +496,12 @@ Read the **whole** global knowledge file for initial roadmap creation, complete 
 - [ ] Exactly one canonical global knowledge file remains intact and identifiable.
 - [ ] Every source section is mapped to a concept or explicitly classified as context/history/example/future reference.
 - [ ] Every substantive planned requirement links to source evidence or is clearly marked proposed/assumed.
-- [ ] All global and active documents have **concept/responsibility-based file names and boundaries**, without phases, stage codes, or time-based buckets.
+- [ ] The execution roadmap has explicit numbered main headings for every stage, with a first-screen overview and smaller tasks under their owning stage; supporting filenames/specifications remain coherent and descriptive.
+- [ ] Every stage has entry conditions, an outcome, completion evidence and a transition rule; verified completion is distinct from implementation.
+- [ ] No incomplete stage is bypassed, silently narrowed, or relabeled complete without an explicit authorized change; optional stages remain optional.
 - [ ] The global concept map covers the complete known subject, not just the current objective.
 - [ ] Every substantial concept has a bounded outcome, dependencies, intended deliverables and verifiable acceptance conditions.
-- [ ] Cross-concept prerequisites are explicit; independent work has not been arbitrarily serialized.
+- [ ] Technical prerequisites are explicit and distinct from staged workflow gates; independent work/cross-stage exceptions are identified without inventing authorization.
 - [ ] Exactly one active roadmap owns mutable task status and executable ordering for its objective.
 - [ ] Every active task and objective acceptance condition maps to a primary spec or external evidence artifact.
 - [ ] The active package covers its entire objective, including prerequisites and non-happy-path behavior where relevant.
@@ -483,7 +515,7 @@ Read the **whole** global knowledge file for initial roadmap creation, complete 
 - [ ] Historical materials are clearly separated from operative plans.
 - [ ] No unrelated files were moved, deleted, or changed.
 
-Existing project conventions may be reused only if they do not violate concept-first organization, source-of-truth authority, or traceability. Do not reintroduce phases merely because an old project had them.
+Reuse owner-approved stage names/numbers and project conventions while preserving source-of-truth authority and traceability. Never replace requested stage headings with a concept-only roadmap merely because the supporting specifications are concept-based. A flat concept list with hidden stage mapping fails this skill's readability contract.
 
 ## 12. Final response contract
 
@@ -491,7 +523,7 @@ After creating, updating, or auditing the documentation, report:
 
 1. **Knowledge input:** exact canonical file and whether complete coverage was possible.
 2. **Generated structure:** created/modified files, including the global router, concept map, and active roadmap.
-3. **Concept overview:** primary concepts, important dependencies, current objective and verifiable acceptance expectations.
+3. **Stage overview:** stage count, current stage, accepted completion evidence, and smaller tasks; link supporting concepts and important dependencies without creating another status ledger.
 4. **Traceability:** source-section coverage and active task-to-document coverage, with counts when feasible.
 5. **Open issues:** assumptions, unresolved decisions, blockers, missing source information and evidence gaps.
 6. **Next actionable step:** link to the one authoritative active roadmap; do not create a duplicate queue.
