@@ -212,17 +212,19 @@ docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwr
 Dla Claude Code/Codex użyj w ścieżce odpowiednio `claude`/`codex`.
 Do korzystania potrzebny jest lokalny Linux Docker Engine i plugin Compose.
 Adapter uruchamia dostarczony `playwright-launcher`, który automatycznie tworzy
-`reports/` i przygotowuje kontener, bez konfiguracji VPN lub hosta.
+`.ai-profiles/reports/` i przygotowuje kontener, bez konfiguracji VPN lub hosta.
 Nie ma automatycznego buildu/pull ani zależności od publikacji GHCR.
 Zależności Playwright są w obrazie, bez hostowego Node. Opcjonalny Basic Auth
-wymaga tylko prywatnego `.private/playwright-basic-auth.json` z `username`,
+wymaga tylko prywatnego `.ai-profiles/.private/playwright-basic-auth.json` z `username`,
 `password`, `origin` i prawami `0600`; Compose/local.json nie wymagają edycji.
 Po przygotowaniu zrestartuj klienta i zatwierdź wymagane natywne zgody projektu/MCP.
 
-React 3.0.0 i WordPress 2.0.0 zmieniają domyślne raporty na `reports/` i sieć
-na `host`. Migracja: update wybranego klienta, build 0.2.0 w projekcie i restart.
-Stare obrazy/raporty oraz frozen legacy pozostają. `local.json` nie jest usuwany:
-stare nadpisanie komendy, sieci lub Compose może utrzymać dawne zachowanie.
+React 4.0.0 i WordPress 3.0.0 używają `.ai-profiles/reports/` i
+`.ai-profiles/.private/` bez migracji starych lokalizacji. Sieć pozostaje `host`.
+WordPress dodatkowo przygotowuje `.ai-profiles/mcp/novamira/` z oficjalnym ZIP-em,
+skryptem instalacji pluginu i mostem w Dockerze. Ścieżki Novamiry są stałe;
+wszystkie `env_file` MCP muszą być pod `.ai-profiles/`.
+Ograniczenie `env_file` dotyczy też profili Golang 4.0.0 i dotnet 2.0.0.
 Uninstall nie usuwa credentials ani reguły `.gitignore`, którą instalator dodaje
 dla domyślnego pliku Basic Auth. Instrukcja i wyjątki (CA, uprawnienia, HTTP 401)
 są w `.ai-profiles/<klient>/mcp/playwright/README.md`;

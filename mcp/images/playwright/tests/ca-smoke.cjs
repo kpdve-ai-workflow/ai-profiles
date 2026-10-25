@@ -82,15 +82,15 @@ function assertNoLeak() {
   for (const value of [stdout, stderr, fs.readFileSync(`${project}/.ai-profiles/state.json`, 'utf8')]) {
     for (const secret of [sentinel, username, password]) assert.ok(!value.includes(secret), 'private data leaked to protocol/log/state');
   }
-  for (const entry of fs.readdirSync(`${project}/reports`, { withFileTypes: true })) {
+  for (const entry of fs.readdirSync(`${project}/.ai-profiles/reports`, { withFileTypes: true })) {
     if (!entry.isFile()) continue;
-    const bytes = fs.readFileSync(`${project}/reports/${entry.name}`);
+    const bytes = fs.readFileSync(`${project}/.ai-profiles/reports/${entry.name}`);
     for (const secret of [sentinel, username, password]) assert.ok(!bytes.includes(Buffer.from(secret)), 'private data leaked to report');
   }
 }
 async function main() {
   const caroot = `${fixtures}/CA with spaces`;
-  const privateDir = `${project}/.private`;
+  const privateDir = `${project}/.ai-profiles/.private`;
   fs.mkdirSync(privateDir, { mode: 0o700 });
   const tls = directory => ({ key: fs.readFileSync(`${directory}/server.key`), cert: fs.readFileSync(`${directory}/server.crt`) });
   const good = await listen(https.createServer(tls(caroot), (req, res) => {
@@ -105,7 +105,7 @@ async function main() {
   fs.chmodSync(`${privateDir}/storage.json`, 0o600);
   fs.writeFileSync(`${privateDir}/playwright-basic-auth.json`, JSON.stringify({ username, password, origin: good }), { mode: 0o600 });
   // No manual CA setting or COMPOSE_FILE; storage state is still an explicit input.
-  fs.writeFileSync(`${project}/.ai-profiles/opencode/local.json`, JSON.stringify({ mcp: { playwright: { environment: { AI_PROFILE_PLAYWRIGHT_STORAGE_STATE: '.private/storage.json' } } } }));
+  fs.writeFileSync(`${project}/.ai-profiles/opencode/local.json`, JSON.stringify({ mcp: { playwright: { environment: { AI_PROFILE_PLAYWRIGHT_STORAGE_STATE: '.ai-profiles/.private/storage.json' } } } }));
   await start(caroot);
   await tool('browser_navigate', { url: good });
   const content = await tool('browser_evaluate', { function: "() => ({text:document.body.innerText,cookie:document.cookie.includes('smoke-session=synthetic-test-only'),axe:window.axe.version})" });
@@ -120,7 +120,7 @@ async function main() {
   assert.equal(caMount.Source, `${caroot}/rootCA.pem`);
   assert.equal(caMount.RW, false);
   assert.ok(mounts.every(mount => mount.Source !== caroot && !mount.Source.includes('rootCA-key.pem')));
-  await tool('browser_take_screenshot', { filename: 'reports/auto-ca.png', type: 'png' });
+  await tool('browser_take_screenshot', { filename: '.ai-profiles/reports/auto-ca.png', type: 'png' });
   const rejected = await request('tools/call', { name: 'browser_navigate', arguments: { url: other } });
   assert.equal(rejected.isError, true);
   assert.match(JSON.stringify(rejected), /ERR_CERT_AUTHORITY_INVALID/);

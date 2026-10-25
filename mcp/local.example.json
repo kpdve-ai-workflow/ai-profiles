@@ -8,7 +8,7 @@
         "crystaldba/postgres-mcp"
       ],
       "access_mode": "unrestricted",
-      "env_file": ".env.stage",
+      "env_file": ".ai-profiles/mcp/postgres/.env.stage",
       "environment": {
         "DATABASE_URI": "{env:STAGE_DATABASE_URL}"
       }

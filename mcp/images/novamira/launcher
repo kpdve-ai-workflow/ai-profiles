@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+project=$(CDPATH= cd -- "$here/../../.." && pwd -P)
+[ "$here" = "$project/.ai-profiles/mcp/novamira" ] || exit 1
+[ "${AI_PROFILE_PROJECT_DIR:-}" = "$project" ] || exit 1
+[ ! -L "$here/.private" ] || exit 1
+# Do not read Compose settings from the project, .env, or inherited COMPOSE_FILE.
+unset COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES COMPOSE_ENV_FILES
+set -- docker compose --project-name ai-profiles-novamira --project-directory "$here" --env-file /dev/null -f "$here/compose.yaml"
+if [ -e "$here/.private/ca.crt" ] || [ -L "$here/.private/ca.crt" ]; then
+    [ -f "$here/.private/ca.crt" ] && [ ! -L "$here/.private/ca.crt" ] || exit 1
+    set -- "$@" -f "$here/compose.ca.yaml"
+fi
+token=ai-profiles-novamira-$$-$(date +%s)
+cleanup() {
+    docker ps -aq --filter "label=ai-profiles.novamira.launch=$token" 2>/dev/null |
+    while IFS= read -r id; do
+        [ -z "$id" ] || docker rm -f "$id" >/dev/null 2>&1 || :
+    done
+}
+trap cleanup EXIT
+trap 'exit 143' HUP INT TERM
+"$@" run --rm --no-deps -T --name "$token" --label "ai-profiles.novamira.launch=$token" novamira

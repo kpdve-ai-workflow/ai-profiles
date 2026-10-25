@@ -10,7 +10,7 @@ services:
     environment:
       HOST_UID: "${HOST_UID:-}"
       HOST_GID: "${HOST_GID:-}"
-      PLAYWRIGHT_MCP_OUTPUT_DIR: "${AI_PROFILE_PROJECT_DIR:?}/reports"
+      PLAYWRIGHT_MCP_OUTPUT_DIR: "${AI_PROFILE_PROJECT_DIR:?}/.ai-profiles/reports"
     volumes:
       - type: bind
         source: "${AI_PROFILE_PROJECT_DIR:?}"
@@ -19,7 +19,7 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: "${AI_PROFILE_PROJECT_DIR:?}/reports"
-        target: "${AI_PROFILE_PROJECT_DIR:?}/reports"
+        source: "${AI_PROFILE_PROJECT_DIR:?}/.ai-profiles/reports"
+        target: "${AI_PROFILE_PROJECT_DIR:?}/.ai-profiles/reports"
         bind:
           create_host_path: false

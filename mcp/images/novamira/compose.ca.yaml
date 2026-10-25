@@ -1,0 +1,11 @@
+services:
+  novamira:
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/novamira/ca.crt
+    volumes:
+      - type: bind
+        source: ./.private/ca.crt
+        target: /run/novamira/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false

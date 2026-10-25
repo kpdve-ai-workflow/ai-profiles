@@ -6,18 +6,18 @@ tests=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 run=$(mktemp -d "${TMPDIR:-/tmp}/playwright-smoke.XXXXXXXX")
 name=playwright-smoke-${run##*.}
 project="$run/project space,comma"
-mkdir -p "$project/reports"
+mkdir -p "$project/.ai-profiles/reports"
 cp "$tests/fixture.html" "$project/fixture.html"
-chmod 755 "$run" "$project" "$project/reports"
+chmod 755 "$run" "$project" "$project/.ai-profiles" "$project/.ai-profiles/reports"
 # Only this fresh, disposable reports tree is writable by container UID 1000.
-chmod 777 "$project/reports"
+chmod 777 "$project/.ai-profiles/reports"
 cleanup() {
   docker rm -f "$name" "$name-fixtures" "$name-dns" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-echo "Smoke artifacts (retained on failure too): $project/reports"
+echo "Smoke artifacts (retained on failure too): $project/.ai-profiles/reports"
 docker image inspect --format 'Image architecture: {{.Os}}/{{.Architecture}}' "$image"
 docker run --rm --pull=never --entrypoint node \
   -e BASIC_AUTH_HELPER=/opt/playwright/basic-auth.cjs \
@@ -55,8 +55,8 @@ YAML
 # while still advertising the real host project through MCP roots. This must fail
 # at the host-visible relative screenshot assertion, not just at mount inspection.
 AI_PROFILE_PROJECT_DIR="$project" AI_PROFILE_SMOKE_IMAGE="$image" AI_PROFILE_SMOKE_DIR="$tests" \
-  AI_PROFILE_PLAYWRIGHT_CA_CERT=.private/ca.crt \
-  AI_PROFILE_PLAYWRIGHT_STORAGE_STATE=.private/auth.json \
+  AI_PROFILE_PLAYWRIGHT_CA_CERT=.ai-profiles/.private/ca.crt \
+  AI_PROFILE_PLAYWRIGHT_STORAGE_STATE=.ai-profiles/.private/auth.json \
   timeout --signal=TERM --kill-after=10s 180s docker compose \
   --project-directory "$project" \
   -f "${AI_PROFILE_SMOKE_COMPOSE:-$tests/../compose.yaml}" -f "$tests/../compose.ca.yaml" \
@@ -72,21 +72,21 @@ services:
   playwright:
     image: "${AI_PROFILE_SMOKE_IMAGE:?}"
 YAML
-cat > "$project/.env.smoke" <<'ENV'
+cat > "$project/.ai-profiles/.env.smoke" <<'ENV'
 AI_PROFILE_PROJECT_DIR=/wrong/dotenv
 ENV
 cat > "$project/.ai-profiles/opencode/local.json" <<'JSON'
-{"mcp":{"playwright":{"env_file":".env.smoke","environment":{
+{"mcp":{"playwright":{"env_file":".ai-profiles/.env.smoke","environment":{
   "AI_PROFILE_PROJECT_DIR":"/wrong/local-mapping",
   "AI_PROFILE_PLAYWRIGHT_NETWORK":"host",
-  "AI_PROFILE_PLAYWRIGHT_CA_CERT":".private/ca.crt",
-  "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE":".private/auth.json",
+  "AI_PROFILE_PLAYWRIGHT_CA_CERT":".ai-profiles/.private/ca.crt",
+  "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE":".ai-profiles/.private/auth.json",
   "COMPOSE_FILE":".ai-profiles/opencode/mcp/playwright/compose.yaml:.ai-profiles/opencode/mcp/playwright/compose.ca.yaml:.ai-profiles/opencode/mcp/playwright/compose.auth.yaml:.ai-profiles/opencode/mcp/playwright/smoke-image.yaml"
 }}}}
 JSON
 # Preserve the first run's evidence, including automatic filename checks.
-mkdir "$project/reports/direct"
-find "$project/reports" -maxdepth 1 -type f -exec mv {} "$project/reports/direct/" \;
+mkdir "$project/.ai-profiles/reports/direct"
+find "$project/.ai-profiles/reports" -maxdepth 1 -type f -exec mv {} "$project/.ai-profiles/reports/direct/" \;
 SMOKE_PROJECT_DIR="$project" SMOKE_ADAPTER="$project/.ai-profiles/opencode/ai-profile-mcp" \
   AI_PROFILE_SMOKE_IMAGE="$image" \
   timeout --signal=TERM --kill-after=10s 180s node "$tests/smoke.cjs"
@@ -98,14 +98,14 @@ mkdir -p "$auth_project"
 cp "$tests/fixture.html" "$auth_project/fixture.html"
 repo=$(CDPATH= cd -- "$tests/../../../.." && pwd)
 make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$auth_project"
-test ! -e "$auth_project/reports"
+test ! -e "$auth_project/.ai-profiles/reports"
 test ! -e "$auth_project/.ai-profiles/opencode/local.json"
 git -C "$auth_project" init -q
 docker image tag "$image" ai-profiles-playwright:0.2.0
 SMOKE_AUTH_PROJECT="$auth_project" \
   SMOKE_AUTH_ADAPTER="$auth_project/.ai-profiles/opencode/ai-profile-mcp" \
   timeout --signal=TERM --kill-after=10s 240s node "$tests/auth-smoke.cjs"
-git -C "$auth_project" check-ignore --no-index -q .private/playwright-basic-auth.json
+git -C "$auth_project" check-ignore --no-index -q .ai-profiles/.private/playwright-basic-auth.json
 
 network_project="$run/network project space,comma"
 mkdir "$network_project"

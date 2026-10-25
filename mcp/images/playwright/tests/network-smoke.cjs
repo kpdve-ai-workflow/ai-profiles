@@ -102,7 +102,7 @@ async function main() {
   await start();
   await checkPage(`http://app.corp.test:${server.address().port}/`);
   assert.match(docker('logs', dnsName), /QUERY app\.corp\.test 1/);
-  await tool('browser_take_screenshot', { filename: 'reports/private-dns.png', type: 'png' });
+  await tool('browser_take_screenshot', { filename: '.ai-profiles/reports/private-dns.png', type: 'png' });
   await stop();
   console.log('PASS: synthetic resolver + host networking, installed launcher from /, loopback HTTP, real hosts/resolver RO mounts, private DNS in Chromium, user overlay precedence');
 }

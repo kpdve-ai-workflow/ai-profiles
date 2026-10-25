@@ -1,0 +1,34 @@
+#!/bin/sh
+# Installs the verified plugin only. Activation and AI Abilities remain manual.
+set -eu
+fail() { echo "Novamira: $*" >&2; exit 1; }
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+project=$(CDPATH= cd -- "$here/../../.." && pwd -P)
+[ "$here" = "$project/.ai-profiles/mcp/novamira" ] || fail 'nieprawidłowa lokalizacja skryptu.'
+archive=$here/downloads/novamira.zip
+[ ! -L "$here/downloads" ] && [ ! -L "$archive" ] && [ -f "$archive" ] || fail 'brak zwykłego pliku ZIP.'
+expected=ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78
+actual=$(sha256sum -- "$archive")
+[ "${actual%% *}" = "$expected" ] || fail 'niezgodna suma SHA-256 paczki.'
+case "${1:-}" in
+  --wordpress)
+    [ "$#" -eq 2 ] || fail 'użycie: install-plugin --wordpress KATALOG albo --ddev'
+    target=$(CDPATH= cd -- "$2" && pwd -P)
+    wp_run() { wp --path="$target" --skip-plugins --skip-themes "$@"; }
+    ;;
+  --ddev)
+    [ "$#" -eq 1 ] || fail 'użycie: install-plugin --wordpress KATALOG albo --ddev'
+    [ -f "$project/.ddev/config.yaml" ] || fail 'brak konfiguracji DDEV w tym projekcie.'
+    cd "$project"
+    wp_run() { ddev exec -- wp --skip-plugins --skip-themes "$@"; }
+    archive=/var/www/html/.ai-profiles/mcp/novamira/downloads/novamira.zip
+    ;;
+  *) fail 'użycie: install-plugin --wordpress KATALOG albo --ddev' ;;
+esac
+# WP_PLUGIN_DIR may be customized (e.g. Bedrock). WordPress itself chooses the
+# destination; never infer wp-content/plugins from the repository layout.
+ready=$(wp_run eval 'if (!in_array(wp_get_environment_type(), ["local", "development"], true) || file_exists(WP_PLUGIN_DIR . "/novamira") || is_link(WP_PLUGIN_DIR . "/novamira")) { exit(10); } echo "novamira-local-install-ready";' 2>/dev/null) || fail 'wymagany lokalny/development WordPress bez istniejącej Novamiry; sprawdź WP-CLI i cel.'
+[ "$ready" = novamira-local-install-ready ] || fail 'nie można jednoznacznie zweryfikować celu.'
+# No --force, --activate, network activation, URL edits or credential changes.
+wp_run plugin install "$archive" >/dev/null 2>&1 || fail 'instalacja pluginu nie powiodła się; nie wymuszono nadpisania.'
+echo 'Novamira: plugin zainstalowany. Aktywuj go ręcznie, włącz AI Abilities i uzupełnij .ai-profiles/mcp/novamira/.env.novamira.'

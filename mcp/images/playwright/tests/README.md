@@ -27,7 +27,7 @@ względne/bezwzględne/automatyczne, trwałość init script po nawigacji,
 HTTPS i cookie uwierzytelnienia. Następnie rzeczywiste `make install CLIENT=opencode PROFILE=react`
 i zainstalowany adapter wykonują pełny drugi etap. Nie ma mockowania adaptera.
 
-Czysty projekt bez `reports/` i `local.json` uruchamia dystrybuowany launcher
+Czysty projekt bez `.ai-profiles/reports/` i `local.json` uruchamia dystrybuowany launcher
 z cwd `/`, w ścieżce ze spacjami i przecinkiem. Test sprawdza automatyczne
 przygotowanie raportów, HTTP Basic Auth (401/200, błędne hasło/port, brak
 Authorization na drugim origin i po redirect), hostowy localhost oraz mounty

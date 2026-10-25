@@ -45,14 +45,14 @@ i adapter. Przykładowa struktura:
 {
   "mcp": {
     "postgres": {
-      "env_file": ".env.stage",
+      "env_file": ".ai-profiles/mcp/postgres/.env.stage",
       "environment": {"DATABASE_URI": "{env:STAGE_DATABASE_URL}"}
     }
   }
 }
 ```
 
-`env_file` jest opcjonalną ścieżką względną projektu, bez `..` i symlinków,
+`env_file` jest opcjonalną ścieżką względną pod `.ai-profiles/`, bez `..` i symlinków,
 dostępna tylko dla lokalnych MCP. Przechowuj pliki sekretów poza Gitem, dodając
 je do projektowego `.gitignore`; konfiguruj sekrety przez referencje środowiskowe,
 nie wpisując ich w JSON. Kolejność wartości to środowisko odziedziczone, wskazany
@@ -107,21 +107,30 @@ nie zastępują jej końcowej wartości. Użytkownik nie musi jej konfigurować.
 
 ### Novamira
 
-Novamira ma centralnie `disabled: false` i `env_file: .env.novamira`.
-Instalacja/update/switch profilu wybierającego ten serwer tworzy brakujący pusty
-szablon w projekcie atomowo z prawami `0600`, bez nadpisywania istniejącego
-zwykłego pliku i bez podążania za symlinkami. To plik użytkownika: nie jest
-hashowany w stanie ani usuwany po zmianie profilu lub uninstall. Nie kopiujemy
-poświadczeń z innych projektów. **Nie dodajemy reguły `.gitignore`**: użytkownik
-musi sam zabezpieczyć plik przed commitem i udostępnieniem przez HTTP.
-Instalacja nie wymaga działającego WordPressa. Puste dane zatrzymują start MCP
-przed uruchomieniem mostu. Login to login konta WordPressa; hasło ma być
-wygenerowanym hasłem aplikacyjnym, nie zwykłym hasłem do wp-admin.
+Novamira ma centralnie `disabled: false`. Bundle jest wspólny dla klientów:
+`.ai-profiles/mcp/novamira/`, z Dockerfile, Compose, launcherem, `install-plugin`,
+`downloads/novamira.zip`, `.private/` i `.env.novamira`. Instalator pobiera pełną
+paczkę 1.12.12 z oficjalnego GitHub Releases i weryfikuje przypięty SHA-256.
+Nie instaluje jej w WordPressie i nie buduje obrazu Docker podczas instalacji profilu.
+Nowy env powstaje z prawami `0600`. Istniejące sekrety nie są odczytywane,
+hashowane, nadpisywane ani usuwane; symlinki i kolizje blokują operację.
+Nie dodajemy reguły `.gitignore` dla Novamiry: użytkownik musi sam zabezpieczyć
+bundle przed ujawnieniem sekretów przez Git i HTTP. Wspólne receptury są
+przygotowywane jednokrotnie; inna zawartość blokuje nadpisanie. Bundle, ZIP,
+env i prywatne pliki pozostają po uninstall, również ostatniego klienta.
 
-Przebieg: instalacja → uzupełnienie env → restart klienta/MCP. Nie ma polecenia
-aktywacji ani obowiązkowego `local.json`. Świadome lokalne `disabled: true`,
-niestandardowy `env_file` i inne nadpisania zachowują pierwszeństwo; zmiany tych
-ustawień renderuj standardowym update wybranego klienta.
+Przebieg: instalacja profilu → `install-plugin --wordpress KATALOG` lub `--ddev`
+→ ręczna aktywacja pluginu i AI Abilities → hasło aplikacyjne i uzupełnienie env
+→ ręczny `docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/mcp/novamira`
+→ restart klienta/MCP. Skrypt wymaga lokalnego/development WordPressa i WP-CLI;
+nie zastępuje istniejącego pluginu ani nie aktywuje go. Nie uruchamia DDEV.
+Host nie potrzebuje Node/npm; most 0.4.0 jest wewnątrz obrazu.
+Kontener używa Linux host networking, montuje RO pliki hosts/resolv.conf i tylko
+opcjonalny publiczny CA `.private/ca.crt` z katalogu bundle, nigdy projektu ani env.
+Poświadczenia są przekazywane przez environment, bez wartości w argumentach.
+Puste dane blokują start MCP przed próbą logowania. Nie ma obowiązkowego
+local.json ani polecenia aktywacji MCP. Lokalny disabled/timeout jest obsługiwany,
+ale command/cwd/env_file Novamiry są stałe, bez ścieżek poza `.ai-profiles/`.
 
 Osłona Novamiry w adapterze Rust odrzuca zastępczą inicjalizację mostu
 `@automattic/mcp-wordpress-remote@0.4.0`, gdy obecne jest
@@ -135,9 +144,7 @@ bez osobnej wtyczki. Surowe logi i plikowy sink logów mostu są wyłączone, st
 zawiera tylko MCP. Poprawne odpowiedzi i narzędzia są przekazywane; zero narzędzi
 nie oznacza błędnego hasła. Pozostałe serwery nadal działają przez zwykłe exec.
 
-WordPress 2.1.0 dostarcza te zmiany przez `make update CLIENT=<klient>
-PROJECT=<projekt>`, osobno dla każdego klienta, z zachowaniem kontroli własności
-zarządzanych wpisów. Następnie uzupełnij env i zrestartuj klienta/MCP.
+WordPress 3.0.0 dostarcza ten nowy układ bez migracji starych lokalizacji.
 Szczegóły: [instrukcja WordPress](../profiles/wordpress/README.md).
 
 ### Zarządzane pliki launcherów
@@ -189,9 +196,9 @@ buildu/pull obrazu. Nie uruchamiaj
 `compose up -d`: każdy klient ma własny kontener i sesję przeglądarki.
 
 Compose montuje projekt pod jego rzeczywistą bezwzględną ścieżką hosta, tylko
-do odczytu, a `reports/` pod tą samą ścieżką zapisywalnie. Ścieżkę dostarcza
+do odczytu, a `.ai-profiles/reports/` pod tą samą ścieżką zapisywalnie. Ścieżkę dostarcza
 wspólny adapter przez `AI_PROFILE_PROJECT_DIR`, bez konfiguracji użytkownika.
-Launcher automatycznie tworzy brakujące `reports/` jako bieżący użytkownik przy
+Launcher automatycznie tworzy brakujące `.ai-profiles/reports/` jako bieżący użytkownik przy
 starcie (nie podczas builda); kontener dopasowuje do niego UID/GID.
 Nie montuje Docker socketu. Opcjonalne
 `HOST_UID` i `HOST_GID` pozwalają jawnie wybrać użytkownika.
@@ -205,11 +212,9 @@ zależności przechodnich w przyszłych rebuildach.
 
 Po aktualizacji dostarczonej receptury użytkownik jawnie ponawia build w projekcie.
 Aktualizacja i uninstall nie zarządzają lokalnymi obrazami ani raportami.
-React 3.0.0 i WordPress 2.0.0 publikują zmianę raportów na `reports/` i sieci na
-`host`: wykonaj update wybranego klienta, build 0.2.0 i restart. Stare obrazy,
-raporty oraz zamrożony payload legacy pozostają. Lokalne nadpisania komendy,
-sieci lub Compose zachowują priorytet i mogą utrzymać poprzednie zachowanie;
-nie są automatycznie usuwane.
+React 4.0.0 i WordPress 3.0.0 umieszczają raporty pod `.ai-profiles/reports/`,
+prywatne pliki pod `.ai-profiles/.private/`, bez migracji i fallbacku do starych
+lokalizacji. Sieć pozostaje `host`; starych danych użytkownika nie usuwamy.
 Szczegółowa instrukcja jest [dostarczana razem z konfiguracją](images/playwright/README.md).
 
 ### Sieć, certyfikaty i artefakty
@@ -278,20 +283,20 @@ Plik jest montowany tylko do odczytu pod oddzielną ścieżką,
 nie należy do raportów ani stanu instalacji.
 
 HTTP Basic Auth jest opcjonalny: utwórz lokalnie
-`.private/playwright-basic-auth.json` z wymaganymi `username`, `password` i
+`.ai-profiles/.private/playwright-basic-auth.json` z wymaganymi `username`, `password` i
 `origin`, o prawach `0600` lub bardziej restrykcyjnych, bez symlinków.
 
 Po utworzeniu pliku ustaw uprawnienia, uruchamiając w docelowym projekcie:
 
 ```sh
-chmod 600 .private/playwright-basic-auth.json
+chmod 600 .ai-profiles/.private/playwright-basic-auth.json
 ```
 
 W `origin` podaj protokół, host i opcjonalny port, bez ścieżki ani końcowego `/`,
 np. `https://serwis.example:8443`.
 
 Launcher automatycznie dołącza rozszerzenie; bez pliku nie włącza Basic Auth.
-Instalacja/update/switch dodaje tylko regułę `/.private/playwright-basic-auth.json`
+Instalacja/update/switch dodaje tylko regułę `/.ai-profiles/.private/playwright-basic-auth.json`
 do `.gitignore`; nie odśledza już wersjonowanego sekretu. Reguła i prywatny plik
 pozostają po uninstall. JSON jest montowany
 tylko do odczytu. Entrypoint przekazuje dane do
@@ -304,13 +309,13 @@ procedura restartu MCP po błędzie uwierzytelnienia są w
 [instrukcji Basic Auth](images/playwright/README.md#http-basic-auth).
 
 Raport, findings JSON, raw scans i screenshoty skill zapisuje w
-`reports/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
+`.ai-profiles/reports/<timestamp>/`. Compose przekazuje do kontenera tylko jawnie
 zadeklarowane zmienne, nie całe środowisko hosta.
 
-Dla jawnego `filename` preferuj `reports/<run>/...` albo odpowiadającą
-bezwzględną ścieżkę hosta `<projekt>/reports/<run>/...`. Nazwy względne
+Dla jawnego `filename` preferuj `.ai-profiles/reports/<run>/...` albo odpowiadającą
+bezwzględną ścieżkę hosta `<projekt>/.ai-profiles/reports/<run>/...`. Nazwy względne
 rozwiązują się względem projektu z MCP roots, nie automatycznie względem katalogu
-wyjściowego. Pominięcie `filename` używa skonfigurowanego `reports/`.
+wyjściowego. Pominięcie `filename` używa skonfigurowanego `.ai-profiles/reports/`.
 Sama nazwa `file.png` próbuje zapisać w projekcie tylko do odczytu i nie jest
 obsługiwana. Nie używaj `/workspace/...` ani hostowego `/tmp/opencode`: nie są
 aliasami projektu ani dodatkowymi mountami. Nie udostępniamy dowolnych katalogów

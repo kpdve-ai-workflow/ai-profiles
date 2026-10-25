@@ -216,6 +216,9 @@ fn parse_server(
                 return Err(McpConfigError::RemoteEnvFile(name.as_str().to_owned()));
             }
             let relative = value.as_str().ok_or(McpConfigError::InvalidProjectPath)?;
+            if !Path::new(relative).starts_with(".ai-profiles") {
+                return Err(McpConfigError::InvalidProjectPath);
+            }
             project_path(project.unwrap_or(Path::new(".")), relative)?;
             Some(relative.to_owned())
         }
@@ -308,6 +311,9 @@ fn load_local_at(
         let Some(fields) = entry.as_object() else {
             return Err(McpConfigError::InvalidOverrideFields(name.clone()));
         };
+        if name == "novamira" && ["env_file", "command", "cwd"].iter().any(|key| fields.contains_key(*key)) {
+            return Err(McpConfigError::InvalidOverrideFields("novamira: command/cwd/env_file mają stałe lokalizacje w .ai-profiles/mcp/novamira".into()));
+        }
         if fields
             .keys()
             .any(|field| !OVERRIDE_FIELDS.contains(&field.as_str()))

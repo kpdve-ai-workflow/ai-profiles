@@ -24,8 +24,15 @@ struct Adapter {
     _project: tempfile::TempDir,
 }
 
+#[derive(Clone, Copy)]
+enum Fixture { Synthetic, Docker }
+
 impl Adapter {
     fn start(command: Value, env_contents: &str, extra: Value, server: &str) -> Self {
+        Self::start_with(command, env_contents, extra, server, Fixture::Synthetic)
+    }
+
+    fn start_with(command: Value, env_contents: &str, extra: Value, server: &str, fixture: Fixture) -> Self {
         // cargo test --all-targets does not itself build an executable release
         // payload. Build once so `make test` works on a fresh VM and never tests
         // a stale adapter left by an earlier verification run.
@@ -50,13 +57,19 @@ impl Adapter {
             );
         });
         let project = tempfile::tempdir().unwrap();
+        if matches!(fixture, Fixture::Docker) {
+            let archive = crate::profile_management::credentials::archive_for(project.path()).unwrap();
+            crate::profile_management::credentials::prepare(project.path(), &archive).unwrap();
+        }
         let root = project.path().join(".ai-profiles/opencode");
         fs::create_dir_all(&root).unwrap();
         let executable = root.join("ai-profile-mcp");
         let release = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/ai-profile-mcp");
         fs::copy(release, &executable).expect("build release binaries in VM before process tests");
-        fs::write(project.path().join("custom.env"), env_contents).unwrap();
-        let mut entry = json!({"type":"local","command":command,"env_file":"custom.env"});
+        let env_path = project.path().join(".ai-profiles/mcp/novamira/.env.novamira");
+        fs::create_dir_all(env_path.parent().unwrap()).unwrap();
+        fs::write(env_path, env_contents).unwrap();
+        let mut entry = json!({"type":"local","command":command,"env_file":".ai-profiles/mcp/novamira/.env.novamira"});
         entry
             .as_object_mut()
             .unwrap()
@@ -143,10 +156,10 @@ fn assert_failure(reply: &Value, auth: bool) {
         .as_str()
         .expect("MCP error message");
     assert!(message.contains("Novamira:"));
-    assert!(message.contains("custom.env"));
+    assert!(message.contains(".ai-profiles/mcp/novamira/.env.novamira"));
     if auth {
         assert!(message.contains("HTTP 401"));
-        assert!(message.contains("custom.env"));
+        assert!(message.contains(".ai-profiles/mcp/novamira/.env.novamira"));
         assert!(message.contains("WP_API_USERNAME") && message.contains("WP_API_PASSWORD"));
         assert!(message.contains("hasła aplikacyjnego WordPressa, nie hasła do panelu"));
     } else {
@@ -310,6 +323,23 @@ impl Drop for Site {
 
 #[test]
 fn novamira_real_pinned_bridge_reports_http_auth_distinctly_and_forwards_tools() {
+    check_real_bridge(Fixture::Synthetic);
+}
+
+#[test]
+fn novamira_distributed_docker_bridge_auth_timeout_tools_and_container_cleanup() {
+    let build = std::process::Command::new("docker").args(["build", "-t", "ai-profiles-novamira:0.1.0"])
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mcp/images/novamira"))
+        .output().unwrap();
+    assert!(build.status.success(), "Docker build failed: {}", String::from_utf8_lossy(&build.stderr));
+    check_real_bridge(Fixture::Docker);
+    let containers = std::process::Command::new("docker").args(["ps", "--filter", "ancestor=ai-profiles-novamira:0.1.0", "--format", "{{.ID}}"])
+        .output().unwrap();
+    assert!(containers.status.success());
+    assert!(containers.stdout.is_empty(), "adapter shutdown left a live bridge container");
+}
+
+fn check_real_bridge(fixture: Fixture) {
     let logs = tempfile::tempdir().unwrap();
     let log_file = logs.path().join("bridge.log");
     for status in [401, 403, 500, 0, 200] {
@@ -318,11 +348,16 @@ fn novamira_real_pinned_bridge_reports_http_auth_distinctly_and_forwards_tools()
             "WP_API_URL={}\nWP_API_USERNAME=test-user\nWP_API_PASSWORD=SECRET-SENTINEL-password\n",
             site.url
         );
-        let mut adapter = Adapter::start(
-            json!(["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"]),
+        let command = match fixture {
+            Fixture::Synthetic => json!(["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"]),
+            Fixture::Docker => json!([".ai-profiles/mcp/novamira/launcher"]),
+        };
+        let mut adapter = Adapter::start_with(
+            command,
             &env,
             json!({"environment":{"OAUTH_ENABLED":"false","USE_SYSTEM_PROXY":"false","WP_API_INIT_TIMEOUT_MS":"1500","LOG_TO_STDERR":"true","LOG_FILE":log_file}}),
             "novamira",
+            fixture,
         );
         let reply = adapter.initialize();
         if status == 200 {
@@ -361,6 +396,6 @@ fn novamira_empty_configuration_fails_before_spawning_bridge() {
     assert!(reply["error"]["message"]
         .as_str()
         .unwrap()
-        .contains("custom.env"));
+        .contains(".ai-profiles/mcp/novamira/.env.novamira"));
     assert!(!adapter.stop().contains("SECRET-SENTINEL"));
 }

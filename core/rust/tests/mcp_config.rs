@@ -79,7 +79,7 @@ fn playwright_uses_the_shared_adapter_and_keeps_runtime_overrides() {
     std::fs::write(
         project.path().join(".opencode/ai-profile.local.json"),
         serde_json::to_vec(&json!({"mcp":{"playwright":{
-            "env_file":".env.playwright",
+            "env_file":".ai-profiles/.env.playwright",
             "environment":{"AI_PROFILE_PLAYWRIGHT_NETWORK":"{env:DEV_NETWORK}"}
         }}}))
         .unwrap(),
@@ -96,7 +96,7 @@ fn playwright_uses_the_shared_adapter_and_keeps_runtime_overrides() {
     );
     assert_eq!(
         resolved.servers["playwright"]["env_file"],
-        ".env.playwright"
+        ".ai-profiles/.env.playwright"
     );
     assert_eq!(
         resolved.servers["playwright"]["environment"]["AI_PROFILE_PLAYWRIGHT_NETWORK"],

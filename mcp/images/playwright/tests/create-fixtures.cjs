@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 
-const directory = process.env.FIXTURE_DIRECTORY || '/project/.private';
+const directory = process.env.FIXTURE_DIRECTORY || '/project/.ai-profiles/.private';
 fs.mkdirSync(directory, { mode: 0o700 });
 function openssl(...args) {
   execFileSync('openssl', args, { cwd: directory, stdio: 'pipe' });

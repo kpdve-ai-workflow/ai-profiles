@@ -29,11 +29,11 @@ Nie wykonuj `compose up -d`: każdy klient otrzymuje własny kontener i sesję.
 Konfiguracja nie buduje ani nie pobiera brakującego obrazu automatycznie.
 
 Projekt jest montowany pod tą samą bezwzględną ścieżką co na hoście, tylko do
-odczytu; jedynie `reports/` jest zapisywalne. Wspólny adapter ustawia
+odczytu; jedynie `.ai-profiles/reports/` jest zapisywalne. Wspólny adapter ustawia
 `AI_PROFILE_PROJECT_DIR` na kanoniczną ścieżkę zainstalowanego projektu przy
 każdym uruchomieniu. Użytkownik nie konfiguruje tej zastrzeżonej zmiennej;
 środowisko, dotenv ani lokalne mapowanie nie mogą jej zastąpić.
-Launcher tworzy brakujące `reports/` jako bieżący użytkownik przy starcie, nie
+Launcher tworzy brakujące `.ai-profiles/reports/` jako bieżący użytkownik przy starcie, nie
 podczas Docker build; kontener dopasowuje UID/GID do właściciela tego katalogu.
 Istniejące raporty pozostają nietknięte. Zwykłe użycie nie wymaga edycji Compose
 ani `local.json`; VPN i konfiguracja hosta pozostają poza zakresem narzędzia.
@@ -41,12 +41,12 @@ Jawne `HOST_UID` i `HOST_GID` pozostają opcją dla niestandardowych uprawnień.
 
 ### Ścieżki artefaktów
 
-- Dla jawnych nazw używaj `reports/<run>/...`, np.
-  `reports/2026-10-21/screenshot.png`. Względna nazwa jest rozwiązywana
+- Dla jawnych nazw używaj `.ai-profiles/reports/<run>/...`, np.
+  `.ai-profiles/reports/2026-10-21/screenshot.png`. Względna nazwa jest rozwiązywana
   względem katalogu projektu z MCP roots, **nie** katalogu wyjściowego.
 - Odpowiadająca bezwzględna ścieżka hosta
-  `<projekt>/reports/<run>/...` działa identycznie w kontenerze.
-- Pominięcie `filename` korzysta ze skonfigurowanego katalogu `reports/`.
+  `<projekt>/.ai-profiles/reports/<run>/...` działa identycznie w kontenerze.
+- Pominięcie `filename` korzysta ze skonfigurowanego katalogu `.ai-profiles/reports/`.
 - Sama nazwa `file.png` wskazuje główny katalog projektu, który jest tylko do
   odczytu: taki zapis nie jest obsługiwany. Nie używaj `/workspace/...` ani nie
   zakładaj, że hostowe `/tmp/opencode` jest dostępne dla Playwright.
@@ -135,7 +135,7 @@ Przykład jawnego CA i opcjonalnego storage state, bez ręcznego Compose:
     "playwright": {
       "environment": {
         "AI_PROFILE_PLAYWRIGHT_CA_CERT": ".ddev/ai-profile-ca.crt",
-        "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE": ".private/playwright-auth.json"
+        "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE": ".ai-profiles/.private/playwright-auth.json"
       }
     }
   }
@@ -155,7 +155,7 @@ nie przebudowuje i nie usuwa obrazów; uninstall zachowuje raporty i prywatne pl
 ### HTTP Basic Auth
 
 Basic Auth skonfiguruj niezależnie od cookies i localStorage ze storage state.
-Utwórz prywatny plik `.private/playwright-basic-auth.json` o prawach `0600`,
+Utwórz prywatny plik `.ai-profiles/.private/playwright-basic-auth.json` o prawach `0600`,
 zastępując przykładowe wartości lokalnie:
 
 ```json
@@ -173,13 +173,13 @@ Ogranicza wysyłanie danych HTTP Auth do tego origin; przekierowanie na inny
 origin nie otrzyma tych danych.
 
 Instalacja/update/switch profilu z Playwright dopisuje do `.gitignore` wyłącznie
-`/.private/playwright-basic-auth.json`. Przed wpisaniem sekretów potwierdź, że
+`/.ai-profiles/.private/playwright-basic-auth.json`. Przed wpisaniem sekretów potwierdź, że
 plik nie jest już śledzony przez Git — sama reguła nie usuwa go z indeksu.
 Zapisz JSON lokalnym edytorem z prawami `0600` lub bardziej restrykcyjnymi;
-katalog `.private` i plik nie mogą być symlinkami. Nigdy nie zapisuj go w `reports/`.
+katalog `.ai-profiles/.private` i plik nie mogą być symlinkami. Nigdy nie zapisuj go w `.ai-profiles/reports/`.
 Nie przekazuj hasła w poleceniu terminala, URL, czacie ani argumentach narzędzi.
 Plik może też leżeć poza projektem; wtedy podaj jego bezwzględną ścieżkę.
-Musi być czytelny dla UID/GID kontenera, zwykle właściciela `reports/`.
+Musi być czytelny dla UID/GID kontenera, zwykle właściciela `.ai-profiles/reports/`.
 
 Brak pliku oznacza brak Basic Auth. Jeśli plik istnieje, launcher sam dołącza
 `compose.basic-auth.yaml`; nie edytujesz Compose ani `local.json`.
@@ -191,7 +191,7 @@ Tylko dla niestandardowej lokalizacji możesz dodać do istniejącego
   "mcp": {
     "playwright": {
       "environment": {
-        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE": ".private/inny-basic-auth.json"
+        "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE": ".ai-profiles/.private/inny-basic-auth.json"
       }
     }
   }
@@ -224,7 +224,7 @@ Dokumentacja: [HTTP authentication](https://playwright.dev/docs/network#http-aut
 - Brak obrazu: wykonaj powyższy `docker build` w projekcie.
 - Brak uprawnień: sprawdź dostęp procesu klienta do lokalnego Dockera i projektu;
   nie uruchamiaj całego klienta przez `sudo`.
-- Błąd przygotowania `reports/`: launcher tworzy katalog; istniejący plik lub
+- Błąd przygotowania `.ai-profiles/reports/`: launcher tworzy katalog; istniejący plik lub
   symlink pod tą nazwą blokuje start. Nie usuwa ani nie przenosi danych użytkownika.
 - Błąd `docker compose`: zainstaluj plugin Compose i uruchom Docker Engine.
 - Błąd zapisu: sprawdź właściciela i uprawnienia katalogu raportów.
@@ -234,12 +234,10 @@ Dokumentacja: [HTTP authentication](https://playwright.dev/docs/network#http-aut
   `{{AI_PROFILE_LOCAL}}`. Zachowują priorytet; aktualizacja nie usuwa ich automatycznie.
 - Zmiana credentials, środowiska lub konfiguracji wymaga restartu MCP/klienta.
 
-Migracja do React 3.0.0 / WordPress 2.0.0: z repozytorium instalatora wykonaj
-`make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=<projekt>`, potem w projekcie
-build 0.2.0 z pierwszej sekcji i restart klienta. Nowe domyślne ustawienia to
-`reports/` i sieć `host`. Stare obrazy, raporty (także `reports/wcag/`) i frozen
-legacy pozostają; uninstall zachowuje również credentials oraz chroniącą je
-regułę `.gitignore`.
+React 4.0.0 / WordPress 3.0.0 używają `.ai-profiles/reports/` i
+`.ai-profiles/.private/`, bez migracji i fallbacku do starych lokalizacji.
+Sieć pozostaje `host`. Uninstall zachowuje raporty, credentials i regułę
+`.gitignore`. Prywatne pliki wskazywane jawnie też muszą być pod `.ai-profiles/`.
 
 Sama konfiguracja ani pozytywny status profilu nie potwierdzają połączenia MCP.
 

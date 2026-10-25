@@ -23,6 +23,8 @@ Instalacja dostarcza:
 - wspólne i wordpressowe skille do `{{AI_PROFILE_ROOT}}/plugin/skills/`, niezależnie dla wskazanego klienta;
 - definicje MCP `novamira`, `figma`, `mariadb` i `playwright` w zarządzanej konfiguracji wskazanego klienta;
 - adapter Rust `{{AI_PROFILE_ROOT}}/ai-profile-mcp`, który uruchamia most Novamira;
+- wspólny bundle `.ai-profiles/mcp/novamira/`: Dockerfile, Compose, launcher,
+  `install-plugin`, zweryfikowany ZIP, pusty `.env.novamira` i prywatny katalog;
 - launcher Rust `{{AI_PROFILE_MCP}}/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
 - launcher Rust i kontekst ręcznego buildu Playwright w `{{AI_PROFILE_MCP}}/playwright/`;
@@ -37,10 +39,12 @@ podczas instalacji dla wybranego klienta. Dla nowych instalacji root to
 
 **Novamira jest domyślnie włączona**, a MariaDB początkowo wyłączona.
 Instalacja nie łączy się z WordPressem i działa bez sekretów. Przygotowuje pusty
-szablon `.env.novamira` od razu z prawami `0600`; istniejącego pliku nie zmienia.
+szablon `.ai-profiles/mcp/novamira/.env.novamira` od razu z prawami `0600`; istniejącego pliku nie zmienia.
 Do czasu uzupełnienia danych start MCP zwróci czytelny błąd, bez próby logowania
 pustymi wartościami. Figma jest skonfigurowana, ale wymaga autoryzacji.
-Instalator nie pobiera ani nie instaluje pluginów WordPressa, Node czy npm.
+Instalator pobiera pełny ZIP Novamiry z oficjalnego GitHub Releases i sprawdza
+SHA-256. Nie instaluje pluginu w WordPressie ani hostowego Node/npm. Do instalacji
+pluginu służy osobno uruchamiany skrypt; aktywacja i AI Abilities pozostają ręczne.
 Skille dotyczące Sage/ACF stosuj tylko do pasującej architektury projektu;
 zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfiguracji motywu.
 
@@ -49,29 +53,43 @@ zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfigurac
 - Rust/Cargo 1.85+, Make i Git w checkoutcie instalatora. Zainstalowany adapter
   Rust nie wymaga Python ani Cargo.
 - Wybrany klient (OpenCode, Claude Code albo Codex) dostępny na hoście, na którym pracujesz.
-- Node.js **24.21.0 lub nowszy z linii 24** i npm z dostępnym `npx` na tym samym
-  hoście. Profil używa `NODE_OPTIONS=--use-system-ca`, więc potrzebna jest wersja
-  Node obsługująca tę opcję. Sprawdź `node --version` i `npx --version`.
+- Lokalny Linux Docker Engine i plugin Compose. Most Node i jego zależności
+  są w obrazie; host nie potrzebuje Node, npm ani npx.
 - Działający WordPress przez HTTPS. Przy DDEV uruchom projekt przez `ddev start`.
-- Certyfikat HTTPS zaufany przez system hosta i Node. Nie wyłączaj weryfikacji TLS.
-- Dostęp do rejestru npm przy pierwszym uruchomieniu mostu. `npx` pobiera
-  przypięty `@automattic/mcp-wordpress-remote@0.4.0` do swojego cache;
-  nie jest to instalacja pluginu WordPressa ani globalnego pakietu.
+- Dla lokalnego HTTPS: publiczny CA w `.ai-profiles/mcp/novamira/.private/ca.crt`,
+  bez symlinków, czytelny dla procesu w kontenerze. Nigdy nie kopiuj klucza CA
+  i nie wyłączaj weryfikacji TLS. Publiczne HTTPS używa zaufania obrazu.
+- Dostęp do GitHub podczas pobierania ZIP-a oraz do rejestrów Docker/npm podczas
+  ręcznego buildu obrazu. Instalacja profilu nie buduje obrazu i nie uruchamia MCP.
 
-Punktem odniesienia jest Novamira **1.12.3**, WordPress **6.9+** i PHP **8.0+**
-według audytu. Dla innej wersji sprawdź wymagania producenta. Historyczny audyt
+Przypięta paczka to Novamira **1.12.12**, wymagająca WordPress **6.9+** i PHP **8.0+**.
+Historyczny audyt
 `wordpress-config.md` nie jest konfiguracją tego projektu: nie kopiuj z niego
 domen, kont ani ustawień Pi/Codex.
 
 ## 3. Zainstaluj plugin Novamira w WordPressie
 
-1. Pobierz pełną paczkę ZIP z [novamira.ai/download](https://novamira.ai/download/).
-   Wybierz wersję 1.12.3, jeśli odtwarzasz wersję z audytu. Główny przycisk
-   pobierania może dostarczać nowszą wersję — sprawdź numer przed instalacją.
-2. Otwórz panel **docelowej witryny**, np. `https://moj-projekt.ddev.site/wp-admin/`.
-3. Wybierz **Wtyczki → Dodaj nową → Wyślij wtyczkę na serwer**, wskaż ZIP,
-   kliknij **Zainstaluj**, a następnie **Włącz**.
-4. W menu **Novamira → Configuration** włącz **AI Abilities**.
+ZIP jest już w `.ai-profiles/mcp/novamira/downloads/novamira.zip`. Źródło:
+[oficjalny release 1.12.12](https://github.com/use-novamira/novamira/releases/tag/v1.12.12),
+SHA-256: `ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78`.
+Strona informacyjna producenta to [novamira.ai/download](https://novamira.ai/download/).
+
+W katalogu projektu uruchom **jeden** wariant:
+
+```sh
+.ai-profiles/mcp/novamira/install-plugin --wordpress /sciezka/do/wordpressa
+# albo dla już uruchomionego lokalnego DDEV:
+.ai-profiles/mcp/novamira/install-plugin --ddev
+```
+
+Skrypt wymaga WP-CLI (w wariancie DDEV wewnątrz DDEV) i środowiska WordPressa
+`local` lub `development`. Odczytuje kontekst WordPressa i respektuje WP_PLUGIN_DIR,
+także przy niestandardowym katalogu pluginów. Sprawdza sumę ZIP-a przed dostępem
+do WordPressa. Nie nadpisuje istniejącego pluginu, nie zmienia URL, kont ani haseł
+i nie uruchamia DDEV. Nie służy do aktualizacji istniejącej wtyczki.
+
+Następnie w panelu **docelowej witryny** ręcznie aktywuj Novamirę i w menu
+**Novamira → Configuration** włącz **AI Abilities**. Nie aktywuj sieciowo bez potrzeby.
 
 AI Abilities udostępniają funkcje WordPressa agentowi: np. odczyt treści i operacje
 na danych. Nadal wymagane są poświadczenia i uprawnienia konta. Novamira wiąże
@@ -95,9 +113,9 @@ Profil nie zakłada blog ID `1`, BIP ani konkretnej domeny.
 5. Skopiuj wygenerowane hasło do prywatnego pliku z następnego kroku.
    WordPress pokazuje je tylko raz. Nie wysyłaj go agentowi ani do czatu.
 
-To osobne hasło integracji, **nie Twoje hasło do wp-admin**. W Novamira 1.12.3
-konto potrzebuje `manage_options` w single-site (zwykle administratora),
-a w multisite statusu superadministratora sieci. Hasło dziedziczy uprawnienia
+To osobne hasło integracji, **nie Twoje hasło do wp-admin**. Wymagane uprawnienia
+to `manage_options` w single-site (zwykle administrator),
+a w multisite status superadministratora sieci. Hasło dziedziczy uprawnienia
 konta; sama nazwa hasła nie ogranicza dostępu do odczytu.
 
 Jeśli sekcji nie ma, sprawdź HTTPS i ustawienia pluginów bezpieczeństwa,
@@ -110,7 +128,7 @@ W katalogu **projektu WordPressa**, przed wpisaniem sekretów, samodzielnie zabe
 plik przed przypadkowym commitem, np. dodając do `.gitignore`:
 
 ```gitignore
-/.env.novamira
+/.ai-profiles/mcp/novamira/.env.novamira
 ```
 
 Jeśli plik z sekretami był już śledzony przez Git, samo `.gitignore` nie wystarczy.
@@ -118,7 +136,7 @@ Usuń go z indeksu i unieważnij ujawnione hasło. Nie zapisuj sekretów w przyk
 wewnątrz `{{AI_PROFILE_ROOT}}/plugin/skills/`: są to zarządzane pliki profilu.
 
 Instalator **nie dodaje** tej reguły ani innego mechanizmu ignorowania.
-Szablon `.env.novamira` jest już przygotowany w katalogu głównym projektu.
+Szablon jest już przygotowany w `.ai-profiles/mcp/novamira/.env.novamira`.
 To plik użytkownika, nie zarządzany payload: update, switch, instalacja kolejnego
 klienta i uninstall go nie nadpisują ani nie usuwają. Symlink lub kolizja
 z katalogiem/innym typem pliku blokuje przygotowanie profilu.
@@ -136,42 +154,33 @@ oraz login konta, na którym wygenerowano hasło. Cudzysłowy pozwalają zachowa
 Plik nie jest skryptem powłoki — nie wpisuj do niego komend ani interpolacji `$VAR`.
 
 Nie musisz tworzyć `{{AI_PROFILE_LOCAL}}` ani aktywować MCP: domyślna definicja
-wskazuje `.env.novamira` i `disabled: false`.
-Opcjonalnie, dla innej ścieżki, dodaj do `{{AI_PROFILE_LOCAL}}`:
-
-```json
-{
-  "mcp": {
-    "novamira": {
-      "env_file": "private/wordpress.env"
-    }
-  }
-}
-```
-
-Jeśli ten plik już istnieje, **dodaj wpis `novamira` do istniejącego `mcp`**,
-zachowując inne ustawienia. Nie zastępuj całego pliku przykładem.
-Plik jest własnością projektu, a nie generowaną konfiguracją OpenCode.
-`env_file` jest ścieżką względem projektu, bez `..` i symlinków.
-
-Niestandardowy plik przygotowujesz sam; instalator tworzy tylko domyślny szablon.
-Przy zmianie ścieżki samodzielnie dostosuj ochronę Git i HTTP.
+wskazuje `.ai-profiles/mcp/novamira/.env.novamira` i `disabled: false`.
+Ścieżki Novamiry są stałe: lokalne nadpisania `env_file`, `command` i `cwd` są
+odrzucane. Możesz nadal świadomie wyłączyć MCP lub zmienić timeout w lokalnym
+pliku klienta. Inne lokalne pliki env MCP również muszą być pod `.ai-profiles/`.
 Nie potrzebujesz ręcznego eksportowania zmiennych do sesji OpenCode.
 Upewnij się, że serwer WWW blokuje dostęp HTTP do plików `.env*`, `.ai-profiles/` i `.opencode/`.
 Uprawnienia `600` i `.gitignore` nie zastępują konfiguracji serwera WWW.
 
 ## 6. Uruchom połączenie w wybranym kliencie
 
-Przebieg: **instalacja profilu → uzupełnienie `.env.novamira` → restart klienta/MCP**.
+Przebieg: **instalacja profilu → skrypt instalacji pluginu → ręczna aktywacja,
+AI Abilities i hasło aplikacyjne → uzupełnienie env → build obrazu → restart klienta/MCP**.
+
+Z katalogu projektu zbuduj obraz bez sekretów w kontekście:
+
+```sh
+docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/mcp/novamira
+```
 Nie ma dodatkowego polecenia aktywacji. Tylko po zmianie lokalnej konfiguracji
-(np. `env_file` lub jawnego `disabled: true`) wykonaj standardowe
+(np. jawnego `disabled: true` lub timeoutu) wykonaj standardowe
 `make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu`, potem restart.
 
 Zrestartuj wybranego klienta i sprawdź jego listę MCP (dla OpenCode: `opencode mcp list` lub `/mcps`).
 Novamira powinna się połączyć bez przeglądarki i bez autoryzacji OAuth:
 
 ```text
-OpenCode → adapter ai-profiles → most Node → HTTPS + Application Password → Novamira
+OpenCode → adapter ai-profiles → most Node w Dockerze → HTTPS + Application Password → Novamira w WordPressie
 ```
 
 Adapter czyta plik env przy uruchomieniu MCP. Zmienne są przekazywane tylko do
@@ -267,14 +276,14 @@ awarii asyncmy na natywnym ARM64. Inna architektura hosta wymaga emulacji Docker
 W głównym katalogu projektu dodaj do `.gitignore`:
 
 ```gitignore
-/.env.mariadb
+/.ai-profiles/mcp/mariadb/.env.mariadb
 ```
 
 Utwórz plik i ustaw prawa przed wpisaniem hasła:
 
 ```bash
-touch .env.mariadb
-chmod 600 .env.mariadb
+mkdir -p .ai-profiles/mcp/mariadb
+(umask 077; touch .ai-profiles/mcp/mariadb/.env.mariadb)
 ```
 
 Przykład dla DDEV z portem bazy opublikowanym na hoście:
@@ -303,7 +312,7 @@ Do istniejącego `{{AI_PROFILE_LOCAL}}` dodaj wpis `mariadb` wewnątrz `mcp`:
   "mcp": {
     "mariadb": {
       "disabled": false,
-      "env_file": ".env.mariadb"
+      "env_file": ".ai-profiles/mcp/mariadb/.env.mariadb"
     }
   }
 }
@@ -519,7 +528,7 @@ Po zakończeniu korzystania z integracji możesz samodzielnie unieważnić jej h
 | --- | --- |
 | Novamira wyłączona | świadome lokalne `disabled: true` / `enabled: false`; zmień tylko jeśli chcesz ją włączyć, potem update i restart |
 | Brak zmiennej/pliku env | nazwę pliku, trzy wymagane zmienne i niepuste wartości |
-| `npx` niedostępne / błąd opcji Node | Node 24, npm i PATH procesu OpenCode |
+| Most nie startuje | Docker Engine, Compose, ręczny build obrazu i dostęp klienta do demona |
 | Błąd TLS | zaufanie do CA DDEV na hoście; nigdy `NODE_TLS_REJECT_UNAUTHORIZED=0` |
 | `404` / błąd zależności | pełną paczkę pluginu, aktywację, AI Abilities i domenę |
 | `401` | login, aktywne hasło aplikacyjne, endpoint bez `-oauth`, przekazanie Authorization do PHP |
@@ -554,7 +563,7 @@ docker build --tag ai-profiles-playwright:0.2.0 {{AI_PROFILE_MCP}}/playwright
 Do użycia potrzebny jest Docker Engine i plugin Compose, bez hostowego
 Node/npm/Chromium na potrzeby Playwright (Novamira ma osobne wymagania).
 Nie ma automatycznego buildu/pull ani publikacji GHCR.
-Opcjonalnie zapisz lokalnym edytorem `.private/playwright-basic-auth.json`
+Opcjonalnie zapisz lokalnym edytorem `.ai-profiles/.private/playwright-basic-auth.json`
 o prawach `0600` lub bardziej restrykcyjnych, bez symlinków:
 
 ```json
@@ -567,17 +576,17 @@ o prawach `0600` lub bardziej restrykcyjnych, bez symlinków:
 
 Wszystkie trzy pola są wymagane; origin to schemat/host/port bez ścieżki i ogranicza
 wysyłanie credentials do tego serwisu. Instalator dopisuje regułę
-`/.private/playwright-basic-auth.json` do `.gitignore`, ale nie odśledza już
+`/.ai-profiles/.private/playwright-basic-auth.json` do `.gitignore`, ale nie odśledza już
 wersjonowanych plików. Nie podawaj sekretów agentowi ani nie zapisuj ich w raportach.
 Brak pliku oznacza brak Basic Auth. Zrestartuj klienta i zatwierdź jego natywne
 zgody projektu/MCP, jeśli wymagane.
 
-Launcher automatycznie tworzy `reports/`, dołącza opcjonalny Basic Auth i dostępny
+Launcher automatycznie tworzy `.ai-profiles/reports/`, dołącza opcjonalny Basic Auth i dostępny
 publiczny CA mkcert oraz używa gotowej sieci hosta Linux; nie konfiguruje VPN ani
 hosta. Docker build nie tworzy katalogu raportów. Zwykłe użycie nie wymaga edycji
 Compose ani `{{AI_PROFILE_LOCAL}}`.
 Szczegóły znajdują się w dostarczonej instrukcji `{{AI_PROFILE_MCP}}/playwright/README.md`.
-Artefakty audytu trafiają do `reports/<timestamp>/`; auth storage pozostaje
+Artefakty audytu trafiają do `.ai-profiles/reports/<timestamp>/`; auth storage pozostaje
 poza raportami. Audyt nie zmienia kodu aplikacji i nie powinien wysyłać
 formularzy tworzących trwałe dane bez zgody.
 
@@ -585,25 +594,17 @@ Wyjątki: niestandardowy CA wskaż przez `AI_PROFILE_PLAYWRIGHT_CA_CERT` w
 `{{AI_PROFILE_LOCAL}}`, nigdy przez wyłączenie TLS. Przy braku obrazu wykonaj build;
 przy braku uprawnień sprawdź dostęp klienta do Dockera/projektu. HTTP 401 wymaga
 lokalnego sprawdzenia loginu, hasła, origin (także portu) i praw pliku oraz restartu MCP.
-Jawne nazwy screenshotów to `reports/...`; `screenshot.png` w korzeniu RO nie działa.
+Jawne nazwy screenshotów to `.ai-profiles/reports/...`; `screenshot.png` w korzeniu RO nie działa.
 
-Migracja ustawień Playwright w WordPress 2.0.0: z repozytorium instalatora wykonaj
-`make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu`, potem build
-0.2.0 w projekcie i restart klienta. Domyślne ustawienia zmieniają się na
-`reports/` i sieć `host`. Stare obrazy, raporty i frozen legacy pozostają.
-Istniejące nadpisania komendy/sieci/Compose w `{{AI_PROFILE_LOCAL}}` zachowują
-priorytet i mogą utrzymać stare zachowanie; nie są automatycznie usuwane.
-Uninstall zachowuje raporty, credentials oraz chroniącą je regułę `.gitignore`.
-
-Aktualizacja do WordPress **2.1.0**: wykonaj
-`make update CLIENT={{AI_PROFILE_CLIENT}} PROJECT=/sciezka/do/projektu`, uzupełnij
-zachowany lub nowo przygotowany `.env.novamira` i zrestartuj klienta/MCP.
-Aktualizacja dostarcza nowy adapter i domyślne włączenie Novamiry.
-Jawne lokalne wyłączenie, własny `env_file` i inne nadpisania pozostają w mocy;
-nie są automatycznie usuwane. Ręczne zmiany zarządzanych wpisów nadal blokują
-update — przenieś ustawienia do lokalnego pliku zgodnie z zasadami instalatora,
-nie obchodź kontroli własności. **Dla Novamiry nie powstaje reguła `.gitignore`**;
-samodzielnie zabezpiecz plik przed commitem i udostępnieniem przez HTTP.
+WordPress **3.0.0** wprowadza nowy układ bez automatycznej migracji i fallbacku
+do starych lokalizacji: Novamira w `.ai-profiles/mcp/novamira/`, prywatne dane
+Playwright w `.ai-profiles/.private/`, raporty w `.ai-profiles/reports/`.
+Nie przenosimy ani nie usuwamy starych poświadczeń. Nowe instalacje wykonują
+opisany wyżej flow. Wspólny bundle Novamiry jest zachowany po uninstall; różniące
+się receptury lub ZIP blokują nadpisanie. Ręczne zmiany zarządzanych wpisów
+klienta nadal blokują update. Dla Novamiry nie powstaje reguła `.gitignore`:
+samodzielnie zabezpiecz sekrety przed commitem i udostępnieniem przez HTTP.
+Pełna instrukcja bundle: `.ai-profiles/mcp/novamira/README.md`.
 
 Źródła: [Novamira quick start](https://novamira.ai/quickstart/),
 [most WordPress 0.4.0](https://github.com/Automattic/mcp-wordpress-remote/tree/7190a4ccf9a16b909433133ecf90c52c9bb04da4),

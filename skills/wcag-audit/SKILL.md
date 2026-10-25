@@ -18,7 +18,7 @@ that require human judgment. See the [W3C evaluation guidance](https://www.w3.or
    If the local Docker image is missing or launcher preparation fails, report a setup
    blocker and refer to `{{AI_PROFILE_MCP}}/playwright/README.md`. Do not build the
    image or install dependencies as part of the audit. The packaged launcher
-   creates missing `reports/` automatically; do not ask the user to create it.
+   creates missing `.ai-profiles/reports/` automatically; do not ask the user to create it.
 2. Default to WCAG 2.2 AA. If the requester names another target, use it and
    record it in the report.
 3. Confirm `window.axe` is available after navigation and record
@@ -35,11 +35,11 @@ that require human judgment. See the [W3C evaluation guidance](https://www.w3.or
 ## Test each selected page
 
 On HTTP 401, an HTTP authentication prompt, or `ERR_INVALID_AUTH_CREDENTIALS`,
-check the metadata of the optional `.private/playwright-basic-auth.json`
+check the metadata of the optional `.ai-profiles/.private/playwright-basic-auth.json`
 (permissions `0600` or stricter, no symlinks). The launcher enables Basic Auth
 automatically when it exists; no Compose/local.json edits are needed.
 An explicit `AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE` in `{{AI_PROFILE_LOCAL}}`
-takes precedence and must point to an existing private file outside `reports/`.
+takes precedence and must point to an existing private file under `.ai-profiles/`, outside `.ai-profiles/reports/`.
 Refer to the installed Playwright README
 for the private file format, permissions and exact origin. Inspect only setup
 and file metadata; do not read or print credentials through browser tools,
@@ -72,7 +72,7 @@ credentials in URLs, tool arguments, tracked configuration or audit artifacts.
 
 ## Artifacts
 
-Create a fresh directory `reports/<timestamp>/` in the project for each
+Create a fresh directory `.ai-profiles/reports/<timestamp>/` in the project for each
 run. Keep authentication storage separate from this directory. Save:
 
 - `report.md`: scope, target, scanner version, selected sample, omissions,
@@ -82,11 +82,11 @@ run. Keep authentication storage separate from this directory. Save:
 - `screenshots/`: relevant page and defect evidence.
 
 Host and container project paths are identical. For explicit MCP `filename`
-values prefer `reports/<timestamp>/...`; the corresponding absolute host
-path `<project>/reports/<timestamp>/...` also works. Named relative files
+values prefer `.ai-profiles/reports/<timestamp>/...`; the corresponding absolute host
+path `<project>/.ai-profiles/reports/<timestamp>/...` also works. Named relative files
 resolve against the project root advertised through MCP roots, **not** the
 configured output directory. Omitting `filename` uses the configured
-`reports/` output directory. A bare `file.png` targets the read-only project
+`.ai-profiles/reports/` output directory. A bare `file.png` targets the read-only project
 root and is unsupported. Do not use `/workspace/...` or assume host
 `/tmp/opencode` is available to Playwright. Only the report subtree is writable;
 do not relax filesystem restrictions. The shared adapter supplies the project

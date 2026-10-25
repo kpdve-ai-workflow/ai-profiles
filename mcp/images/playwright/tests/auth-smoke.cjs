@@ -133,7 +133,7 @@ async function stopMcp(exited) {
 }
 
 function writeCredentials(origin, secret) {
-  const directory = `${project}/.private`;
+  const directory = `${project}/.ai-profiles/.private`;
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   fs.chmodSync(directory, 0o700);
   fs.writeFileSync(`${directory}/playwright-basic-auth.json`, JSON.stringify({
@@ -143,9 +143,9 @@ function writeCredentials(origin, secret) {
 }
 
 async function main() {
-  assert.ok(!fs.existsSync(`${project}/reports`), 'fixture must not pre-create reports');
+  assert.ok(!fs.existsSync(`${project}/.ai-profiles/reports`), 'fixture must not pre-create reports');
   assert.ok(!fs.existsSync(`${project}/.ai-profiles/opencode/local.json`), 'fixture must not use local.json');
-  assert.ok(!fs.existsSync(`${project}/.private/playwright-basic-auth.json`), 'fixture starts without credentials');
+  assert.ok(!fs.existsSync(`${project}/.ai-profiles/.private/playwright-basic-auth.json`), 'fixture starts without credentials');
   assert.ok(fs.existsSync(`${project}/.ai-profiles/opencode/mcp/playwright/playwright-launcher`));
 
   authServer = http.createServer((req, res) => {
@@ -183,7 +183,7 @@ async function main() {
 
   let { exited } = await startMcp();
   console.error('auth-smoke: reports prepared');
-  assert.ok(fs.statSync(`${project}/reports`).isDirectory(), 'launcher must create reports before Compose');
+  assert.ok(fs.statSync(`${project}/.ai-profiles/reports`).isDirectory(), 'launcher must create reports before Compose');
   await tool('browser_navigate', { url: publicOrigin });
   console.error('auth-smoke: public navigation complete');
   assert.equal(evaluated(await tool('browser_evaluate', { function: '() => document.body.innerText' })), 'PUBLIC_OK');
@@ -226,10 +226,10 @@ async function main() {
   assert.ok(otherRequests.some(request => request.url === '/redirected'));
   assert.ok(otherRequests.every(request => request.authorization === undefined),
     'Authorization must not cross to another origin, including redirects');
-  await tool('browser_take_screenshot', { filename: 'reports/auth.png', type: 'png' });
-  for (const entry of fs.readdirSync(`${project}/reports`, { withFileTypes: true })) {
+  await tool('browser_take_screenshot', { filename: '.ai-profiles/reports/auth.png', type: 'png' });
+  for (const entry of fs.readdirSync(`${project}/.ai-profiles/reports`, { withFileTypes: true })) {
     if (!entry.isFile()) continue;
-    const contents = fs.readFileSync(`${project}/reports/${entry.name}`);
+    const contents = fs.readFileSync(`${project}/.ai-profiles/reports/${entry.name}`);
     assert.ok(!contents.includes(Buffer.from(username)), 'reports must not contain the username');
     assert.ok(!contents.includes(Buffer.from(password)), 'reports must not contain the password');
   }

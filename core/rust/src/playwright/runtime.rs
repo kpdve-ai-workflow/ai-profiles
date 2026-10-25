@@ -21,7 +21,7 @@ const PROJECT_METADATA: &str = "AI_PROFILE_PROJECT_DIR";
 const COMPOSE_FILE: &str = "COMPOSE_FILE";
 const BASIC_AUTH_FILE: &str = "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE";
 const STORAGE_STATE: &str = "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE";
-const DEFAULT_BASIC_AUTH: &str = ".private/playwright-basic-auth.json";
+const DEFAULT_BASIC_AUTH: &str = ".ai-profiles/.private/playwright-basic-auth.json";
 const CA_CERT: &str = "AI_PROFILE_PLAYWRIGHT_CA_CERT";
 const CAROOT_OUTPUT_LIMIT: usize = 8192;
 
@@ -71,7 +71,7 @@ pub(crate) fn prepare_launch_with(
 
     prepare_reports(&project)?;
     let reports = project
-        .join("reports")
+        .join(".ai-profiles/reports")
         .canonicalize()
         .map_err(|_| PlaywrightError::InvalidReports)?;
 
@@ -277,7 +277,7 @@ fn installed_identity(executable: &Path) -> Result<(PathBuf, PathBuf), Playwrigh
 }
 
 fn prepare_reports(project: &Path) -> Result<(), PlaywrightError> {
-    let path = file_path(project, "reports").map_err(|_| PlaywrightError::InvalidReports)?;
+    let path = file_path(project, ".ai-profiles/reports").map_err(|_| PlaywrightError::InvalidReports)?;
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => Ok(()),
         Ok(_) => Err(PlaywrightError::InvalidReports),
@@ -334,7 +334,7 @@ fn private_input(
     let canonical = path
         .canonicalize()
         .map_err(|_| PlaywrightError::InvalidPrivateInput)?;
-    if canonical.starts_with(reports) {
+    if canonical.starts_with(reports) || !canonical.starts_with(project.join(".ai-profiles")) {
         return Err(PlaywrightError::InvalidPrivateInput);
     }
     Ok(canonical)

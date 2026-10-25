@@ -14,7 +14,7 @@ const uid = adapter ? process.getuid() : 1000;
 const gid = adapter ? process.getgid() : 1000;
 // Optional legacy layout is solely for demonstrating the old roots regression.
 const mountedProject = process.env.SMOKE_MOUNT_PROJECT || project;
-const report = `${mountedProject}/reports`;
+const report = `${mountedProject}/.ai-profiles/reports`;
 const pending = new Map();
 let nextId = 0;
 let child;
@@ -171,16 +171,16 @@ async function main() {
   await tool('browser_navigate', { url });
   assert.ok(rootsRequests > 0, 'server never requested MCP roots');
   assert.equal(evaluated(await tool('browser_evaluate', { function: '() => window.axe.version' })), '4.14.0');
-  await tool('browser_take_screenshot', { filename: 'reports/relative.png', type: 'png' });
+  await tool('browser_take_screenshot', { filename: '.ai-profiles/reports/relative.png', type: 'png' });
   assert.ok(fs.existsSync(`${report}/relative.png`),
     `MCP relative screenshot did not reach the host report bind (advertised root: ${project})`);
-  await tool('browser_evaluate', { function: 'async () => await window.axe.run(document)', filename: 'reports/axe-raw.json' });
+  await tool('browser_evaluate', { function: 'async () => await window.axe.run(document)', filename: '.ai-profiles/reports/axe-raw.json' });
   const scan = JSON.parse(fs.readFileSync(`${report}/axe-raw.json`, 'utf8'));
   assert.equal(scan.testEngine.version, '4.14.0');
   const violations = new Set(scan.violations.map(item => item.id));
   assert.ok(violations.has('button-name'), 'axe missed the unlabeled button');
   assert.ok(violations.has('image-alt'), 'axe missed the image without alt text');
-  await tool('browser_take_screenshot', { filename: `${project}/reports/absolute.png`, type: 'png' });
+  await tool('browser_take_screenshot', { filename: `${project}/.ai-profiles/reports/absolute.png`, type: 'png' });
   const before = new Set(fs.readdirSync(report));
   await tool('browser_take_screenshot', { type: 'png' });
   const automatic = fs.readdirSync(report).filter(name => !before.has(name) && name.endsWith('.png'));
@@ -197,8 +197,8 @@ async function main() {
   await tool('browser_navigate', { url: `${url}?second-navigation` });
   assert.equal(evaluated(await tool('browser_evaluate', { function: '() => window.axe.version' })), '4.14.0');
   tlsServer = https.createServer({
-    key: fs.readFileSync(`${project}/.private/server.key`),
-    cert: fs.readFileSync(`${project}/.private/server.crt`),
+    key: fs.readFileSync(`${project}/.ai-profiles/.private/server.key`),
+    cert: fs.readFileSync(`${project}/.ai-profiles/.private/server.crt`),
   }, respond);
   await new Promise((resolve, reject) => {
     tlsServer.once('error', reject);

@@ -73,11 +73,20 @@ impl Drop for Bridge {
     fn drop(&mut self) {
         // npx can own a shell and a Node grandchild. Terminate only this guard's
         // private process group, including on EOF/error, and reap the direct child.
+        let group = format!("-{}", self.0.id());
         let _ = Command::new("kill")
-            .args(["-KILL", "--", &format!("-{}", self.0.id())])
+            .args(["-TERM", "--", &group])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();
+        // Let docker compose forward TERM and remove its --rm container before
+        // escalating. Killing the CLI immediately can leave a live container.
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while self.0.try_wait().is_ok_and(|status| status.is_none()) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = Command::new("kill").args(["-KILL", "--", &group])
+            .stdout(Stdio::null()).stderr(Stdio::null()).status();
         let _ = self.0.kill();
         let _ = self.0.wait();
     }

@@ -1,5 +1,5 @@
 pub mod cli;
-mod credentials;
+pub(crate) mod credentials;
 pub(crate) mod installation;
 pub(crate) mod migration;
 pub(crate) mod native;

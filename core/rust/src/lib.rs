@@ -36,6 +36,9 @@ mod mcp_runtime_tests;
 #[path = "../tests/novamira.rs"]
 mod novamira_tests;
 #[cfg(test)]
+#[path = "../tests/novamira_bundle.rs"]
+mod novamira_bundle_tests;
+#[cfg(test)]
 #[path = "../tests/playwright.rs"]
 mod playwright_tests;
 #[cfg(test)]

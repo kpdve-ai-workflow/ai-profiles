@@ -148,6 +148,7 @@ struct Prepared {
     writes: BTreeMap<String, Vec<u8>>,
     old: Option<Value>,
     record: Value,
+    novamira_archive: Option<Vec<u8>>,
 }
 
 fn check_destination(project: &Path, relative: &str) -> Result<()> {
@@ -339,12 +340,14 @@ fn prepare(
         "layout":"isolated","files":hashes,"mcp":mcp,"mcp_base":base,"skills_directory_added":skills_directory_added,
         "mcp_local_hash":sha(&json_bytes(&overrides)?),"had_config":had_config,
         "gitignore_added":false,"instructions_added":false,"native":native_state});
+    let novamira_archive = if base.contains_key("novamira") { Some(super::credentials::archive_for(project)?) } else { None };
     Ok(Prepared {
         client,
         files,
         writes,
         old: old.cloned(),
         record,
+        novamira_archive,
     })
 }
 
@@ -361,8 +364,8 @@ impl Prepared {
         manifest: &mut Manifest,
         runner: &impl crate::process::ProcessRunner,
     ) -> Result<()> {
-        if self.record["mcp_base"].get("novamira").is_some() {
-            super::credentials::prepare(project)?;
+        if let Some(archive) = &self.novamira_archive {
+            super::credentials::prepare(project, archive)?;
         }
         if let Some(old) = &self.old {
             if let Some(files) = old.get("files").and_then(Value::as_object) {

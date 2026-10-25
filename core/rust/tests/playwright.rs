@@ -48,6 +48,22 @@ fn env(entries: &[(&str, &OsStr)]) -> HashMap<OsString, OsString> {
 }
 
 #[test]
+fn playwright_keeps_private_inputs_and_reports_inside_ai_profiles() {
+    let project = tempfile::tempdir().unwrap();
+    let launcher = installed_launcher(project.path(), Client::OpenCode);
+    let private = project.path().join(".ai-profiles/.private");
+    fs::create_dir(&private).unwrap();
+    let credentials = private.join("playwright-basic-auth.json");
+    fs::write(&credentials, b"synthetic").unwrap();
+    fs::set_permissions(&credentials, fs::Permissions::from_mode(0o600)).unwrap();
+    let plan = prepare_launch(&launcher, project.path().as_os_str(), &HashMap::new()).unwrap();
+    assert!(project.path().join(".ai-profiles/reports").is_dir());
+    assert!(!project.path().join("reports").exists());
+    assert!(!project.path().join(".private").exists());
+    assert_eq!(plan.environment[OsStr::new("AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE")], credentials.into_os_string());
+}
+
+#[test]
 fn launcher_prepares_reports_for_each_isolated_client_independent_of_cwd() {
     for client in Client::ALL {
         let project = tempfile::tempdir().unwrap();
@@ -57,7 +73,7 @@ fn launcher_prepares_reports_for_each_isolated_client_independent_of_cwd() {
         let plan = prepare_launch(&launcher, metadata, &HashMap::new()).unwrap();
 
         assert_eq!(plan.project, project.path());
-        assert!(project.path().join("reports").is_dir());
+        assert!(project.path().join(".ai-profiles/reports").is_dir());
         assert_eq!(
             plan.environment[OsStr::new("COMPOSE_FILE")],
             OsString::from(format!(
@@ -87,7 +103,7 @@ fn launcher_rejects_project_mismatch_before_creating_reports() {
 fn existing_reports_and_files_are_left_untouched() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let report = project.path().join("reports");
+    let report = project.path().join(".ai-profiles/reports");
     fs::create_dir(&report).unwrap();
     fs::write(report.join("existing.json"), b"keep exactly\r\n").unwrap();
 
@@ -111,7 +127,7 @@ fn default_basic_auth_is_optional_and_attached_only_for_a_valid_private_file() {
         .to_string_lossy()
         .contains("compose.basic-auth.yaml"));
 
-    let private = project.path().join(".private");
+    let private = project.path().join(".ai-profiles/.private");
     fs::create_dir(&private).unwrap();
     let credentials = private.join("playwright-basic-auth.json");
     fs::write(
@@ -135,7 +151,7 @@ fn default_basic_auth_is_optional_and_attached_only_for_a_valid_private_file() {
 fn explicit_missing_or_unsafe_credentials_do_not_fall_back_to_default() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let private = project.path().join(".private");
+    let private = project.path().join(".ai-profiles/.private");
     fs::create_dir(&private).unwrap();
     let default = private.join("playwright-basic-auth.json");
     fs::write(&default, b"synthetic").unwrap();
@@ -143,7 +159,7 @@ fn explicit_missing_or_unsafe_credentials_do_not_fall_back_to_default() {
 
     let explicit = env(&[(
         "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE",
-        OsStr::new(".private/missing.json"),
+        OsStr::new(".ai-profiles/.private/missing.json"),
     )]);
     assert!(prepare_launch(&launcher, project.path().as_os_str(), &explicit).is_err());
 
@@ -155,7 +171,7 @@ fn explicit_missing_or_unsafe_credentials_do_not_fall_back_to_default() {
 fn explicit_credentials_override_default_but_symlinks_and_reports_paths_are_rejected() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let private = project.path().join(".private");
+    let private = project.path().join(".ai-profiles/.private");
     fs::create_dir(&private).unwrap();
     let default = private.join("playwright-basic-auth.json");
     fs::write(&default, b"synthetic default").unwrap();
@@ -165,7 +181,7 @@ fn explicit_credentials_override_default_but_symlinks_and_reports_paths_are_reje
     fs::set_permissions(&explicit, fs::Permissions::from_mode(0o600)).unwrap();
     let inherited = env(&[(
         "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE",
-        OsStr::new(".private/override.json"),
+        OsStr::new(".ai-profiles/.private/override.json"),
     )]);
     let plan = prepare_launch(&launcher, project.path().as_os_str(), &inherited).unwrap();
     assert_eq!(
@@ -182,12 +198,12 @@ fn explicit_credentials_override_default_but_symlinks_and_reports_paths_are_reje
         explicit.clone().into_os_string()
     );
 
-    let secret_in_reports = project.path().join("reports/private.json");
+    let secret_in_reports = project.path().join(".ai-profiles/reports/private.json");
     fs::write(&secret_in_reports, b"synthetic").unwrap();
     fs::set_permissions(&secret_in_reports, fs::Permissions::from_mode(0o600)).unwrap();
     let inherited = env(&[(
         "AI_PROFILE_PLAYWRIGHT_BASIC_AUTH_FILE",
-        OsStr::new("reports/private.json"),
+        OsStr::new(".ai-profiles/reports/private.json"),
     )]);
     assert!(prepare_launch(&launcher, project.path().as_os_str(), &inherited).is_err());
 
@@ -208,13 +224,13 @@ fn symlinked_private_directory_and_unreadable_credentials_are_rejected() {
     let credentials = external.join("playwright-basic-auth.json");
     fs::write(&credentials, b"synthetic").unwrap();
     fs::set_permissions(&credentials, fs::Permissions::from_mode(0o600)).unwrap();
-    std::os::unix::fs::symlink(&external, project.path().join(".private")).unwrap();
+    std::os::unix::fs::symlink(&external, project.path().join(".ai-profiles/.private")).unwrap();
     assert!(prepare_launch(&launcher, project.path().as_os_str(), &HashMap::new()).is_err());
 
-    fs::remove_file(project.path().join(".private")).unwrap();
+    fs::remove_file(project.path().join(".ai-profiles/.private")).unwrap();
     fs::remove_file(credentials).unwrap();
     fs::remove_dir(&external).unwrap();
-    let private = project.path().join(".private");
+    let private = project.path().join(".ai-profiles/.private");
     fs::create_dir(&private).unwrap();
     fs::write(private.join("playwright-basic-auth.json"), b"synthetic").unwrap();
     fs::set_permissions(
@@ -229,7 +245,7 @@ fn symlinked_private_directory_and_unreadable_credentials_are_rejected() {
 fn compose_overlays_precede_and_do_not_reorder_or_duplicate_user_files() {
     let project = tempfile::tempdir().unwrap();
     let launcher = installed_launcher(project.path(), Client::OpenCode);
-    let private = project.path().join(".private");
+    let private = project.path().join(".ai-profiles/.private");
     fs::create_dir(&private).unwrap();
     let credentials = private.join("playwright-basic-auth.json");
     fs::write(&credentials, b"synthetic").unwrap();
@@ -244,7 +260,7 @@ fn compose_overlays_precede_and_do_not_reorder_or_duplicate_user_files() {
         ("AI_PROFILE_PLAYWRIGHT_CA_CERT", OsStr::new("public-ca.pem")),
         (
             "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE",
-            OsStr::new(".private/storage.json"),
+            OsStr::new(".ai-profiles/.private/storage.json"),
         ),
     ]);
 
@@ -300,7 +316,7 @@ fn reports_file_or_symlink_is_rejected_before_compose() {
     for as_symlink in [false, true] {
         let project = tempfile::tempdir().unwrap();
         let launcher = installed_launcher(project.path(), Client::OpenCode);
-        let report = project.path().join("reports");
+        let report = project.path().join(".ai-profiles/reports");
         if as_symlink {
             let target = project.path().join("report-target");
             fs::create_dir(&target).unwrap();
