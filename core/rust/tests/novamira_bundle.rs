@@ -1,4 +1,4 @@
-//! Distribution contract: one shared bundle, verified release, no root secrets,
+//! Distribution contract: client-isolated bundles, verified release, no root secrets,
 //! no WordPress writes during profile install, and no credential destruction.
 use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, process::Command, sync::OnceLock};
 
@@ -43,7 +43,7 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    let root = project.path().join(".ai-profiles/mcp/novamira");
+    let root = project.path().join(".ai-profiles/opencode/mcp/novamira");
     for name in [
         "Dockerfile",
         "compose.yaml",
@@ -66,6 +66,11 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         .unwrap()
         .contains("@automattic/mcp-wordpress-remote@0.4.0"));
     let config = fs::read(project.path().join("opencode.json")).unwrap();
+    let effective: serde_json::Value = serde_json::from_slice(&config).unwrap();
+    assert_eq!(
+        effective["mcp"]["novamira"]["command"][0],
+        ".ai-profiles/opencode/mcp/novamira/launcher"
+    );
     fs::write(
         project.path().join(".env.novamira"),
         "WP_API_PASSWORD=synthetic-private-sentinel\n",
@@ -77,10 +82,22 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
+    let claude_root = project.path().join(".ai-profiles/claude/mcp/novamira");
+    assert!(claude_root.join("downloads/novamira.zip").is_file());
+    assert!(root.join("downloads/novamira.zip").is_file());
+    let claude_config: serde_json::Value =
+        serde_json::from_slice(&fs::read(project.path().join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(
+        claude_config["mcpServers"]["novamira"]["command"],
+        ".ai-profiles/claude/mcp/novamira/launcher"
+    );
+    assert!(!project.path().join(".ai-profiles/mcp").exists());
     assert_eq!(
         fs::read(project.path().join("opencode.json")).unwrap(),
         config
     );
+    fs::create_dir_all(root.join(".private")).unwrap();
+    fs::write(root.join(".private/ca.crt"), b"user-owned-public-ca").unwrap();
     let result = invoke("update", "opencode");
     assert!(
         result.status.success(),
@@ -89,6 +106,10 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
     );
     let state = fs::read_to_string(project.path().join(".ai-profiles/state.json")).unwrap();
     assert!(!state.contains("synthetic-private-sentinel"));
+    assert_eq!(
+        fs::read(root.join(".private/ca.crt")).unwrap(),
+        b"user-owned-public-ca"
+    );
     for client in ["opencode", "claude"] {
         assert!(invoke("uninstall", client).status.success());
     }
@@ -199,8 +220,13 @@ fn plugin_script_installs_verified_release_in_real_disposable_wordpress_without_
         }
     }
     let project = tempfile::tempdir().unwrap();
-    let root = project.path().join(".ai-profiles/mcp/novamira");
-    crate::profile_management::credentials::prepare(project.path()).unwrap();
+    let root = project.path().join(".ai-profiles/opencode/mcp/novamira");
+    let installed = Command::new(binaries().join("ai-profile"))
+        .args(["install", "wordpress", "--client", "opencode", "--project"])
+        .arg(project.path())
+        .output()
+        .unwrap();
+    assert!(installed.status.success(), "{}", String::from_utf8_lossy(&installed.stderr));
     let unique = project
         .path()
         .file_name()
@@ -252,7 +278,7 @@ fn plugin_script_installs_verified_release_in_real_disposable_wordpress_without_
 set -eu
 exec timeout 180 docker run --rm --name "$WP_TEST_NETWORK-cli" --network "$WP_TEST_NETWORK" --user 1000:1000 \
   --volume "$WP_TEST_PROJECT:$WP_TEST_PROJECT" --workdir "$WP_TEST_PROJECT" \
-  -e "WP_CLI_CACHE_DIR=$WP_TEST_PROJECT/.ai-profiles/mcp/novamira/.private/wp-cli-cache" \
+  -e "WP_CLI_CACHE_DIR=$WP_TEST_PROJECT/.ai-profiles/opencode/mcp/novamira/.private/wp-cli-cache" \
   wordpress:cli-php8.3 php -d memory_limit=512M /usr/local/bin/wp "$@"
 "#).unwrap();
     fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();

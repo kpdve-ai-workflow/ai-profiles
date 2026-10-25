@@ -37,7 +37,7 @@
     },
     "novamira": {
       "type": "local",
-      "command": [".ai-profiles/mcp/novamira/launcher"],
+      "command": [".ai-profiles/opencode/mcp/novamira/launcher"],
       "disabled": false,
       "env_file": ".env.novamira",
       "environment": {

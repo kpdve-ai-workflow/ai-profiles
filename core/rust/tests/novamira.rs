@@ -67,7 +67,26 @@ impl Adapter {
         });
         let project = tempfile::tempdir().unwrap();
         if matches!(fixture, Fixture::Docker) {
-            crate::profile_management::credentials::prepare(project.path()).unwrap();
+            let build = Command::new(env!("CARGO"))
+                .args([
+                    "build",
+                    "--manifest-path",
+                    concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"),
+                    "--locked",
+                    "--release",
+                    "--bin",
+                    "ai-profile",
+                ])
+                .output()
+                .unwrap();
+            assert!(build.status.success(), "{}", String::from_utf8_lossy(&build.stderr));
+            let installer = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/ai-profile");
+            let installed = Command::new(installer)
+                .args(["install", "wordpress", "--client", "opencode", "--project"])
+                .arg(project.path())
+                .output()
+                .unwrap();
+            assert!(installed.status.success(), "{}", String::from_utf8_lossy(&installed.stderr));
         }
         let root = project.path().join(".ai-profiles/opencode");
         fs::create_dir_all(&root).unwrap();
@@ -378,7 +397,7 @@ fn check_real_bridge(fixture: Fixture) {
         );
         let command = match fixture {
             Fixture::Synthetic => json!(["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"]),
-            Fixture::Docker => json!([".ai-profiles/mcp/novamira/launcher"]),
+            Fixture::Docker => json!([".ai-profiles/opencode/mcp/novamira/launcher"]),
         };
         let mut adapter = Adapter::start_with(
             command,

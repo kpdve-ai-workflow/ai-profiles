@@ -268,7 +268,7 @@ fn novamira_credential_collisions_do_not_block_install_or_get_modified() {
         let project = tempfile::tempdir().unwrap();
         let outside = tempfile::NamedTempFile::new().unwrap();
         fs::write(outside.path(), b"unchanged").unwrap();
-        fs::create_dir_all(project.path().join(".ai-profiles/mcp/novamira")).unwrap();
+        fs::create_dir_all(project.path().join(".ai-profiles/opencode/mcp/novamira")).unwrap();
         let path = project.path().join(".env.novamira");
         match kind {
             "symlink" => std::os::unix::fs::symlink(outside.path(), &path).unwrap(),

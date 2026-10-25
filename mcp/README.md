@@ -128,8 +128,8 @@ nie zastępują jej końcowej wartości. Użytkownik nie musi jej konfigurować.
 
 ### Novamira
 
-Novamira ma centralnie `disabled: false`. Bundle jest wspólny dla klientów:
-`.ai-profiles/mcp/novamira/`, z Dockerfile, Compose, launcherem, `install-plugin`
+Novamira ma centralnie `disabled: false`. Każdy klient otrzymuje niezależny bundle:
+`.ai-profiles/<klient>/mcp/novamira/`, z Dockerfile, Compose, launcherem, `install-plugin`
 i `downloads/novamira.zip`. Instalator kopiuje pełną
 paczkę 1.12.12 z oficjalnego GitHub Releases i weryfikuje przypięty SHA-256.
 Nie instaluje jej w WordPressie i nie buduje obrazu Docker podczas instalacji profilu.
@@ -137,18 +137,19 @@ Plik `.env.novamira` nie jest dostarczany ani tworzony. Użytkownik sam tworzy g
 w katalogu głównym projektu z prawami `0600`; brak pliku nie blokuje lifecycle,
 a start MCP wskazuje dokładną nazwę brakującego pliku.
 Nie dodajemy reguły `.gitignore` dla Novamiry: użytkownik musi sam zabezpieczyć
-plik przed ujawnieniem sekretów przez Git i HTTP. Wspólne receptury są
-przygotowywane jednokrotnie; inna zawartość blokuje nadpisanie. Bundle i ZIP
-pozostają po uninstall, również ostatniego klienta.
+plik przed ujawnieniem sekretów przez Git i HTTP. Bundle jest zarządzany osobno
+w stanie każdego klienta. Uninstall klienta usuwa jego zarządzane pliki bundle’a;
+nie usuwa `.env.novamira` ani niezarządzanych plików prywatnych, takich jak CA.
+Stary `.ai-profiles/mcp/novamira/` pozostaje bez zmian i nie jest używany.
 
 Przebieg: instalacja profilu → `install-plugin --wordpress KATALOG` lub `--ddev`
 → ręczna aktywacja pluginu i AI Abilities → hasło aplikacyjne i uzupełnienie env
-→ ręczny `docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/mcp/novamira`
+→ ręczny `docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/<klient>/mcp/novamira`
 → restart klienta/MCP. Skrypt wymaga lokalnego/development WordPressa i WP-CLI;
 nie zastępuje istniejącego pluginu ani nie aktywuje go. Nie uruchamia DDEV.
 Host nie potrzebuje Node/npm; most 0.4.0 jest wewnątrz obrazu.
 Kontener używa Linux host networking, montuje RO pliki hosts/resolv.conf i tylko
-opcjonalny publiczny CA `.ai-profiles/mcp/novamira/.private/ca.crt` z katalogu bundle.
+opcjonalny publiczny CA `.ai-profiles/<klient>/mcp/novamira/.private/ca.crt` z katalogu bundle.
 Poświadczenia są przekazywane przez environment, bez wartości w argumentach.
 Puste dane blokują start MCP przed próbą logowania. Nie ma obowiązkowego
 local.json ani polecenia aktywacji MCP. Lokalny disabled/timeout jest obsługiwany,

@@ -3,8 +3,8 @@
 set -eu
 fail() { echo "Novamira: $*" >&2; exit 1; }
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
-project=$(CDPATH= cd -- "$here/../../.." && pwd -P)
-[ "$here" = "$project/.ai-profiles/mcp/novamira" ] || fail 'nieprawidłowa lokalizacja skryptu.'
+project=$(CDPATH= cd -- "$here/../../../.." && pwd -P)
+case "$here" in "$project"/.ai-profiles/*/mcp/novamira) ;; *) fail 'nieprawidłowa lokalizacja skryptu.' ;; esac
 archive=$here/downloads/novamira.zip
 [ ! -L "$here/downloads" ] && [ ! -L "$archive" ] && [ -f "$archive" ] || fail 'brak zwykłego pliku ZIP.'
 expected=ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78
@@ -21,7 +21,9 @@ case "${1:-}" in
     [ -f "$project/.ddev/config.yaml" ] || fail 'brak konfiguracji DDEV w tym projekcie.'
     cd "$project"
     wp_run() { ddev exec -- wp --skip-plugins --skip-themes "$@"; }
-    archive=/var/www/html/.ai-profiles/mcp/novamira/downloads/novamira.zip
+    client=${here#"$project"/.ai-profiles/}
+    client=${client%%/*}
+    archive=/var/www/html/.ai-profiles/$client/mcp/novamira/downloads/novamira.zip
     ;;
   *) fail 'użycie: install-plugin --wordpress KATALOG albo --ddev' ;;
 esac

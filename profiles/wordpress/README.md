@@ -23,7 +23,7 @@ Instalacja dostarcza:
 - wspólne i wordpressowe skille do `{{AI_PROFILE_ROOT}}/plugin/skills/`, niezależnie dla wskazanego klienta;
 - definicje MCP `novamira`, `figma`, `mariadb` i `playwright` w zarządzanej konfiguracji wskazanego klienta;
 - adapter Rust `{{AI_PROFILE_ROOT}}/ai-profile-mcp`, który uruchamia most Novamira;
-- wspólny bundle `.ai-profiles/mcp/novamira/`: Dockerfile, Compose, launcher,
+- osobny bundle Novamiry `.ai-profiles/<klient>/mcp/novamira/` dla każdego klienta: Dockerfile, Compose, launcher,
   `install-plugin` i zweryfikowany ZIP; bez plików poświadczeń;
 - launcher Rust `{{AI_PROFILE_MCP}}/mariadb/mariadb-launcher`, który buduje i uruchamia
   oficjalny serwer MCP w Dockerze;
@@ -56,9 +56,8 @@ zawarte w nich przykłady nie tworzą automatycznie pól, treści ani konfigurac
 - Lokalny Linux Docker Engine i plugin Compose. Most Node i jego zależności
   są w obrazie; host nie potrzebuje Node, npm ani npx.
 - Działający WordPress przez HTTPS. Przy DDEV uruchom projekt przez `ddev start`.
-- Dla lokalnego HTTPS: publiczny CA w `.ai-profiles/mcp/novamira/.private/ca.crt`,
-  bez symlinków, czytelny dla procesu w kontenerze. Nigdy nie kopiuj klucza CA
-  i nie wyłączaj weryfikacji TLS. Publiczne HTTPS używa zaufania obrazu.
+- Dla lokalnego HTTPS (np. DDEV) przygotuj CA zgodnie z następną sekcją.
+  Publiczne HTTPS korzysta z zaufania obrazu i nie wymaga tego kroku.
 - Dostęp do rejestrów Docker/npm podczas ręcznego buildu obrazu. Instalacja
   profilu nie pobiera ZIP-a, nie buduje obrazu i nie uruchamia MCP.
 
@@ -69,7 +68,7 @@ domen, kont ani ustawień Pi/Codex.
 
 ## 3. Zainstaluj plugin Novamira w WordPressie
 
-ZIP jest już w `.ai-profiles/mcp/novamira/downloads/novamira.zip`. Źródło:
+ZIP jest już w `.ai-profiles/<klient>/mcp/novamira/downloads/novamira.zip`. Źródło:
 [oficjalny release 1.12.12](https://github.com/use-novamira/novamira/releases/tag/v1.12.12),
 SHA-256: `ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78`.
 Strona informacyjna producenta to [novamira.ai/download](https://novamira.ai/download/).
@@ -77,9 +76,9 @@ Strona informacyjna producenta to [novamira.ai/download](https://novamira.ai/dow
 W katalogu projektu uruchom **jeden** wariant:
 
 ```sh
-.ai-profiles/mcp/novamira/install-plugin --wordpress /sciezka/do/wordpressa
+.ai-profiles/<klient>/mcp/novamira/install-plugin --wordpress /sciezka/do/wordpressa
 # albo dla już uruchomionego lokalnego DDEV:
-.ai-profiles/mcp/novamira/install-plugin --ddev
+.ai-profiles/<klient>/mcp/novamira/install-plugin --ddev
 ```
 
 Skrypt wymaga WP-CLI (w wariancie DDEV wewnątrz DDEV) i środowiska WordPressa
@@ -103,6 +102,32 @@ WordPress MCP Adapter tylko na potrzeby tego profilu.
 W multisite wybierz właściwy blog. Nie aktywuj sieciowo ani nie dodawaj kolejnych
 blogów wyłącznie z powodu MCP. Jeden skonfigurowany URL wskazuje jedną witrynę.
 Profil nie zakłada blog ID `1`, BIP ani konkretnej domeny.
+
+## 3a. Zaufaj lokalnemu CA (DDEV/mkcert)
+
+To standardowy krok dla lokalnego WordPressa używającego HTTPS z certyfikatem
+DDEV/mkcert. Wykonaj go na hoście, w katalogu głównym projektu WordPressa,
+po instalacji profilu. Dla OpenCode:
+
+```sh
+CAROOT="$(mkcert -CAROOT)"
+test -s "$CAROOT/rootCA.pem" || { echo "Brak $CAROOT/rootCA.pem; sprawdź mkcert -install i ponów." >&2; exit 1; }
+mkdir -p .ai-profiles/opencode/mcp/novamira/.private
+chmod 700 .ai-profiles/opencode/mcp/novamira/.private
+install -m 644 "$CAROOT/rootCA.pem" .ai-profiles/opencode/mcp/novamira/.private/ca.crt
+```
+
+Zamień `opencode` na `claude` albo `codex`, jeśli profil zainstalowano dla
+innego klienta. `mkcert -CAROOT` wskazuje katalog lokalnego CA, a `rootCA.pem`
+jest jego publicznym certyfikatem. Jeśli polecenie `mkcert` nie jest dostępne
+lub certyfikat nie istnieje, zainstaluj/skonfiguruj mkcert dla hosta i upewnij
+się, że DDEV używa tego CA; nie twórz certyfikatu ani nie kopiuj klucza
+prywatnego. Nie wyłączaj weryfikacji TLS.
+
+Launcher Novamiry automatycznie dołącza `compose.ca.yaml`, gdy ten plik CA
+istnieje, i montuje certyfikat w kontenerze tylko do odczytu. Nie trzeba
+przebudowywać obrazu po dodaniu lub zmianie CA — wystarczy ponownie uruchomić
+MCP. Certyfikat nie jest dodawany do obrazu ani repozytorium profilu.
 
 ## 4. Utwórz hasło aplikacyjne
 
@@ -163,13 +188,14 @@ i `.gitignore` nie zastępują ochrony HTTP.
 
 ## 6. Uruchom połączenie w wybranym kliencie
 
-Przebieg: **instalacja profilu → skrypt instalacji pluginu → ręczna aktywacja,
-AI Abilities i hasło aplikacyjne → uzupełnienie env → build obrazu → restart klienta/MCP**.
+Przebieg: **instalacja profilu → (lokalny HTTPS: przygotowanie CA) → skrypt
+instalacji pluginu → ręczna aktywacja, AI Abilities i hasło aplikacyjne →
+uzupełnienie env → build obrazu → restart klienta/MCP**.
 
 Z katalogu projektu zbuduj obraz bez sekretów w kontekście:
 
 ```sh
-docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/mcp/novamira
+docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/<klient>/mcp/novamira
 ```
 Nie ma dodatkowego polecenia aktywacji. Tylko po zmianie lokalnej konfiguracji
 (np. jawnego `disabled: true` lub timeoutu) wykonaj standardowe
@@ -605,14 +631,14 @@ lokalnego sprawdzenia loginu, hasła, origin (także portu) i praw pliku oraz re
 Jawne nazwy screenshotów to `.ai-profiles/reports/...`; `screenshot.png` w korzeniu RO nie działa.
 
 WordPress **3.0.0** wprowadza nowy układ bez automatycznej migracji i fallbacku
-do starych lokalizacji: Novamira w `.ai-profiles/mcp/novamira/`, prywatne dane
+do starych lokalizacji: Novamira w `.ai-profiles/<klient>/mcp/novamira/`, prywatne dane
 Playwright w `(katalog projektu)/`, raporty w `.ai-profiles/reports/`.
 Nie przenosimy ani nie usuwamy starych poświadczeń. Nowe instalacje wykonują
 opisany wyżej flow. Wspólny bundle Novamiry jest zachowany po uninstall; różniące
 się receptury lub ZIP blokują nadpisanie. Ręczne zmiany zarządzanych wpisów
 klienta nadal blokują update. Dla Novamiry nie powstaje reguła `.gitignore`:
 samodzielnie zabezpiecz sekrety przed commitem i udostępnieniem przez HTTP.
-Pełna instrukcja bundle: `.ai-profiles/mcp/novamira/README.md`.
+Pełna instrukcja bundle: `.ai-profiles/<klient>/mcp/novamira/README.md`.
 
 Źródła: [Novamira quick start](https://novamira.ai/quickstart/),
 [most WordPress 0.4.0](https://github.com/Automattic/mcp-wordpress-remote/tree/7190a4ccf9a16b909433133ecf90c52c9bb04da4),

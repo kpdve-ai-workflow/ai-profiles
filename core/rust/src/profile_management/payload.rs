@@ -161,6 +161,31 @@ fn build_files(
                 )?;
             }
         }
+        if name == "novamira" {
+            let root = file_path(&context.sources, "mcp/images/novamira")?;
+            for (filename, destination) in [
+                ("Dockerfile", "Dockerfile"),
+                (".dockerignore", ".dockerignore"),
+                ("compose.yaml", "compose.yaml"),
+                ("compose.ca.yaml", "compose.ca.yaml"),
+                ("README.md", "README.md"),
+                ("novamira.zip", "downloads/novamira.zip"),
+            ] {
+                insert_file(
+                    &mut files,
+                    &format!(".opencode/mcp/novamira/{destination}"),
+                    &root.join(filename),
+                    true,
+                )?;
+            }
+            for filename in ["launcher", "install-plugin"] {
+                insert_executable_file(
+                    &mut files,
+                    &format!(".opencode/mcp/novamira/{filename}"),
+                    &root.join(filename),
+                )?;
+            }
+        }
         let launcher = file_path(&context.sources, &format!("mcp/launchers/{name}"))?;
         if launcher.exists() {
             if !launcher.is_dir() {
@@ -549,6 +574,26 @@ fn insert_file(
         relative_path: relative_path.to_owned(),
         contents,
         kind: PayloadKind::Data,
+    });
+    Ok(())
+}
+
+fn insert_executable_file(
+    files: &mut Vec<PayloadFile>,
+    relative_path: &str,
+    source: &Path,
+) -> Result<(), PayloadError> {
+    if files.iter().any(|file| file.relative_path == relative_path) {
+        return Err(PayloadError::DuplicateSkillFile(relative_path.to_owned()));
+    }
+    let contents = fs::read(source).map_err(|source_error| PayloadError::Io {
+        path: source.to_owned(),
+        source: source_error,
+    })?;
+    files.push(PayloadFile {
+        relative_path: relative_path.to_owned(),
+        contents,
+        kind: PayloadKind::Executable,
     });
     Ok(())
 }

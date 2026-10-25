@@ -223,7 +223,7 @@ Po przygotowaniu zrestartuj klienta i zatwierdź wymagane natywne zgody projektu
 React 4.0.0 i WordPress 3.0.0 używają `.ai-profiles/reports/`; poświadczenia
 użytkownik tworzy w katalogu głównym projektu, bez migracji starych lokalizacji.
 Sieć pozostaje `host`.
-WordPress dodatkowo przygotowuje `.ai-profiles/mcp/novamira/` z oficjalnym ZIP-em,
+WordPress dodatkowo przygotowuje `.ai-profiles/<klient>/mcp/novamira/` z oficjalnym ZIP-em,
 skryptem instalacji pluginu i mostem w Dockerze. Ścieżki Novamiry są stałe;
 wszystkie `env_file` MCP są ścieżkami względnymi od katalogu głównego projektu.
 `<PROJECT>/.env.novamira` jest wymagany wyłącznie przy uruchamianiu Novamiry;

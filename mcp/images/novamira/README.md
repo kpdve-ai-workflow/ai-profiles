@@ -1,6 +1,6 @@
 # Novamira
 
-Wspólny katalog projektu: `.ai-profiles/mcp/novamira/`.
+Katalog klienta: `.ai-profiles/<klient>/mcp/novamira/` (np. `opencode`). Każdy klient otrzymuje własny bundle.
 ZIP: oficjalny release `use-novamira/novamira` 1.12.12, pełna paczka z vendor/.
 SHA-256: `ad4dac087e9cad073b2206cb75b44bf5224d57880452f1937a038068920caf78`.
 
@@ -9,9 +9,9 @@ instalacja profilu nie wymaga pobierania go z sieci ani nie dotyka WordPressa.
 Sam uruchom jedną z komend w projekcie:
 
 ```sh
-.ai-profiles/mcp/novamira/install-plugin --wordpress /sciezka/do/wordpressa
+.ai-profiles/<klient>/mcp/novamira/install-plugin --wordpress /sciezka/do/wordpressa
 # albo dla istniejącego, uruchomionego DDEV (skrypt go nie uruchamia):
-.ai-profiles/mcp/novamira/install-plugin --ddev
+.ai-profiles/<klient>/mcp/novamira/install-plugin --ddev
 ```
 
 Wymagane WP-CLI (w wariancie DDEV wewnątrz DDEV), środowisko WordPressa `local`
@@ -38,7 +38,7 @@ komendach, JSON klienta ani czacie. Instalator nie tworzy ani nie kopiuje pliku.
 Zbuduj obraz (bez sekretów, ZIP-a, prywatnych plików i projektu w kontekście):
 
 ```sh
-docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/mcp/novamira
+docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/<klient>/mcp/novamira
 ```
 
 Potem restart klienta/MCP. Adapter Rust czyta env, a launcher uruchamia most
@@ -55,8 +55,10 @@ obsługę MCP; HTTP 401 nie jest mylone z błędem TLS, DNS czy brakiem narzędz
 
 Poświadczenia są w katalogu głównym projektu, niezależnie od katalogu roboczego
 terminala i położenia launchera. Ścieżki zasobów Novamiry są stałe; lokalne
-command/cwd/env_file nie są obsługiwane. Nie ma migracji starych lokalizacji.
-Wspólny bundle jest przygotowywany jednokrotnie, a różniąca się zawartość receptur
-lub ZIP-a blokuje operację zamiast nadpisania. Kolejny klient używa tego samego
-bundle bez nadpisywania sekretów. Uninstall zachowuje bundle i ZIP oraz nie usuwa
-pliku poświadczeń użytkownika, pluginu WordPressa ani obrazu Docker.
+command/cwd/env_file nie są obsługiwane. Stary `.ai-profiles/mcp/novamira/`
+nie jest używany, przenoszony ani modyfikowany; jego pliki, w tym `.private/ca.crt`,
+pozostają nietknięte. Instalacja przygotowuje bundle pod wybranym klientem.
+Aktualizacja zarządza tylko plikami zapisanymi w stanie tego klienta; prywatny CA
+i inne niezarządzane pliki pozostają nietknięte. Uninstall usuwa zarządzany bundle
+tego klienta, ale zachowuje niezarządzane pliki prywatne, `.env.novamira`, plugin
+WordPressa i obraz Docker.
