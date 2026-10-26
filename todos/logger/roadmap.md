@@ -2,12 +2,12 @@
 
 **Cel:** pełna lokalna diagnostyka narzędzi Rust, pozwalająca odtworzyć przepływ operacji i danych bez zmiany zachowania aplikacji. Ten plik jest jedynym źródłem bieżących statusów i kolejności prac.
 
-**Aktualnie:** etap 1 ukończony i zweryfikowany; etap 2 jest w toku. PROCESS-LIFECYCLE i PROCESS-DATA ukończone i zweryfikowane; cztery zadania etapu 2 pozostały.
+**Aktualnie:** etap 1 ukończony i zweryfikowany; etap 2 jest w toku. PROCESS-LIFECYCLE, PROCESS-DATA i PROFILE-LIFECYCLE ukończone i zweryfikowane; trzy zadania etapu 2 pozostały.
 
 | Etap | Zakres i odnośnik | Stan wynikający z zadań |
 | --- | --- | --- |
 | 1 | [Fundament loggera](#etap-1-fundament-loggera) | Ukończony i zweryfikowany: 109/109. |
-| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | W toku: PROCESS-LIFECYCLE i PROCESS-DATA ukończone; cztery zadania pozostały. |
+| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | W toku: PROCESS-LIFECYCLE, PROCESS-DATA i PROFILE-LIFECYCLE ukończone; trzy zadania pozostały. |
 | 3 | [Diagnostyka Novamiry](#etap-3-diagnostyka-novamiry) | Do wykonania; integracja mostu wymaga ustalenia kanału diagnostycznego. |
 | 4 | [Obserwacja po exec](#etap-4-obserwacja-po-exec) | Zablokowany do ustalenia kontraktu nadzorowania lub collectora. |
 | 5 | [Opcjonalna integracja Grafana i Loki](#etap-5-opcjonalna-integracja-grafana-i-loki) | Poza bieżącym wdrożeniem; wymaga osobnej zgody. |
@@ -68,11 +68,11 @@
 
 ### Zadanie 2.3: Instalacja, aktualizacja, zmiana i usuwanie profilu
 
-- [~] **PROFILE-LIFECYCLE — Instrumentacja install/update/switch/uninstall.**
+- [x] **PROFILE-LIFECYCLE — Instrumentacja install/update/switch/uninstall.**
   - Zależność techniczna: FOUNDATION-BASE. Zalecana kolejność w etapie: po PROCESS-LIFECYCLE; nie wymaga to ukończonego przechwytywania strumieni.
   - Zakres: przygotowanie, decyzje, konflikty, zapis/usuwanie, aktywacja, zapis stanu, wynik każdego klienta i zachowane wyniki częściowe.
   - Kontrakt: [lifecycle klientów](concepts/profiles.md#client-lifecycle).
-  - Podział: A — wybór i przygotowanie; B — zapis i aktywacja; C — uninstall. A i B ukończone i zweryfikowane; C nierozpoczęta.
+  - Podział: A — wybór i przygotowanie; B — zapis i aktywacja; C — uninstall. Wszystkie części ukończone i zweryfikowane.
   - A — implementacja: dodano korelację `operation_id` z `run_id`, spany operacji/klienta/etapu, wynik manifestu, decyzje wyboru/pominięcia, przygotowanie, planowane ścieżki zmian, preflight uninstallu i błędy przed spłaszczeniem. Status pozostał poza instrumentacją; testy porównują logi z plikami i manifestem, w tym zachowanie zmienionego pliku przy konflikcie uninstallu.
   - A — RED: `make test` w VM Debian 13 — 128 passed, 2 failed; oba nowe testy wykryły brak zdarzeń operacji/przygotowania. [Artefakty](../../.test-vm/artifacts/20261026T100813Z-ebf88692-16f5-435c-afb5-727dd6fe1aba/host.log).
   - A — GREEN: `make test` — 131/131 passed, w tym 26 lifecycle tests. [Artefakty](../../.test-vm/artifacts/20261026T102132Z-57717027-62b3-43d9-bd66-07f7a8f3bd33/host.log).
@@ -82,7 +82,12 @@
   - B — RED: `make test` w Debian 13 VM — 132 passed, 2 nowe testy failed dokładnie z powodu braku zdarzeń commit/aktywacji. [Artefakty](../../.test-vm/artifacts/20261026T103620Z-154f57ac-4406-4dae-a47f-f711305839ef/host.log).
   - B — GREEN: `make test` — 134/134 passed. Wcześniejsze przebiegi po RED wykryły problem formatowania, błąd Clippy oraz przejściowe `Text file busy`/timeout w istniejących testach; poprawiono kod, a testów nie pomijano. [Artefakty](../../.test-vm/artifacts/20261026T104642Z-b5f381a3-44b2-4895-918d-9973d15417b8/host.log).
   - B — bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (134/134), Debian 13. [Artefakty](../../.test-vm/artifacts/20261026T105027Z-dca06e4c-bebc-40e3-ac0b-ba94eb6dc3c9/host.log); [worklog](../../changelogs/10-26-2026-11:51-agent-worklog.md).
-  - Następne zadanie: etap 2, zadanie 2.3, część C — instrumentacja usuwania profilu i wyników po błędzie usuwania.
+  - C — implementacja: preflight i usuwanie raportują stan faktyczny zmian plików/konfiguracji, cleanup i ostrzeżenia, zapis manifestu, wynik klienta oraz stan zachowany po błędzie usuwania lub zapisu. Błąd zapisu manifestu jest logowany, a następnie propagowany bez zmiany dotychczasowego przerwania operacji; wcześniejsze wyniki pozostają zapisane.
+  - C — RED: `make test` przed instrumentacją — 134 passed, 4 failed; testy wykryły brak zdarzeń zmian, manifestu i wyniku uninstallu. W tym samym przebiegu wykryto błędną kolejność argumentu profilu w fixture prawdziwego procesu; poprawiono fixture, nie oczekiwania produktu. [Artefakty](../../.test-vm/artifacts/20261026T115013Z-e6e55c5c-4ca3-401f-85ed-d28a0312cc00/host.log).
+  - C — GREEN: `make test` — 139/139 passed. Pokrycie obejmuje konflikt preflight i zachowanie edytowanego pliku, poprawny uninstall wybranego klienta z zachowaniem drugiego klienta i `context.txt`, awarię usuwania z `uninstall all` i wynikiem częściowym, awarię zapisu manifestu po usunięciu, brak diagnostyki oraz rzeczywisty proces CLI. [Artefakty](../../.test-vm/artifacts/20261026T115326Z-b23553ee-ab16-40b0-81c8-a6d135644da4/host.log).
+  - C — bramka: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (139/139), Debian 13. [Artefakty](../../.test-vm/artifacts/20261026T120026Z-3406a102-917c-479e-936f-3fa7f3b3abde/host.log); [worklog](../../changelogs/10-26-2026-12:56-agent-worklog.md).
+  - Próby pośrednie: początkowy przebieg po implementacji ujawnił zbyt wąską asercję stanu po błędzie (usunięcie `.gitignore` zostało prawidłowo zachowane) oraz przejściowe `Text file busy` w istniejącym teście Novamiry. Asercję poprawiono zgodnie z faktycznym stanem częściowym; późniejszy pełny przebieg przeszedł bez pomijania testów. Kolejne bramki zatrzymały się na formatowaniu i ostrzeżeniu Clippy; oba problemy poprawiono. Końcowa implementacja zachowuje dotychczasowy tekst błędu CLI i zakres operacji uninstallu.
+  - Następne zadanie: etap 2, zadanie 2.4 — MANAGER-AUX.
 
 ### Zadanie 2.4: Pozostałe komendy menedżera
 
@@ -171,7 +176,7 @@
 
 ## Następne zadanie
 
-**Etap 2, zadanie 2.3 — PROFILE-LIFECYCLE, część C.** Części A i B ukończone i zweryfikowane; kolejnym zakresem jest uninstall.
+**Etap 2, zadanie 2.4 — MANAGER-AUX.** PROFILE-LIFECYCLE (A–C) ukończone i zweryfikowane.
 
 ## Historia aktualizacji
 
@@ -183,3 +188,4 @@
 - 2026-10-26: ukończono PROFILE-LIFECYCLE A test-first. RED: 128 passed/2 nowe testy failed; GREEN: 131/131; końcowa `make validate-rust-migration` po dodaniu testu preflight uninstallu PASS, 132/132, Debian 13, rustc/Cargo 1.99.1. Szczegóły i artefakty w sekcji zadania 2.3. B — zapis, aktywacja i wyniki częściowe — jest jedynym następnym krokiem.
 - 2026-10-26: rozpoczęto PROFILE-LIFECYCLE B, dodając testy efektów commit/manifestu i zachowanego stanu po błędzie aktywacji. `make test` nie dotarło do Cargo: brak uprawnień hosta do socketu Incus. Nie potwierdzono RED i nie rozpoczęto implementacji; B oczekuje na dostęp do wymaganej VM.
 - 2026-10-26: właściciel przywrócił dostęp do VM. PROFILE-LIFECYCLE B ukończono test-first: RED 132/2, GREEN 134/134, końcowa `make validate-rust-migration` PASS (134/134) w Debian 13. Dodano zdarzenia efektów commit, aktywacji, manifestu i częściowych wyników; następne jest C — uninstall. Szczegóły: [worklog](../../changelogs/10-26-2026-11:51-agent-worklog.md).
+- 2026-10-26: PROFILE-LIFECYCLE C ukończono test-first w Debian 13: RED 134/4 przed instrumentacją; końcowa bramka PASS (139/139). Dodano faktyczne zmiany uninstallu, ostrzeżenia cleanupu, błędy usuwania/zapisu manifestu i wyniki częściowe przy zachowaniu dotychczasowych błędów CLI. `context.txt` pozostaje nietknięty przez logikę uninstallu. Następne: MANAGER-AUX. Szczegóły: [worklog](../../changelogs/10-26-2026-12:56-agent-worklog.md).

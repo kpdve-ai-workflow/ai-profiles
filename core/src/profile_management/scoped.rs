@@ -157,6 +157,88 @@ struct CommitProgress {
     persisted_clients: std::collections::BTreeSet<String>,
 }
 
+fn removal_snapshot(
+    project: &Path,
+    client: Client,
+    old: &Value,
+) -> BTreeMap<String, Option<Vec<u8>>> {
+    let mut paths = old
+        .get("files")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|files| files.keys().cloned())
+        .collect::<std::collections::BTreeSet<_>>();
+    paths.insert(".gitignore".into());
+    match client {
+        Client::OpenCode => {
+            paths.insert("opencode.json".into());
+        }
+        Client::Claude => {
+            paths.insert(".claude/settings.json".into());
+            paths.insert(".mcp.json".into());
+        }
+        Client::Codex => {
+            paths.insert(".codex/config.toml".into());
+        }
+    }
+    paths
+        .into_iter()
+        .map(|relative| {
+            let bytes = fs::read(project.join(&relative)).ok();
+            (relative, bytes)
+        })
+        .collect()
+}
+
+fn log_removal_changes(
+    before: &BTreeMap<String, Option<Vec<u8>>>,
+    after: &BTreeMap<String, Option<Vec<u8>>>,
+    operation_id: &str,
+    client: Client,
+    progress: &mut CommitProgress,
+) -> usize {
+    let mut count = 0;
+    for (relative, previous) in before {
+        let current = after.get(relative).and_then(Option::as_ref);
+        let changed = match (previous.as_ref(), current) {
+            (Some(previous), Some(current)) => previous != current,
+            (None, Some(_)) | (Some(_), None) => true,
+            (None, None) => false,
+        };
+        if !changed {
+            continue;
+        }
+        count += 1;
+        progress.applied_clients.insert(client.as_str().to_owned());
+        let change = if current.is_none() {
+            "removed"
+        } else {
+            "written"
+        };
+        let role = if relative == ".gitignore"
+            || relative == "opencode.json"
+            || relative == ".claude/settings.json"
+            || relative == ".mcp.json"
+            || relative == ".codex/config.toml"
+        {
+            "configuration"
+        } else {
+            "managed_file"
+        };
+        tracing::info!(
+            event = "profile.change.applied",
+            operation_id,
+            action = "uninstall",
+            client = client.as_str(),
+            stage = "remove",
+            change,
+            path = relative.as_str(),
+            role,
+        );
+    }
+    count
+}
+
 fn check_destination(project: &Path, relative: &str) -> Result<()> {
     let path = file_path(project, relative)?;
     if path.exists() && !path.is_file() {
@@ -645,7 +727,11 @@ fn run_lifecycle_with_runner(
             action = diagnostics::action_name(action),
             project = %project.display(),
             result = "success",
-            coverage = "commit_and_activation",
+            coverage = if action == ProfileAction::Uninstall {
+                "removal"
+            } else {
+                "commit_and_activation"
+            },
         );
     }
     result
@@ -919,15 +1005,146 @@ fn run_lifecycle_inner(
         }
     }
     for (client, old) in removals {
+        let before = removal_snapshot(project, client, &old);
+        tracing::info!(
+            event = "profile.remove.started",
+            operation_id,
+            action = action_name,
+            client = client.as_str(),
+        );
         match remove(project, client, &old) {
             Ok(()) => {
+                let after = removal_snapshot(project, client, &old);
+                let change_count =
+                    log_removal_changes(&before, &after, operation_id, client, &mut progress);
+                tracing::info!(
+                    event = "profile.remove.finished",
+                    operation_id,
+                    action = action_name,
+                    client = client.as_str(),
+                    result = "success",
+                    change_count,
+                );
                 manifest.clients.remove(client.as_str());
-                manifest.save(project)?;
-                progress.persisted_clients = manifest.clients.keys().cloned().collect();
-                println!("OK: {} usunięty", client.as_str());
+                match manifest.save(project) {
+                    Ok(()) => {
+                        progress.persisted_clients = manifest.clients.keys().cloned().collect();
+                        tracing::info!(
+                            event = "profile.manifest.saved",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            result = "saved",
+                            clients = manifest.clients.len(),
+                        );
+                        completed_clients.push(client.as_str());
+                        tracing::info!(
+                            event = "profile.client.finished",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            result = "success",
+                            state = "removed",
+                        );
+                        println!("OK: {} usunięty", client.as_str());
+                    }
+                    Err(error) => {
+                        manifest
+                            .clients
+                            .insert(client.as_str().to_owned(), old.clone());
+                        let error_message = diagnostics::error_chain(error.as_ref());
+                        tracing::error!(
+                            event = "profile.error",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            stage = "manifest_save",
+                            error = error_message.as_str(),
+                        );
+                        tracing::error!(
+                            event = "profile.manifest.saved",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            result = "error",
+                            clients = manifest.clients.len(),
+                            retained_clients = progress
+                                .persisted_clients
+                                .iter()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(","),
+                            error = error_message.as_str(),
+                        );
+                        tracing::error!(
+                            event = "profile.client.finished",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            result = "error",
+                            state = if progress.applied_clients.contains(client.as_str()) {
+                                "changes_applied_manifest_retained"
+                            } else {
+                                "manifest_retained"
+                            },
+                            error = error_message.as_str(),
+                        );
+                        tracing::error!(
+                            event = "profile.operation.finished",
+                            operation_id,
+                            action = action_name,
+                            project = %project.display(),
+                            result = "partial",
+                            coverage = "removal",
+                            completed_clients = completed_clients.join(","),
+                            failed_clients = client.as_str(),
+                            retained_clients = progress
+                                .persisted_clients
+                                .iter()
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(","),
+                        );
+                        return Err(error);
+                    }
+                }
             }
             Err(error) => {
+                let after = removal_snapshot(project, client, &old);
+                let change_count =
+                    log_removal_changes(&before, &after, operation_id, client, &mut progress);
+                let error_message = diagnostics::error_chain(error.as_ref());
                 eprintln!("{}: {error}", client.as_str());
+                tracing::error!(
+                    event = "profile.error",
+                    operation_id,
+                    action = action_name,
+                    client = client.as_str(),
+                    stage = "remove",
+                    error = error_message.as_str(),
+                );
+                tracing::error!(
+                    event = "profile.remove.finished",
+                    operation_id,
+                    action = action_name,
+                    client = client.as_str(),
+                    result = "error",
+                    change_count,
+                    error = error_message.as_str(),
+                );
+                tracing::error!(
+                    event = "profile.client.finished",
+                    operation_id,
+                    action = action_name,
+                    client = client.as_str(),
+                    result = "error",
+                    state = if progress.applied_clients.contains(client.as_str()) {
+                        "changes_applied_manifest_retained"
+                    } else {
+                        "unchanged"
+                    },
+                    error = error_message.as_str(),
+                );
                 errors.push(client.as_str());
             }
         }
@@ -954,7 +1171,7 @@ fn run_lifecycle_inner(
             } else {
                 "partial"
             },
-            coverage = "commit_and_activation",
+            coverage = if action == ProfileAction::Uninstall { "removal" } else { "commit_and_activation" },
             completed_clients = completed_clients.join(","),
             failed_clients = errors.join(","),
             retained_clients,
@@ -1095,7 +1312,23 @@ fn remove(project: &Path, client: Client, old: &Value) -> Result<()> {
         Client::Claude => {
             let (bytes, _) = native::configure_claude_mcp(project, Some(old), &empty)?;
             if let Some(warning) = native::cleanup_claude(project, old) {
+                tracing::warn!(
+                    event = "profile.cleanup.finished",
+                    action = "uninstall",
+                    client = "claude",
+                    cleanup = "native_plugin",
+                    result = "warning",
+                    warning = warning.as_str(),
+                );
                 println!("WARNING: {warning}");
+            } else {
+                tracing::info!(
+                    event = "profile.cleanup.finished",
+                    action = "uninstall",
+                    client = "claude",
+                    cleanup = "native_plugin",
+                    result = "no_warning"
+                );
             }
             native::remove_claude(project, old)?;
             let value: Value = serde_json::from_slice(&bytes)?;
@@ -1115,7 +1348,23 @@ fn remove(project: &Path, client: Client, old: &Value) -> Result<()> {
         }
         Client::Codex => {
             if let Some(warning) = native::cleanup_codex(project, old) {
+                tracing::warn!(
+                    event = "profile.cleanup.finished",
+                    action = "uninstall",
+                    client = "codex",
+                    cleanup = "native_plugin",
+                    result = "warning",
+                    warning = warning.as_str(),
+                );
                 println!("WARNING: {warning}");
+            } else {
+                tracing::info!(
+                    event = "profile.cleanup.finished",
+                    action = "uninstall",
+                    client = "codex",
+                    cleanup = "native_plugin",
+                    result = "no_warning"
+                );
             }
             native::remove_codex(project, old)?;
             let path = file_path(project, ".codex/config.toml")?;

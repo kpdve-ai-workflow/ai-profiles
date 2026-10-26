@@ -322,6 +322,252 @@ fn profile_uninstall_preflight_logs_conflict_and_preserves_modified_managed_file
 }
 
 #[test]
+fn profile_uninstall_logs_actual_removals_manifest_and_preserves_other_state() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Codex,
+        Some("wordpress"),
+    );
+    let user_file = project.path().join("context.txt");
+    fs::write(&user_file, b"user-owned context").unwrap();
+    let other_client_record = read_json(&project.path().join(".ai-profiles/state.json")).unwrap()
+        ["clients"]["codex"]
+        .clone();
+
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let result = with_session(&session, || {
+        run(
+            &context,
+            project.path(),
+            A::Uninstall,
+            ClientSelection::One(Client::OpenCode),
+            None,
+        )
+    });
+    session.flush();
+
+    assert!(result.is_ok());
+    assert_eq!(fs::read(user_file).unwrap(), b"user-owned context");
+    let manifest = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert!(manifest["clients"]["opencode"].is_null());
+    assert_eq!(manifest["clients"]["codex"], other_client_record);
+    assert!(!project
+        .path()
+        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md")
+        .exists());
+
+    let events = diagnostic_events(logs.path());
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.change.applied"
+            && event["fields"]["action"] == "uninstall"
+            && event["fields"]["client"] == "opencode"
+            && event["fields"]["change"] == "removed"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.manifest.saved"
+            && event["fields"]["client"] == "opencode"
+            && event["fields"]["result"] == "saved"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.client.finished"
+            && event["fields"]["client"] == "opencode"
+            && event["fields"]["result"] == "success"
+            && event["fields"]["state"] == "removed"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.operation.finished"
+            && event["fields"]["action"] == "uninstall"
+            && event["fields"]["result"] == "success"
+            && event["fields"]["coverage"] == "removal"
+    }));
+}
+
+#[test]
+fn profile_uninstall_keeps_result_when_diagnostics_are_unavailable() {
+    use crate::model::{Client, ClientSelection, ProfileAction as A};
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+
+    let result = crate::profile_management::scoped::run(
+        &context,
+        project.path(),
+        A::Uninstall,
+        ClientSelection::One(Client::OpenCode),
+        None,
+    );
+
+    assert!(result.is_ok());
+    assert!(
+        read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]["opencode"]
+            .is_null()
+    );
+}
+
+#[test]
+fn profile_uninstall_logs_retained_state_when_file_removal_fails() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Codex,
+        Some("wordpress"),
+    );
+    let managed = project
+        .path()
+        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md");
+    let state_path = project.path().join(".ai-profiles/state.json");
+    let state_before = fs::read(&state_path).unwrap();
+    let parent = managed.parent().unwrap();
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o500)).unwrap();
+
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let result = with_session(&session, || {
+        run(
+            &context,
+            project.path(),
+            A::Uninstall,
+            ClientSelection::All,
+            None,
+        )
+    });
+    session.flush();
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).unwrap();
+
+    assert!(result.is_err());
+    assert_eq!(
+        fs::read(&managed).unwrap(),
+        b"---\nname: test-gap-discovery\ndescription: Test inventory\n---\n"
+    );
+    let manifest_after = read_json(&state_path).unwrap();
+    assert_ne!(fs::read(&state_path).unwrap(), state_before);
+    assert!(manifest_after["clients"]["opencode"].is_object());
+    assert!(manifest_after["clients"]["codex"].is_null());
+    let events = diagnostic_events(logs.path());
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.error"
+            && event["fields"]["stage"] == "remove"
+            && event["fields"]["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty())
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.client.finished"
+            && event["fields"]["client"] == "opencode"
+            && event["fields"]["result"] == "error"
+            && event["fields"]["state"] == "changes_applied_manifest_retained"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.operation.finished"
+            && event["fields"]["result"] == "partial"
+            && event["fields"]["retained_clients"] == "opencode"
+    }));
+}
+
+#[test]
+fn profile_uninstall_logs_manifest_save_failure_after_removals() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    let managed = project
+        .path()
+        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md");
+    let state_dir = project.path().join(".ai-profiles");
+    fs::set_permissions(&state_dir, fs::Permissions::from_mode(0o500)).unwrap();
+
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let result = with_session(&session, || {
+        run(
+            &context,
+            project.path(),
+            A::Uninstall,
+            ClientSelection::One(Client::OpenCode),
+            None,
+        )
+    });
+    session.flush();
+    fs::set_permissions(&state_dir, fs::Permissions::from_mode(0o700)).unwrap();
+
+    assert!(result.is_err());
+    assert!(
+        !managed.exists(),
+        "managed file removal completed before save"
+    );
+    assert!(project.path().join(".ai-profiles/state.json").is_file());
+    let events = diagnostic_events(logs.path());
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.error"
+            && event["fields"]["stage"] == "manifest_save"
+            && event["fields"]["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty())
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.client.finished"
+            && event["fields"]["result"] == "error"
+            && event["fields"]["state"] == "changes_applied_manifest_retained"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.operation.finished"
+            && event["fields"]["result"] == "partial"
+            && event["fields"]["retained_clients"] == "opencode"
+    }));
+}
+
+#[test]
 fn profile_commit_logs_applied_changes_activation_and_persisted_manifest() {
     use crate::{
         logging::{with_session, Config, Session},

@@ -269,6 +269,110 @@ fn manager_logging_context_roundtrips_exact_process_inputs_before_parsing() {
 }
 
 #[test]
+fn manager_process_uninstall_reports_removed_state_and_preserves_user_file() {
+    let checkout = Checkout::with_assets(&crate::manager_fixture::binaries());
+    let outside = tempfile::tempdir().unwrap();
+    for name in ["home", "xdg", "tmp", "cwd", "project"] {
+        fs::create_dir(outside.path().join(name)).unwrap();
+    }
+    let project = outside.path().join("project");
+    let user_file = project.join("context.txt");
+    fs::write(&user_file, b"user-owned context").unwrap();
+    let command = |action: &str| {
+        let mut command = Command::new(&checkout.executable);
+        command.arg(action);
+        if action == "install" {
+            command.arg("wordpress");
+        }
+        command
+            .args([
+                "--client",
+                "opencode",
+                "--project",
+                project.to_str().unwrap(),
+            ])
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", outside.path().join("home"))
+            .env("XDG_STATE_HOME", outside.path().join("xdg"))
+            .env("XDG_CACHE_HOME", outside.path().join("xdg"))
+            .env("TMPDIR", outside.path().join("tmp"))
+            .current_dir(outside.path().join("cwd"));
+        command
+    };
+    let installed = command("install").output().unwrap();
+    assert_eq!(
+        installed.status.code(),
+        Some(0),
+        "stderr: {:?}",
+        installed.stderr
+    );
+    assert_eq!(installed.stderr, b"");
+    let managed = project.join(".ai-profiles/opencode/plugin/skills");
+    assert!(managed.is_dir());
+
+    let removed = command("uninstall").output().unwrap();
+    assert_eq!(
+        removed.status.code(),
+        Some(0),
+        "stderr: {:?}",
+        removed.stderr
+    );
+    assert!(String::from_utf8_lossy(&removed.stdout).contains("usunięty"));
+    assert_eq!(removed.stderr, b"");
+    assert_eq!(fs::read(user_file).unwrap(), b"user-owned context");
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(project.join(".ai-profiles/state.json")).unwrap())
+            .unwrap();
+    assert!(manifest["clients"]["opencode"].is_null());
+    assert!(!managed.join("test-gap-discovery/SKILL.md").exists());
+
+    let runs = fs::read_dir(checkout.root.path().join(".ai-profiles-logs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        runs.len(),
+        2,
+        "install and uninstall each start one logged run"
+    );
+    let uninstall_records = runs
+        .iter()
+        .flat_map(|run| {
+            fs::read_dir(run)
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|extension| extension == "jsonl")
+                })
+                .flat_map(|path| {
+                    fs::read_to_string(path)
+                        .unwrap()
+                        .lines()
+                        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|record| record["fields"]["action"] == "uninstall")
+        .collect::<Vec<_>>();
+    assert!(uninstall_records.iter().any(|record| {
+        record["fields"]["event"] == "profile.change.applied"
+            && record["fields"]["change"] == "removed"
+    }));
+    assert!(uninstall_records.iter().any(|record| {
+        record["fields"]["event"] == "profile.manifest.saved"
+            && record["fields"]["result"] == "saved"
+    }));
+    assert!(uninstall_records.iter().any(|record| {
+        record["fields"]["event"] == "profile.operation.finished"
+            && record["fields"]["result"] == "success"
+    }));
+}
+
+#[test]
 fn manager_logging_unavailable_cwd_is_explicit_and_does_not_change_help() {
     let fixture = Invocation::new();
     let cwd = fixture.outside.path().join("deleted");
