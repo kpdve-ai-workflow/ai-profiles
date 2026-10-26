@@ -2,7 +2,7 @@
 # Lekkie regresje powłoki i transportu; NIE dowód działania VM/E2E.
 set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-scratch=$(mktemp -d "${TMPDIR:-/tmp/opencode}/ai-profiles-vm-check.XXXXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/ai-profiles-vm-check.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 expect() {
     local expected=$1; shift
