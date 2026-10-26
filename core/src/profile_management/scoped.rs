@@ -676,7 +676,37 @@ pub(crate) fn run_with_runner(
     runner: &impl crate::process::ProcessRunner,
 ) -> Result<()> {
     if action == ProfileAction::Status {
-        return run_lifecycle_with_runner(context, project, action, selection, profile, runner, "");
+        return diagnostics::operation(action, project, |operation_id| {
+            let result = run_lifecycle_with_runner(
+                context,
+                project,
+                action,
+                selection,
+                profile,
+                runner,
+                operation_id,
+            );
+            match &result {
+                Ok(()) => tracing::info!(
+                    event = "profile.operation.finished",
+                    operation_id,
+                    action = "status",
+                    project = %project.display(),
+                    result = "success",
+                    coverage = "client_status",
+                ),
+                Err(error) => tracing::error!(
+                    event = "profile.operation.finished",
+                    operation_id,
+                    action = "status",
+                    project = %project.display(),
+                    result = "error",
+                    coverage = "client_status",
+                    error = %diagnostics::error_chain(error.as_ref()),
+                ),
+            }
+            result
+        });
     }
     diagnostics::operation(action, project, |operation_id| {
         run_lifecycle_with_runner(
@@ -748,7 +778,28 @@ fn run_lifecycle_inner(
 ) -> Result<()> {
     let action_name = diagnostics::action_name(action);
     let mut manifest = if action == ProfileAction::Status {
-        Manifest::load(context, project)?
+        match Manifest::load(context, project) {
+            Ok(manifest) => {
+                tracing::info!(
+                    event = "profile.manifest.loaded",
+                    operation_id,
+                    action = action_name,
+                    clients = manifest.clients.len(),
+                    result = "success",
+                );
+                manifest
+            }
+            Err(error) => {
+                tracing::error!(
+                    event = "profile.error",
+                    operation_id,
+                    action = action_name,
+                    stage = "manifest_load",
+                    error = %diagnostics::error_chain(error.as_ref()),
+                );
+                return Err(error);
+            }
+        }
     } else {
         match Manifest::load(context, project) {
             Ok(manifest) => {
@@ -781,11 +832,27 @@ fn run_lifecycle_inner(
     if action == ProfileAction::Status {
         let mut errors = Vec::new();
         for client in selected {
+            let client_span = tracing::info_span!(
+                "profile.client",
+                operation_id,
+                action = action_name,
+                client = client.as_str(),
+                project = %project.display(),
+            );
+            let _guard = client_span.enter();
+            tracing::info!(
+                event = "profile.status.client.started",
+                operation_id,
+                action = action_name,
+                client = client.as_str(),
+                project = %project.display(),
+            );
             if let Err(error) = super::status::status(
                 context,
                 project,
                 client,
                 manifest.clients.get(client.as_str()),
+                operation_id,
             ) {
                 eprintln!("{}: {error}", client.as_str());
                 errors.push(client.as_str());

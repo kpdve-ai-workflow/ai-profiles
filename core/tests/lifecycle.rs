@@ -44,6 +44,188 @@ fn diagnostic_events(root: &Path) -> Vec<serde_json::Value> {
         .collect()
 }
 
+fn diagnostic_payloads(root: &Path) -> Vec<Vec<u8>> {
+    let run = fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.is_dir() && path.join("format").exists())
+        .unwrap();
+    let mut payloads = fs::read_dir(run)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("payload-")
+        })
+        .collect::<Vec<_>>();
+    payloads.sort();
+    payloads
+        .into_iter()
+        .map(|path| fs::read(path).unwrap())
+        .collect()
+}
+
+#[test]
+fn status_diagnostics_correlate_one_operation_and_report_each_uninstalled_client() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    let before = snapshot(project.path());
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-status-test").unwrap();
+    let result = with_session(&session, || {
+        run(
+            &context,
+            project.path(),
+            A::Status,
+            ClientSelection::All,
+            None,
+        )
+    });
+    session.flush();
+    assert!(result.is_ok(), "an absent profile is a valid status result");
+    assert_eq!(before, snapshot(project.path()), "status must be read-only");
+
+    let events = diagnostic_events(logs.path());
+    let starts = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.operation.started")
+        .collect::<Vec<_>>();
+    let terminals = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.operation.finished")
+        .collect::<Vec<_>>();
+    assert_eq!(starts.len(), 1, "one status invocation is one operation");
+    assert_eq!(terminals.len(), 1, "the status operation has one terminal");
+    assert_eq!(starts[0]["fields"]["action"], "status");
+    assert_eq!(
+        starts[0]["fields"]["operation_id"],
+        terminals[0]["fields"]["operation_id"]
+    );
+    assert_eq!(terminals[0]["fields"]["result"], "success");
+
+    let clients = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.status.client.finished")
+        .map(|event| {
+            (
+                event["fields"]["client"].as_str().unwrap().to_owned(),
+                event["fields"]["result"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    assert_eq!(
+        clients.len(),
+        Client::ALL.len(),
+        "each selected client gets a result"
+    );
+    for client in Client::ALL {
+        assert_eq!(clients[client.as_str()], "not_installed");
+    }
+}
+
+#[test]
+fn status_all_records_local_differences_and_each_client_result_before_aggregation() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    run(
+        &context,
+        project.path(),
+        A::Install,
+        ClientSelection::All,
+        Some("wordpress"),
+    )
+    .unwrap();
+
+    let changed_managed = project
+        .path()
+        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md");
+    fs::write(&changed_managed, b"user edit; status must report only").unwrap();
+    fs::write(
+        source.path().join("skills/test-gap-discovery/SKILL.md"),
+        b"---\nname: test-gap-discovery\ndescription: Changed source\n---\n",
+    )
+    .unwrap();
+    // A malformed Claude configuration is a single-client failure. Status must
+    // still report OpenCode and Codex results before returning its aggregate.
+    fs::write(project.path().join(".claude/settings.json"), b"{broken").unwrap();
+
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-status-test").unwrap();
+    let result = with_session(&session, || {
+        run(
+            &context,
+            project.path(),
+            A::Status,
+            ClientSelection::All,
+            None,
+        )
+    });
+    session.flush();
+    assert!(result.is_err());
+
+    let events = diagnostic_events(logs.path());
+    let terminals = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.operation.finished")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        terminals.len(),
+        1,
+        "client failures must not duplicate the operation terminal"
+    );
+    assert_eq!(terminals[0]["fields"]["result"], "error");
+
+    let results = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.status.client.finished")
+        .map(|event| {
+            (
+                event["fields"]["client"].as_str().unwrap().to_owned(),
+                event["fields"].clone(),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    assert_eq!(
+        results.len(),
+        Client::ALL.len(),
+        "all clients are checked despite one failure"
+    );
+    assert_eq!(results["opencode"]["result"], "success");
+    assert_eq!(results["opencode"]["source_content_changed"], true);
+    assert_eq!(results["opencode"]["source_comparison_performed"], true);
+    assert_eq!(results["opencode"]["configuration_result"], "success");
+    assert!(results["opencode"]["managed_changes"]
+        .as_str()
+        .unwrap()
+        .contains(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md"));
+    assert_eq!(results["claude"]["result"], "error");
+    assert!(results["claude"]["error"]
+        .as_str()
+        .is_some_and(|error| !error.is_empty()));
+    assert_eq!(results["codex"]["result"], "success");
+    let payloads = diagnostic_payloads(logs.path());
+    assert!(payloads
+        .iter()
+        .any(|payload| payload == b"user edit; status must report only"));
+    assert!(payloads.iter().any(|payload| {
+        payload == b"---\nname: test-gap-discovery\ndescription: Changed source\n---\n"
+    }));
+}
+
 #[test]
 fn profile_install_diagnostics_correlate_calls_and_match_prepared_state() {
     use crate::{

@@ -112,6 +112,61 @@ fn lifecycle(records: &[Value], code: i32, error: Option<(&str, &str)>) -> Strin
     run_id.to_owned()
 }
 
+fn lifecycle_with_profile_events(
+    records: &[Value],
+    code: i32,
+    error: Option<(&str, &str)>,
+) -> String {
+    let cli_records = records
+        .iter()
+        .filter(|record| {
+            !record["fields"]["event"]
+                .as_str()
+                .is_some_and(|event| event.starts_with("profile.") || event.starts_with("payload."))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    lifecycle(&cli_records, code, error)
+}
+
+fn assert_profile_operation(records: &[Value], action: &str, result: &str) -> String {
+    let operation_records = records
+        .iter()
+        .filter(|record| {
+            record["fields"]["event"]
+                .as_str()
+                .is_some_and(|event| event.starts_with("profile."))
+        })
+        .collect::<Vec<_>>();
+    let starts = operation_records
+        .iter()
+        .filter(|record| record["fields"]["event"] == "profile.operation.started")
+        .collect::<Vec<_>>();
+    let terminals = operation_records
+        .iter()
+        .filter(|record| record["fields"]["event"] == "profile.operation.finished")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        starts.len(),
+        1,
+        "one profile operation start: {operation_records:?}"
+    );
+    assert_eq!(
+        terminals.len(),
+        1,
+        "one profile operation terminal: {operation_records:?}"
+    );
+    assert_eq!(starts[0]["fields"]["action"], action);
+    assert_eq!(terminals[0]["fields"]["action"], action);
+    assert_eq!(terminals[0]["fields"]["result"], result);
+    let operation_id = starts[0]["fields"]["operation_id"].as_str().unwrap();
+    assert!(!operation_id.is_empty());
+    for record in operation_records {
+        assert_eq!(record["fields"]["operation_id"], operation_id);
+    }
+    operation_id.to_owned()
+}
+
 // The versioned framing and contiguous indices detect missing/duplicate records,
 // even when the missing value was empty. Only these explicit additions are allowed.
 fn context_structure(records: &[Value]) -> usize {
@@ -512,9 +567,289 @@ fn manager_logging_project_does_not_select_log_directory() {
     assert_eq!(output.stdout, b"opencode: brak profilu\n");
     assert!(output.stderr.is_empty());
     assert_eq!(fixture.logs().len(), 1);
-    lifecycle(&fixture.logs()[0], 0, None);
+    lifecycle_with_profile_events(&fixture.logs()[0], 0, None);
+    assert_profile_operation(&fixture.logs()[0], "status", "success");
     assert!(!project.join(".ai-profiles-logs").exists());
     fixture.no_fallback();
+}
+
+#[test]
+fn manager_status_without_installation_records_one_operation_and_each_client() {
+    let fixture = Invocation::new();
+    let project = fixture.outside.path().join("project");
+    let output = fixture
+        .command()
+        .args(["status", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        output.stdout,
+        b"opencode: brak profilu\nclaude: brak profilu\ncodex: brak profilu\n"
+    );
+    assert!(output.stderr.is_empty());
+    assert!(!project.join(".ai-profiles").exists());
+
+    let logs = fixture.logs();
+    assert_eq!(logs.len(), 1);
+    lifecycle_with_profile_events(&logs[0], 0, None);
+    assert_profile_operation(&logs[0], "status", "success");
+    let clients = logs[0]
+        .iter()
+        .filter(|record| record["fields"]["event"] == "profile.status.client.finished")
+        .map(|record| record["fields"]["client"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(clients, ["opencode", "claude", "codex"]);
+    assert!(logs[0].iter().any(|record| {
+        record["fields"]["event"] == "profile.status.client.finished"
+            && record["fields"]["client"] == "opencode"
+            && record["fields"]["result"] == "not_installed"
+    }));
+    fixture.no_fallback();
+}
+
+#[test]
+fn manager_validate_logs_scope_and_preserves_cli_results() {
+    let checkout = Checkout::with_assets(&crate::manager_fixture::binaries());
+    let full = Command::new(&checkout.executable)
+        .arg("validate")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .unwrap();
+    assert_eq!(full.status.code(), Some(0), "stderr: {:?}", full.stderr);
+    assert_eq!(
+        full.stdout,
+        "OK: wszystkie skille i definicje MCP są spójne\n".as_bytes()
+    );
+    assert!(full.stderr.is_empty());
+
+    let scoped = Command::new(&checkout.executable)
+        .args(["validate", "wordpress"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .unwrap();
+    assert_eq!(scoped.status.code(), Some(0), "stderr: {:?}", scoped.stderr);
+    assert_eq!(
+        scoped.stdout,
+        "OK: profil wordpress, wybrane skille i definicje MCP są spójne\n".as_bytes()
+    );
+    assert!(scoped.stderr.is_empty());
+
+    let logs = fs::read_dir(checkout.root.path().join(".ai-profiles-logs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    assert_eq!(logs.len(), 2);
+    let mut saw_all_scope = false;
+    let mut saw_profile_scope = false;
+    for run in &logs {
+        let records = read_records(run);
+        lifecycle_with_profile_events(&records, 0, None);
+        assert_profile_operation(&records, "validate", "success");
+        let validation = records
+            .iter()
+            .find(|record| record["fields"]["event"] == "profile.validate.started")
+            .unwrap();
+        assert_eq!(
+            validation["fields"]["source_repository"],
+            checkout.root.path().to_str().unwrap()
+        );
+        assert!(validation["fields"]["project"].is_null());
+        match validation["fields"]["scope"].as_str().unwrap() {
+            "all_sources" => {
+                saw_all_scope = true;
+                for check in [
+                    "skill_catalog",
+                    "mcp_definition",
+                    "profile_metadata",
+                    "profile_skills",
+                    "profile_mcp_definitions",
+                ] {
+                    assert!(
+                        records.iter().any(|record| {
+                            record["fields"]["event"] == "profile.validate.check.finished"
+                                && record["fields"]["check"] == check
+                                && record["fields"]["result"] == "success"
+                        }),
+                        "missing executed check {check}"
+                    );
+                }
+            }
+            "profile" => {
+                saw_profile_scope = true;
+                for check in ["skill_catalog", "mcp_registry"] {
+                    assert!(records.iter().any(|record| {
+                        record["fields"]["event"] == "profile.validate.check"
+                            && record["fields"]["check"] == check
+                            && record["fields"]["result"] == "skipped"
+                            && record["fields"]["reason"] == "single_profile_scope"
+                    }));
+                }
+            }
+            other => panic!("unexpected validation scope {other}"),
+        }
+        assert!(records.iter().any(|record| {
+            record["fields"]["event"] == "profile.validate.payload"
+                && record["fields"]["role"] == "mcp_example"
+                && record["fields"]["complete"] == true
+        }));
+        assert!(read_payloads(run)
+            .iter()
+            .any(|payload| payload.as_slice() == include_bytes!("../../mcp/example.json")));
+    }
+    assert!(saw_all_scope && saw_profile_scope);
+
+    let before = fs::read(checkout.root.path().join("mcp/example.json")).unwrap();
+    fs::write(
+        checkout.root.path().join("mcp/example.json"),
+        br#"{"mcp":{"novamira":{"type":"local","command":["incorrect"]}}}"#,
+    )
+    .unwrap();
+    let mismatch = Command::new(&checkout.executable)
+        .arg("validate")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .unwrap();
+    assert_eq!(mismatch.status.code(), Some(1));
+    assert!(mismatch.stdout.is_empty());
+    assert_eq!(
+        mismatch.stderr,
+        b"ERROR: mcp/example.json does not match the MCP definitions selected by the profiles\n"
+    );
+    let runs = fs::read_dir(checkout.root.path().join(".ai-profiles-logs"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_dir())
+        .collect::<Vec<_>>();
+    assert_eq!(runs.len(), 3);
+    let (mismatch_run, mismatch_records) = runs
+        .iter()
+        .find_map(|run| {
+            let records = read_records(run);
+            records
+                .iter()
+                .any(|record| record["fields"]["result"] == "error")
+                .then_some((run, records))
+        })
+        .unwrap();
+    lifecycle_with_profile_events(
+        &mismatch_records,
+        1,
+        Some((
+            "operation",
+            "mcp/example.json does not match the MCP definitions selected by the profiles",
+        )),
+    );
+    assert_profile_operation(&mismatch_records, "validate", "error");
+    assert!(mismatch_records.iter().any(|record| {
+        record["fields"]["event"] == "profile.validate.example_compared"
+            && record["fields"]["result"] == "mismatch"
+    }));
+    assert!(read_payloads(mismatch_run).iter().any(|payload| {
+        payload.as_slice() == br#"{"mcp":{"novamira":{"type":"local","command":["incorrect"]}}}"#
+    }));
+    assert_eq!(before, include_bytes!("../../mcp/example.json"));
+}
+
+fn read_records(run: &Path) -> Vec<Value> {
+    let mut segments = fs::read_dir(run)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "jsonl")
+        })
+        .collect::<Vec<_>>();
+    segments.sort();
+    segments
+        .into_iter()
+        .flat_map(|path| {
+            fs::read_to_string(path)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect::<Vec<Value>>()
+        })
+        .collect()
+}
+
+fn read_payloads(run: &Path) -> Vec<Vec<u8>> {
+    fs::read_dir(run)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("payload-")
+        })
+        .map(|path| fs::read(path).unwrap())
+        .collect()
+}
+
+#[test]
+fn manager_status_result_survives_unavailable_diagnostics() {
+    let fixture = Invocation::new();
+    let blocked = fixture.checkout.root.path().join(".ai-profiles-logs");
+    fs::write(&blocked, b"keep this file").unwrap();
+    let project = fixture.outside.path().join("project");
+    let output = fixture
+        .command()
+        .args(["status", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        output.stdout,
+        b"opencode: brak profilu\nclaude: brak profilu\ncodex: brak profilu\n"
+    );
+    warning(&output.stderr);
+    assert_eq!(fs::read(blocked).unwrap(), b"keep this file");
+    assert!(!project.join(".ai-profiles").exists());
+    fixture.no_fallback();
+}
+
+#[test]
+fn manager_validate_result_survives_unavailable_diagnostics() {
+    let checkout = Checkout::with_assets(&crate::manager_fixture::binaries());
+    let outside = tempfile::tempdir().unwrap();
+    for name in ["home", "xdg", "tmp", "cwd"] {
+        fs::create_dir(outside.path().join(name)).unwrap();
+    }
+    let blocked = checkout.root.path().join(".ai-profiles-logs");
+    fs::write(&blocked, b"keep this file").unwrap();
+    let example_before = fs::read(checkout.root.path().join("mcp/example.json")).unwrap();
+    let output = Command::new(&checkout.executable)
+        .arg("validate")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("HOME", outside.path().join("home"))
+        .env("XDG_STATE_HOME", outside.path().join("xdg"))
+        .env("XDG_CACHE_HOME", outside.path().join("xdg"))
+        .env("TMPDIR", outside.path().join("tmp"))
+        .current_dir(outside.path().join("cwd"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        output.stdout,
+        "OK: wszystkie skille i definicje MCP są spójne\n".as_bytes()
+    );
+    warning(&output.stderr);
+    assert_eq!(fs::read(blocked).unwrap(), b"keep this file");
+    assert_eq!(
+        fs::read(checkout.root.path().join("mcp/example.json")).unwrap(),
+        example_before
+    );
+    for name in ["home", "xdg", "tmp", "cwd"] {
+        assert_eq!(fs::read_dir(outside.path().join(name)).unwrap().count(), 0);
+    }
 }
 
 fn warning(stderr: &[u8]) -> &str {

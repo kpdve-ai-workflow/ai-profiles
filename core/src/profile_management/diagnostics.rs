@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -30,11 +31,7 @@ pub(super) fn operation<T>(
 ) -> Result<T, Box<dyn std::error::Error>> {
     let action = action_name(action);
     let run_id = logging::current_session().map(|session| session.run_id);
-    let sequence = NEXT_OPERATION.fetch_add(1, Ordering::Relaxed);
-    let operation_id = run_id
-        .as_deref()
-        .map(|run_id| format!("{run_id}-operation-{sequence}"))
-        .unwrap_or_else(|| format!("operation-{sequence}"));
+    let operation_id = next_operation_id(run_id.as_deref());
     let span = tracing::info_span!(
         "profile.operation",
         operation_id = %operation_id,
@@ -54,6 +51,69 @@ pub(super) fn operation<T>(
     } else {
         invoke(&operation_id)
     }
+}
+
+pub(super) fn source_operation<T, E>(
+    sources: &Path,
+    invoke: impl FnOnce(&str) -> Result<T, E>,
+) -> Result<T, E>
+where
+    E: Error + 'static,
+{
+    let run_id = logging::current_session().map(|session| session.run_id);
+    let operation_id = next_operation_id(run_id.as_deref());
+    let span = tracing::info_span!(
+        "profile.operation",
+        operation_id = %operation_id,
+        action = "validate",
+        source_repository = %sources.display(),
+        run_id = run_id.as_deref().unwrap_or("unavailable"),
+    );
+    let _guard = span.enter();
+    tracing::info!(
+        event = "profile.operation.started",
+        operation_id = %operation_id,
+        action = "validate",
+        target = "source_repository",
+        source_repository = %sources.display(),
+    );
+    let execute = || {
+        let result = invoke(&operation_id);
+        match &result {
+            Ok(_) => tracing::info!(
+                event = "profile.operation.finished",
+                operation_id = %operation_id,
+                action = "validate",
+                target = "source_repository",
+                source_repository = %sources.display(),
+                result = "success",
+                coverage = "source_validation",
+            ),
+            Err(error) => tracing::error!(
+                event = "profile.operation.finished",
+                operation_id = %operation_id,
+                action = "validate",
+                target = "source_repository",
+                source_repository = %sources.display(),
+                result = "error",
+                coverage = "source_validation",
+                error = %error_chain(error),
+            ),
+        }
+        result
+    };
+    if let Some(session) = logging::current_session() {
+        tracing::subscriber::with_default(session.subscriber(), execute)
+    } else {
+        execute()
+    }
+}
+
+fn next_operation_id(run_id: Option<&str>) -> String {
+    let sequence = NEXT_OPERATION.fetch_add(1, Ordering::Relaxed);
+    run_id
+        .map(|run_id| format!("{run_id}-operation-{sequence}"))
+        .unwrap_or_else(|| format!("operation-{sequence}"))
 }
 
 pub(super) fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {

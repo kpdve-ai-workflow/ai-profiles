@@ -25,12 +25,17 @@ pub(crate) fn json_bytes<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, Co
 }
 
 pub(crate) fn read_json(path: &Path) -> Result<Value, CodecError> {
+    read_json_with_bytes(path).map(|(value, _)| value)
+}
+
+pub(crate) fn read_json_with_bytes(path: &Path) -> Result<(Value, Vec<u8>), CodecError> {
     let contents = fs::read(path).map_err(|source| CodecError::Read {
         path: path.to_owned(),
         source,
     })?;
-    serde_json::from_slice(&contents).map_err(|source| CodecError::Parse {
+    let value = serde_json::from_slice(&contents).map_err(|source| CodecError::Parse {
         path: path.to_owned(),
         source,
-    })
+    })?;
+    Ok((value, contents))
 }

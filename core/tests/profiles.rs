@@ -1,4 +1,8 @@
-use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     codec::{json_bytes, read_json},
@@ -13,6 +17,104 @@ fn source() -> (tempfile::TempDir, RepositoryContext) {
     }
     let context = RepositoryContext::from_sources(PathBuf::from(temp.path())).unwrap();
     (temp, context)
+}
+
+fn validation_source() -> (tempfile::TempDir, RepositoryContext) {
+    let (temp, context) = source();
+    for (relative, contents) in [
+        (
+            "profiles/demo/profile.json",
+            br#"{"name":"demo","version":"1.0.0","description":"Demo profile"}"#.as_slice(),
+        ),
+        ("profiles/demo/skills.json", br#"{"skills":[]}"#.as_slice()),
+        (
+            "profiles/demo/mcp.json",
+            br#"{"servers":["sample"]}"#.as_slice(),
+        ),
+        (
+            "mcp/servers/sample.json",
+            br#"{"type":"remote","url":"https://example.test/mcp"}"#.as_slice(),
+        ),
+        (
+            "mcp/example.json",
+            br#"{"mcp":{"sample":{"type":"remote","url":"https://example.test/mcp"}}}"#.as_slice(),
+        ),
+    ] {
+        let path = temp.path().join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, contents).unwrap();
+    }
+    let native_binary = temp.path().join("core/target/release/ai-profile-mcp");
+    fs::create_dir_all(native_binary.parent().unwrap()).unwrap();
+    fs::write(native_binary, b"synthetic native binary").unwrap();
+    fs::set_permissions(
+        temp.path().join("core/target/release/ai-profile-mcp"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    (temp, context)
+}
+
+fn tree_snapshot(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    fn visit(
+        root: &Path,
+        current: &Path,
+        files: &mut std::collections::BTreeMap<PathBuf, Vec<u8>>,
+    ) {
+        for entry in fs::read_dir(current).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                visit(root, &entry.path(), files);
+            } else if entry.file_type().unwrap().is_file() {
+                files.insert(
+                    entry.path().strip_prefix(root).unwrap().to_owned(),
+                    fs::read(entry.path()).unwrap(),
+                );
+            }
+        }
+    }
+    let mut files = std::collections::BTreeMap::new();
+    visit(root, root, &mut files);
+    files
+}
+
+#[test]
+fn validate_sources_accepts_full_and_scoped_fixture_without_mutating_sources() {
+    let (temp, context) = validation_source();
+    let before = tree_snapshot(temp.path());
+
+    crate::profile_management::validation::validate_sources(&context, None).unwrap();
+    crate::profile_management::validation::validate_sources(&context, Some("demo")).unwrap();
+
+    assert_eq!(tree_snapshot(temp.path()), before);
+}
+
+#[test]
+fn validate_sources_reports_unknown_profile_and_example_mismatch() {
+    let (temp, context) = validation_source();
+    let before = tree_snapshot(temp.path());
+
+    let unknown =
+        crate::profile_management::validation::validate_sources(&context, Some("missing"))
+            .unwrap_err();
+    assert_eq!(unknown.to_string(), "Unknown profile: missing");
+
+    fs::write(
+        temp.path().join("mcp/example.json"),
+        br#"{"mcp":{"sample":{"type":"remote","url":"https://wrong.example/mcp"}}}"#,
+    )
+    .unwrap();
+    let mismatch =
+        crate::profile_management::validation::validate_sources(&context, None).unwrap_err();
+    assert_eq!(
+        mismatch.to_string(),
+        "mcp/example.json does not match the MCP definitions selected by the profiles"
+    );
+    assert_ne!(
+        tree_snapshot(temp.path()),
+        before,
+        "only the controlled example fixture changed"
+    );
 }
 
 #[test]

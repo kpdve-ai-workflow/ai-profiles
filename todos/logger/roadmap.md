@@ -91,11 +91,18 @@
 
 ### Zadanie 2.4: Pozostałe komendy menedżera
 
-- [ ] **MANAGER-AUX — Status, walidacja, migracja i zarządzanie profilami.**
+- [~] **MANAGER-AUX — Status, walidacja, migracja i zarządzanie profilami.**
   - Zależność: FOUNDATION-BASE.
   - Zakres: status, walidacja źródeł, migracja, tworzenie/zmiana nazwy/wersji profilu; dostępne przyczyny błędów przed spłaszczeniem ich do tekstu.
+  - Podział: A — status/validate; B — create/rename/bump; C — migrate-legacy.
   - Kontrakt: [pozostałe komendy](concepts/profiles.md#other-manager-commands).
-  - Weryfikacja: niewykonana.
+  - A — wykonano: `status` tworzy jedną skorelowaną operację, zapisuje wynik każdego klienta przed agregacją, obserwowane różnice plików/źródeł, konfigurację, nadpisania i aktywację; surowe zarządzane pliki trafiają do payloadów. `validate_sources` zapisuje zakres repozytorium, wykonane i pominięte kontrole, wyniki porównania MCP, przyczyny błędów oraz użyte dane w payloadach. Zachowano teksty i kody CLI; testy potwierdzają brak mutacji projektu/źródeł oraz zachowanie wyniku przy niedostępnych logach.
+  - A — RED: `make test` w VM wykazało brak zdarzeń dla statusu i walidacji; przed implementacją poprawiono dwa błędy konstrukcji fixture (brak syntetycznego executable i executable bit). W ustabilizowanym RED: 140 passed/6 failed, z czego cztery testy ujawniły brak diagnostyki, a dwa błędne fixture walidacji; [artefakty](../../.test-vm/artifacts/20261026T121944Z-fae4df9b-3ad7-41c2-98a8-bc361cb0e6fe/host.log).
+  - A — GREEN: `make test` — 146/146 passed po instrumentacji; [artefakty](../../.test-vm/artifacts/20261026T122753Z-57f70b00-d633-42cc-8d65-afc5ff9aa0b5/host.log). Dodano później test awarii diagnostyki dla `validate`.
+  - A — bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (147/147); Debian 13, rustc `1.99.1 (58cf8f9c3 2026-10-13)`, Cargo `1.99.1 (5f94df478 2026-08-27)`. [Artefakty](../../.test-vm/artifacts/20261026T123442Z-973a1441-89cf-4a57-8f6f-636e33fd3e7e/host.log); [worklog](../../changelogs/10-26-2026-13:35-agent-worklog.md).
+  - Dodatkowe kontrole: `git diff --check` — PASS. Brak nowych zależności; nie uruchomiono osobnego Rust 1.85 przebiegu, ponieważ nie dodano zależności ani API wymagającego dodatkowego dowodu MSRV. Status nie weryfikuje połączenia/uwierzytelnienia MCP ani ładowania umiejętności.
+  - Próba pośrednia końcowej bramki: format, build, Clippy i `make validate` przeszły, lecz istniejący test Novamiry zakończył się `Text file busy` (146/147); pełna bramka po ponowieniu przeszła bez pomijania testów. [Artefakty próby](../../.test-vm/artifacts/20261026T123355Z-afae9402-1697-426e-bf8b-5406fe80e7a3/host.log).
+  - Następne: część B — create/rename/bump.
 
 ### Zadanie 2.5: Przepływ WordPress restore
 
@@ -189,3 +196,4 @@
 - 2026-10-26: rozpoczęto PROFILE-LIFECYCLE B, dodając testy efektów commit/manifestu i zachowanego stanu po błędzie aktywacji. `make test` nie dotarło do Cargo: brak uprawnień hosta do socketu Incus. Nie potwierdzono RED i nie rozpoczęto implementacji; B oczekuje na dostęp do wymaganej VM.
 - 2026-10-26: właściciel przywrócił dostęp do VM. PROFILE-LIFECYCLE B ukończono test-first: RED 132/2, GREEN 134/134, końcowa `make validate-rust-migration` PASS (134/134) w Debian 13. Dodano zdarzenia efektów commit, aktywacji, manifestu i częściowych wyników; następne jest C — uninstall. Szczegóły: [worklog](../../changelogs/10-26-2026-11:51-agent-worklog.md).
 - 2026-10-26: PROFILE-LIFECYCLE C ukończono test-first w Debian 13: RED 134/4 przed instrumentacją; końcowa bramka PASS (139/139). Dodano faktyczne zmiany uninstallu, ostrzeżenia cleanupu, błędy usuwania/zapisu manifestu i wyniki częściowe przy zachowaniu dotychczasowych błędów CLI. `context.txt` pozostaje nietknięty przez logikę uninstallu. Następne: MANAGER-AUX. Szczegóły: [worklog](../../changelogs/10-26-2026-12:56-agent-worklog.md).
+- 2026-10-26: MANAGER-AUX A — status/validate — ukończone test-first. Dodano korelację i terminal statusu, per-klientowe wyniki oraz obserwacje konfiguracji/różnic/payloadów; walidacja raportuje rzeczywisty zakres, kontrole, pominięcia, porównanie MCP i przyczyny. RED ujawnił brak zdarzeń status/validate; końcowa bramka w Debian 13 PASS (147/147). Szczegóły, wersje i artefakty w sekcji zadania 2.4. Następne: część B — create/rename/bump.
