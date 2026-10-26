@@ -50,11 +50,7 @@ impl Checkout {
 
     pub(crate) fn with_assets(binaries: &Path) -> Self {
         let checkout = Self::new();
-        let source = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         for directory in ["core", "profiles", "skills", "mcp"] {
             copy_tree(
                 &source.join(directory),

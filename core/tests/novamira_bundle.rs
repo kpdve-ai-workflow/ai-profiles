@@ -218,7 +218,7 @@ fn novamira_local_settings_cannot_redirect_runtime_or_secret_paths() {
     let project = tempfile::tempdir().unwrap();
     fs::create_dir_all(project.path().join(".ai-profiles/opencode")).unwrap();
     let definition: serde_json::Value =
-        serde_json::from_slice(include_bytes!("../../../mcp/servers/novamira.json")).unwrap();
+        serde_json::from_slice(include_bytes!("../../mcp/servers/novamira.json")).unwrap();
     let base = serde_json::json!({"novamira":definition});
     for entry in [
         serde_json::json!({"env_file":"outside.env"}),

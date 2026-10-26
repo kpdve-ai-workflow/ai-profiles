@@ -154,9 +154,9 @@ fn novamira_source() -> (tempfile::TempDir, RepositoryContext) {
     put(
         source.path(),
         "mcp/servers/novamira.json",
-        include_bytes!("../../../mcp/servers/novamira.json"),
+        include_bytes!("../../mcp/servers/novamira.json"),
     );
-    let images = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mcp/images/novamira");
+    let images = Path::new(env!("CARGO_MANIFEST_DIR")).join("../mcp/images/novamira");
     for filename in [
         "Dockerfile",
         ".dockerignore",
@@ -923,9 +923,9 @@ fn playwright_source() -> (tempfile::TempDir, RepositoryContext) {
     put(
         source.path(),
         "mcp/servers/playwright.json",
-        include_bytes!("../../../mcp/servers/playwright.json"),
+        include_bytes!("../../mcp/servers/playwright.json"),
     );
-    let images = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mcp/images/playwright");
+    let images = Path::new(env!("CARGO_MANIFEST_DIR")).join("../mcp/images/playwright");
     for filename in PLAYWRIGHT_FILES {
         put(
             source.path(),
@@ -1384,12 +1384,7 @@ fn native_install_retires_owned_python_and_preserves_user_files() {
 #[test]
 fn missing_native_binary_stops_install_before_project_writes() {
     let (_source, context) = native_source();
-    fs::remove_file(
-        context
-            .sources
-            .join("core/target/release/restore-updraft"),
-    )
-    .unwrap();
+    fs::remove_file(context.sources.join("core/target/release/restore-updraft")).unwrap();
     let project = tempfile::tempdir().unwrap();
     assert!(apply_profile(&context, project.path(), "wordpress").is_err());
     assert_eq!(fs::read_dir(project.path()).unwrap().count(), 0);

@@ -86,7 +86,7 @@ fn playwright_uses_the_shared_adapter_and_keeps_runtime_overrides() {
     )
     .unwrap();
     let definition: serde_json::Value =
-        serde_json::from_str(include_str!("../../../mcp/servers/playwright.json")).unwrap();
+        serde_json::from_str(include_str!("../../mcp/servers/playwright.json")).unwrap();
     let base = json!({"playwright":definition});
     let base = base.as_object().unwrap();
     let resolved = resolve(project.path(), base).unwrap();

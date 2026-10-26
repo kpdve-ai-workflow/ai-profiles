@@ -377,7 +377,7 @@ fn novamira_real_pinned_bridge_reports_http_auth_distinctly_and_forwards_tools()
 fn novamira_distributed_docker_bridge_auth_timeout_tools_and_container_cleanup() {
     let build = std::process::Command::new("docker")
         .args(["build", "-t", "ai-profiles-novamira:0.1.0"])
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mcp/images/novamira"))
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../mcp/images/novamira"))
         .output()
         .unwrap();
     assert!(
