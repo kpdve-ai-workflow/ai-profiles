@@ -51,6 +51,9 @@ mod novamira_tests;
 #[path = "../tests/playwright.rs"]
 mod playwright_tests;
 #[cfg(test)]
+#[path = "../tests/process_logging.rs"]
+mod process_logging_tests;
+#[cfg(test)]
 #[path = "../tests/profiles.rs"]
 mod profiles_tests;
 #[cfg(test)]

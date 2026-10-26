@@ -15,11 +15,11 @@ This file owns decision rationale and unresolved questions, not task progress. S
 
 ## Stream observation boundary
 
-**Gap ID: STREAM-BOUNDARY.** How will complete diagnostic capture coexist with `CaptureLimited`, `Null`, inherited stdin, and timeout paths without changing application semantics?
+**Gap ID: STREAM-BOUNDARY — RESOLVED by owner (2026-10-26).** Zachowanie procesów bez zmian. Capture every byte observed by the existing runner operations, and label data beyond that observation boundary explicitly as not captured. This exception is limited to stream observation; it does not limit argument completeness or available configuration data.
 
-Evidence: [process.rs](../../core/src/process.rs) drops `Null` streams, reads at most `limit + 1` bytes for limited capture, inherits stdin in one mode, and deliberately avoids joining readers after timeout because descendants may retain pipes. Simply teeing all streams or continuing to drain can change pipe closure, SIGPIPE, waiting, or deadlines.
+Evidence: [process.rs](../../core/src/process.rs) drops `Null` streams, reads at most `limit + 1` bytes for limited capture, inherits stdin in one mode, and deliberately avoids joining readers after timeout because descendants may retain pipes. The accepted design observes only the existing reads and writes, without extra I/O, retries, joins, proxies, or changes to deadlines, kill/wait, pipe closure, or join behavior.
 
-Affected task: PROCESS-DATA and any acceptance claim of complete shared-runner stream coverage. The implementer must not choose to remove limits, redirect inherited input, or wait indefinitely merely for logging. A bounded observation design must specify which bytes can be captured, how unavailable bytes are reported, and demonstrate semantic preservation. If this requires changing approved application behavior or reducing required capture, owner approval is required. No such alternative has been accepted in this migration.
+Affected task: PROCESS-DATA and any acceptance claim of complete shared-runner stream coverage. Capture observes successful existing reads/writes only. Full stdout/stderr observation is confirmed only at real EOF. CaptureLimited retains the existing `take(n + 1)` boundary and is `limited` when that reader stops at its cap, without claiming total length or certain truncation. Null stdout/stderr and inherited stdin remain untouched and are reported unavailable; Null stdin is not applicable. Child-side consumption of stdin writes is never inferred. Timeouts/cancellation do not gain joins. Thus no claim of capturing every child stream is allowed.
 
 ## Novamira diagnostic channel
 

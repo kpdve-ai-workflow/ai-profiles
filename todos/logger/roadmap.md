@@ -2,12 +2,12 @@
 
 **Cel:** pełna lokalna diagnostyka narzędzi Rust, pozwalająca odtworzyć przepływ operacji i danych bez zmiany zachowania aplikacji. Ten plik jest jedynym źródłem bieżących statusów i kolejności prac.
 
-**Aktualnie:** etap 1 ukończony i zweryfikowany; realizacja etapu 2 jeszcze się nie rozpoczęła. Ta aktualizacja porządkuje dokumentację, nie wdraża nowych funkcji.
+**Aktualnie:** etap 1 ukończony i zweryfikowany; etap 2 jest w toku. PROCESS-LIFECYCLE i PROCESS-DATA ukończone i zweryfikowane; cztery zadania etapu 2 pozostały.
 
 | Etap | Zakres i odnośnik | Stan wynikający z zadań |
 | --- | --- | --- |
 | 1 | [Fundament loggera](#etap-1-fundament-loggera) | Ukończony i zweryfikowany: 109/109. |
-| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | Do wykonania; sześć mniejszych zadań. Zadanie 2.2 wymaga rozstrzygnięcia granicy przechwytywania strumieni. |
+| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | W toku: PROCESS-LIFECYCLE i PROCESS-DATA ukończone; cztery zadania pozostały. |
 | 3 | [Diagnostyka Novamiry](#etap-3-diagnostyka-novamiry) | Do wykonania; integracja mostu wymaga ustalenia kanału diagnostycznego. |
 | 4 | [Obserwacja po exec](#etap-4-obserwacja-po-exec) | Zablokowany do ustalenia kontraktu nadzorowania lub collectora. |
 | 5 | [Opcjonalna integracja Grafana i Loki](#etap-5-opcjonalna-integracja-grafana-i-loki) | Poza bieżącym wdrożeniem; wymaga osobnej zgody. |
@@ -44,19 +44,27 @@
 
 ### Zadanie 2.1: Lifecycle wspólnego runnera procesów
 
-- [ ] **PROCESS-LIFECYCLE — Próby uruchomienia i rzeczywiste wyniki procesów.**
+- [x] **PROCESS-LIFECYCLE — Próby uruchomienia i rzeczywiste wyniki procesów.**
   - Zależność: FOUNDATION-BASE.
   - Zakres: skorelowane zdarzenia próby, spawn, zakończenia i błędu; rzeczywisty status, czas, timeout/anulowanie i dostępne przyczyny. Bez przechwytywania strumieni w tym zadaniu.
   - Kontrakt i akceptacja test-first: [lifecycle runnera](concepts/processes.md#runner-lifecycle).
-  - Weryfikacja: niewykonana dla tego zadania.
+  - Wykonano: każde wywołanie emituje `process.started` i dokładnie jeden terminal; udany spawn raportuje PID dziecka; zdarzenia mają run/process ID, czas, status lub klasyfikację/stage/przyczynę. Zachowano semantykę niezerowego statusu, timeoutu, anulowania i cleanupu. Dodano testy prawdziwych procesów i rejestrację modułu.
+  - RED (bazowy runner bez instrumentacji): `cargo test --manifest-path core/Cargo.toml --locked --lib process_logging -- --nocapture` — 8 niepowodzeń lifecycle z powodu braku zdarzeń, test wyniku bez diagnostyki przeszedł; uzasadniony RED. VM Debian 13, Cargo 1.99.1, rustc 1.99.1. [Log RED](../../.test-vm/artifacts/20261026T083916Z-c93259e3-cb4e-4815-b581-26a33ae78f3f/process-lifecycle-red.log).
+  - GREEN: to samo polecenie — 9/9 testów przeszło i moduł został wykonany; [log GREEN](../../.test-vm/artifacts/20261026T083940Z-d0252f42-c79a-4a09-92c3-577578ea5ea9/process-lifecycle-green.log). Testy obejmują poprawne i niezerowe zakończenie, sygnał, brak executable, anulowanie przed spawn i w trakcie procesu, timeout, równoległą korelację oraz brak diagnostyki.
+  - Bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, clippy, `make validate`, `make test` (118/118, w tym 9 `process_logging_tests`). VM Debian 13, Cargo 1.99.1, rustc 1.99.1; [log bramki](../../.test-vm/artifacts/20261026T084031Z-d00c1450-4d0a-4314-b446-727d87a7ce15/host.log). Dwa wcześniejsze przebiegi przerwały się odpowiednio na `format` ([log](../../.test-vm/artifacts/20261026T083951Z-f44ce505-f081-4be7-9a2f-bac633404c6c/host.log)) i `clippy` ([log](../../.test-vm/artifacts/20261026T084013Z-4c0a67da-f064-4655-98ff-7055dcd7e6ee/host.log)); wskazane problemy poprawiono przed końcowym PASS. Nie zmieniono zależności ani nie użyto API wymagających osobnego dowodu MSRV dla tego zadania.
 
 ### Zadanie 2.2: Argumenty, środowisko i strumienie procesów
 
-- [!] **PROCESS-DATA — Przechwytywanie danych bez zmiany semantyki procesu.**
-  - Zależności: PROCESS-LIFECYCLE i rozstrzygnięcie [STREAM-BOUNDARY](decisions-and-gaps.md#stream-observation-boundary).
+- [x] **PROCESS-DATA — Obserwacja danych bez zmiany zachowania procesów.**
+  - Zależności: PROCESS-LIFECYCLE i rozstrzygnięte [STREAM-BOUNDARY](decisions-and-gaps.md#stream-observation-boundary).
   - Zakres: dokładne argumenty, efektywne środowisko i obserwowane stdin/stdout/stderr połączone z istniejącym API payloadów oraz jawną kompletnością przechwycenia.
   - Kontrakt: [dane procesów](concepts/processes.md#process-data).
-  - Weryfikacja: niewykonana. Nie zgadujemy zachowania dla strumieni ograniczonych, odrzucanych i dziedziczonych.
+  - Właściciel rozstrzygnął: „Zachowanie procesów bez zmian”. Przechwytujemy wszystkie bajty obserwowane przez istniejące operacje runnera, a dane poza tą granicą jawnie oznaczamy jako nieprzechwycone. Wyjątek dotyczy granicy obserwacji strumieni; nie ogranicza kompletności argumentów ani dostępnych danych konfiguracyjnych.
+  - Wykonano: dodano obserwację argumentów, efektywnego środowiska, cwd oraz bajtów zaakceptowanych przez istniejące operacje runnera. Payloady są pożyczane we fragmentach do 64 KiB i korelowane z process/stream/scope/index/offset. Stany EOF, limit, Null, Inherit, anulowanie, błąd spawn i awaria storage pozostają jawne; zachowano procesowe I/O, limity, terminy, cleanup i reguły join.
+  - RED: `make test` w Debian 13 VM — 118 passed, nowy test `process_context_preserves_argument_boundaries_and_observed_output` failed z powodu braku kontekstu PROCESS-DATA; uzasadniony RED. [Log](../../.test-vm/artifacts/20261026T090733Z-d73a14e5-b3a7-4500-a04b-2b9f13d6a723/export/operation.log).
+  - GREEN ukierunkowany: `cargo test --manifest-path core/Cargo.toml --locked --lib process_logging -- --nocapture` jako `tester` w VM, pod blokadą `.test-vm/lock` i świeżym `TMPDIR` — 19/19; [log](../../.test-vm/artifacts/20261026T0929-process-data-focused/targeted.log).
+  - Bramka końcowa: `make validate-rust-migration` — PASS: format, release build, Clippy, `make validate`, `make test` — 128 passed; [log](../../.test-vm/artifacts/20261026T092912Z-4a071960-d03e-41af-8a74-75d9cadafdc4/host.log). Debian 13.7, Cargo 1.99.1, rustc 1.99.1. Nie dodano zależności; użyte API są dostępne w Rust 1.85, więc dodatkowy przebieg MSRV nie był wymagany.
+  - Próby pośrednie: jedna bramka zatrzymała się na Clippy; kolejna wykryła stan `not_started` w teście anulowania oraz przejściowy `Text file busy` w istniejącym teście Novamiry. Poprawiono obserwację stanu, a końcowa bramka przeszła bez pomijania testów.
 
 ### Zadanie 2.3: Instalacja, aktualizacja, zmiana i usuwanie profilu
 
@@ -153,9 +161,12 @@
 
 ## Następne zadanie
 
-**Etap 2, zadanie 2.1 — PROCESS-LIFECYCLE.** Następne zlecenie obejmuje wyłącznie to zadanie. Przed testami i kodem przeczytaj [kontrakt lifecycle runnera](concepts/processes.md#runner-lifecycle). Nie rozpoczynaj zablokowanych zadań ani kolejnych etapów bez wymaganej zgody.
+**Etap 2, zadanie 2.2 — PROCESS-DATA ukończone i zweryfikowane.** STREAM-BOUNDARY rozstrzygnięte przez właściciela. Zadanie 2.3 nie zostało rozpoczęte w tym zleceniu.
 
 ## Historia aktualizacji
 
 - 2026-10-25: przeniesiono oryginalny dokument bez zmian do `logger.md`, utworzono pakiet dokumentacji i zaimportowano dowody ukończenia fundamentu. Bez nowych zmian aplikacji i uruchamiania testów.
 - 2026-10-25: na wyraźne polecenie właściciela przywrócono etapy 1–5 jako główne nagłówki, sześć zadań etapu 2 jako podsekcje, kryteria zakończenia i jawne warunki przechodzenia dalej. Zachowano wszystkie 11 identyfikatorów zadań, ich statusy, zależności techniczne oraz dowody. Poprzedni układ wyłącznie obszarowy jest zastąpiony tym układem.
+- 2026-10-26: ukończono PROCESS-LIFECYCLE test-first; zapisano RED/GREEN, wyniki `make validate-rust-migration`, wersje kompilatorów i ścieżki artefaktów. PROCESS-DATA nadal blokuje nierozstrzygnięty STREAM-BOUNDARY.
+- 2026-10-26: właściciel rozstrzygnął STREAM-BOUNDARY: zachowanie procesów bez zmian; obserwacja wyłącznie istniejących operacji I/O. PROCESS-DATA rozpoczęte.
+- 2026-10-26: ukończono PROCESS-DATA test-first; targeted 19/19 i `make validate-rust-migration` 128/128 w Debian 13.7, Cargo/rustc 1.99.1. Zapisano logi RED/GREEN i bramki. Nie twierdzimy, że wszystkie strumienie dziecka są przechwytywane.

@@ -10,6 +10,24 @@ use std::{
 
 thread_local! { static CURRENT: RefCell<Option<Session>> = const { RefCell::new(None) }; }
 
+struct CurrentGuard(Option<Session>);
+
+impl Drop for CurrentGuard {
+    fn drop(&mut self) {
+        CURRENT.with(|current| *current.borrow_mut() = self.0.take());
+    }
+}
+
+pub(crate) fn current_session() -> Option<Session> {
+    CURRENT.with(|current| current.borrow().clone())
+}
+
+pub(crate) fn with_session<T>(session: &Session, invoke: impl FnOnce() -> T) -> T {
+    let previous = CURRENT.with(|current| current.borrow_mut().replace(session.clone()));
+    let _guard = CurrentGuard(previous);
+    tracing::subscriber::with_default(session.subscriber(), invoke)
+}
+
 fn location(binary: &str) -> io::Result<PathBuf> {
     let executable = std::env::current_exe()?;
     match binary {
@@ -104,10 +122,8 @@ pub fn with_diagnostics<T>(binary: &str, invoke: impl FnOnce() -> T) -> T {
     })();
     match prepared {
         Ok(session) => {
-            CURRENT.with(|current| *current.borrow_mut() = Some(session.clone()));
-            let result = tracing::subscriber::with_default(session.subscriber(), invoke);
+            let result = with_session(&session, invoke);
             session.flush();
-            CURRENT.with(|current| current.borrow_mut().take());
             result
         }
         Err(error) => {

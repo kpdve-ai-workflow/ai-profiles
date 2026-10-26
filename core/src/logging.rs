@@ -42,6 +42,9 @@ use tracing_subscriber::{
 mod session;
 pub use session::{Config, PayloadSummary, Session};
 mod entry;
+pub(crate) use entry::current_session;
+#[cfg(test)]
+pub(crate) use entry::with_session;
 pub use entry::{diagnostics_complete, handoff, runtime_entry, with_diagnostics};
 
 /// Run identity supplied by the binary, not inferred from paths or environment.
