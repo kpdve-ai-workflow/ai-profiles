@@ -1,4 +1,4 @@
-use std::{fs, io::Write, path::Path, str::FromStr};
+use std::{fs, io::Cursor, io::Write, path::Path, str::FromStr};
 
 use serde_json::{json, Value};
 use tempfile::Builder;
@@ -7,7 +7,7 @@ use crate::{
     codec::json_bytes,
     error::ProfileManagementError,
     filesystem::file_path,
-    model::{ProfileName, RepositoryContext, Version, VersionBump},
+    model::{ProfileAction, ProfileName, RepositoryContext, Version, VersionBump},
     repository::{profile_metadata, profile_names},
 };
 
@@ -16,6 +16,26 @@ pub(crate) fn create_profile(
     profile: &str,
     description: Option<&str>,
 ) -> Result<(), ProfileManagementError> {
+    super::diagnostics::repository_operation(
+        ProfileAction::Create,
+        &context.sources,
+        |operation_id| create_profile_inner(context, profile, description, operation_id),
+    )
+}
+
+fn create_profile_inner(
+    context: &RepositoryContext,
+    profile: &str,
+    description: Option<&str>,
+    operation_id: &str,
+) -> Result<(), ProfileManagementError> {
+    tracing::info!(
+        event = "profile.profile.create.started",
+        operation_id,
+        profile,
+        description = description.unwrap_or(""),
+        description_provided = description.is_some(),
+    );
     let profile_name =
         ProfileName::from_str(profile).map_err(|_| ProfileManagementError::InvalidProfileName)?;
     if description.is_some_and(|value| value.trim().is_empty()) {
@@ -54,13 +74,26 @@ pub(crate) fn create_profile(
         "version": "1.0.0",
         "description": description,
     });
-    write_staged(&staged.join("profile.json"), &json_bytes(&metadata)?)?;
+    let metadata_bytes = json_bytes(&metadata)?;
+    write_staged(&staged.join("profile.json"), &metadata_bytes)?;
+    record_payload(
+        operation_id,
+        "profile_metadata",
+        "profile.json",
+        &metadata_bytes,
+    );
     let mcp = json!({"servers": []});
-    write_staged(&staged.join("mcp.json"), &json_bytes(&mcp)?)?;
-    write_staged(
-        &staged.join("skills.json"),
-        &json_bytes(&json!({"skills": []}))?,
-    )?;
+    let mcp_bytes = json_bytes(&mcp)?;
+    write_staged(&staged.join("mcp.json"), &mcp_bytes)?;
+    record_payload(operation_id, "mcp_selection", "mcp.json", &mcp_bytes);
+    let skills_bytes = json_bytes(&json!({"skills": []}))?;
+    write_staged(&staged.join("skills.json"), &skills_bytes)?;
+    record_payload(
+        operation_id,
+        "skill_selection",
+        "skills.json",
+        &skills_bytes,
+    );
 
     fs::create_dir(&destination).map_err(|source| ProfileManagementError::Io {
         path: destination.clone(),
@@ -77,8 +110,23 @@ pub(crate) fn create_profile(
         fs::rename(entry.path(), &target).map_err(|_| ProfileManagementError::CreateFailed {
             destination: destination.clone(),
         })?;
+        tracing::info!(
+            event = "profile.profile.file_published",
+            operation_id,
+            profile = profile_name.as_str(),
+            path = %format!("profiles/{}/{}", profile_name.as_str(), entry.file_name().to_string_lossy()),
+            result = "success",
+        );
     }
 
+    tracing::info!(
+        event = "profile.profile.created",
+        operation_id,
+        profile = profile_name.as_str(),
+        version = "1.0.0",
+        description,
+        result = "success",
+    );
     println!("OK: utworzono profil {} (1.0.0)", profile_name.as_str());
     Ok(())
 }
@@ -88,6 +136,25 @@ pub(crate) fn rename_profile(
     profile: &str,
     new_name: &str,
 ) -> Result<(), ProfileManagementError> {
+    super::diagnostics::repository_operation(
+        ProfileAction::Rename,
+        &context.sources,
+        |operation_id| rename_profile_inner(context, profile, new_name, operation_id),
+    )
+}
+
+fn rename_profile_inner(
+    context: &RepositoryContext,
+    profile: &str,
+    new_name: &str,
+    operation_id: &str,
+) -> Result<(), ProfileManagementError> {
+    tracing::info!(
+        event = "profile.profile.rename.started",
+        operation_id,
+        previous_name = profile,
+        profile = new_name,
+    );
     let old =
         ProfileName::from_str(profile).map_err(|_| ProfileManagementError::InvalidProfileName)?;
     let new =
@@ -115,6 +182,7 @@ pub(crate) fn rename_profile(
         .ok_or_else(|| crate::error::RepositoryError::InvalidMetadata(profile.to_owned()))?;
     object.insert("name".to_owned(), Value::String(new.as_str().to_owned()));
     let bytes = json_bytes(&metadata)?;
+    record_payload(operation_id, "profile_metadata", "profile.json", &bytes);
     let permissions = fs::metadata(&metadata_path)
         .map_err(|source| ProfileManagementError::Io {
             path: metadata_path.clone(),
@@ -154,6 +222,14 @@ pub(crate) fn rename_profile(
         }
         return Err(ProfileManagementError::Persist(error.error.to_string()));
     }
+    tracing::info!(
+        event = "profile.profile.renamed",
+        operation_id,
+        previous_name = old.as_str(),
+        profile = new.as_str(),
+        path = %format!("profiles/{}/profile.json", new.as_str()),
+        result = "success",
+    );
     println!("OK: zmieniono nazwę profilu {profile} -> {new_name} w repozytorium ai-profiles. Zainstalowane projekty nie zostały zmienione.");
     Ok(())
 }
@@ -175,6 +251,29 @@ pub(crate) fn bump_profile(
     profile: &str,
     part: VersionBump,
 ) -> Result<String, ProfileManagementError> {
+    super::diagnostics::repository_operation(
+        ProfileAction::Bump,
+        &context.sources,
+        |operation_id| bump_profile_inner(context, profile, part, operation_id),
+    )
+}
+
+fn bump_profile_inner(
+    context: &RepositoryContext,
+    profile: &str,
+    part: VersionBump,
+    operation_id: &str,
+) -> Result<String, ProfileManagementError> {
+    tracing::info!(
+        event = "profile.profile.bump.started",
+        operation_id,
+        profile,
+        part = match part {
+            VersionBump::Major => "major",
+            VersionBump::Minor => "minor",
+            VersionBump::Patch => "patch",
+        },
+    );
     if !profile_names(context)?.iter().any(|name| name == profile) {
         return Err(ProfileManagementError::UnknownProfile(profile.to_owned()));
     }
@@ -191,6 +290,8 @@ pub(crate) fn bump_profile(
         .as_object_mut()
         .ok_or_else(|| crate::error::RepositoryError::InvalidMetadata(profile.to_owned()))?;
     object.insert("version".to_owned(), Value::String(next.clone()));
+    let bytes = json_bytes(&metadata)?;
+    record_payload(operation_id, "profile_metadata", "profile.json", &bytes);
 
     let parent = path
         .parent()
@@ -204,7 +305,7 @@ pub(crate) fn bump_profile(
             source,
         })?;
     temporary
-        .write_all(&json_bytes(&metadata)?)
+        .write_all(&bytes)
         .map_err(|source| ProfileManagementError::Io {
             path: temporary.path().to_owned(),
             source,
@@ -220,8 +321,33 @@ pub(crate) fn bump_profile(
         .persist(&path)
         .map_err(|error| ProfileManagementError::Persist(error.error.to_string()))?;
 
+    tracing::info!(
+        event = "profile.profile.version_bumped",
+        operation_id,
+        profile,
+        previous_version = previous,
+        version = next,
+        path = %relative,
+        result = "success",
+    );
     println!("OK: {}: {} -> {}", profile, previous, next);
     Ok(next)
+}
+
+fn record_payload(operation_id: &str, role: &str, path: &str, bytes: &[u8]) {
+    let Some(session) = crate::logging::current_session() else {
+        return;
+    };
+    let summary = session.payload(Cursor::new(bytes));
+    tracing::info!(
+        event = "profile.repository.payload",
+        operation_id,
+        role,
+        path,
+        payload_id = summary.payload_id,
+        bytes = summary.length,
+        complete = summary.complete,
+    );
 }
 
 #[cfg(unix)]

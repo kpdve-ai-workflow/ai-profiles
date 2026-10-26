@@ -109,6 +109,64 @@ where
     }
 }
 
+pub(super) fn repository_operation<T, E>(
+    action: ProfileAction,
+    sources: &Path,
+    invoke: impl FnOnce(&str) -> Result<T, E>,
+) -> Result<T, E>
+where
+    E: Error + 'static,
+{
+    let action_name = action_name(action);
+    let run_id = logging::current_session().map(|session| session.run_id);
+    let operation_id = next_operation_id(run_id.as_deref());
+    let span = tracing::info_span!(
+        "profile.operation",
+        operation_id = %operation_id,
+        action = action_name,
+        source_repository = %sources.display(),
+        run_id = run_id.as_deref().unwrap_or("unavailable"),
+    );
+    let _guard = span.enter();
+    tracing::info!(
+        event = "profile.operation.started",
+        operation_id = %operation_id,
+        action = action_name,
+        target = "source_repository",
+        source_repository = %sources.display(),
+    );
+    let execute = || {
+        let result = invoke(&operation_id);
+        match &result {
+            Ok(_) => tracing::info!(
+                event = "profile.operation.finished",
+                operation_id = %operation_id,
+                action = action_name,
+                target = "source_repository",
+                source_repository = %sources.display(),
+                result = "success",
+                coverage = "profile_maintenance",
+            ),
+            Err(error) => tracing::error!(
+                event = "profile.operation.finished",
+                operation_id = %operation_id,
+                action = action_name,
+                target = "source_repository",
+                source_repository = %sources.display(),
+                result = "error",
+                coverage = "profile_maintenance",
+                error = %error_chain(error),
+            ),
+        }
+        result
+    };
+    if let Some(session) = logging::current_session() {
+        tracing::subscriber::with_default(session.subscriber(), execute)
+    } else {
+        execute()
+    }
+}
+
 fn next_operation_id(run_id: Option<&str>) -> String {
     let sequence = NEXT_OPERATION.fetch_add(1, Ordering::Relaxed);
     run_id

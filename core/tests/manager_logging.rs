@@ -468,7 +468,7 @@ fn manager_logging_success_and_operation_error_preserve_cli_and_source_location(
         "OK: utworzono profil sample (1.0.0)\n".as_bytes()
     );
     assert!(success.stderr.is_empty());
-    let first = lifecycle(&fixture.logs()[0], 0, None);
+    let first = lifecycle_with_profile_events(&fixture.logs()[0], 0, None);
     let failure = fixture.run(&["create", "sample"]);
     assert_eq!(failure.status.code(), Some(1));
     assert!(failure.stdout.is_empty());
@@ -485,7 +485,194 @@ fn manager_logging_success_and_operation_error_preserve_cli_and_source_location(
         .iter()
         .find(|records| records[0]["run_id"] != first)
         .unwrap();
-    lifecycle(failed, 1, Some(("operation", message)));
+    lifecycle_with_profile_events(failed, 1, Some(("operation", message)));
+    fixture.no_fallback();
+}
+
+#[test]
+fn manager_profile_maintenance_records_source_changes_and_preserves_cli_results() {
+    let fixture = Invocation::new();
+
+    let create = fixture.run(&["create", "sample", "--description", "Example profile"]);
+    assert_eq!(create.status.code(), Some(0));
+    assert_eq!(create.stdout, b"OK: utworzono profil sample (1.0.0)\n");
+    assert!(create.stderr.is_empty());
+    let created_metadata = fs::read(
+        fixture
+            .checkout
+            .root
+            .path()
+            .join("profiles/sample/profile.json"),
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&created_metadata).unwrap(),
+        serde_json::json!({
+            "name": "sample",
+            "version": "1.0.0",
+            "description": "Example profile"
+        })
+    );
+
+    let rename = fixture.run(&["rename", "sample", "--new-name", "renamed"]);
+    assert_eq!(rename.status.code(), Some(0));
+    assert_eq!(
+        rename.stdout,
+        "OK: zmieniono nazwę profilu sample -> renamed w repozytorium ai-profiles. Zainstalowane projekty nie zostały zmienione.\n".as_bytes()
+    );
+    assert!(rename.stderr.is_empty());
+    assert!(!fixture
+        .checkout
+        .root
+        .path()
+        .join("profiles/sample")
+        .exists());
+    let renamed_metadata = fs::read(
+        fixture
+            .checkout
+            .root
+            .path()
+            .join("profiles/renamed/profile.json"),
+    )
+    .unwrap();
+    let mut expected_renamed: Value = serde_json::from_slice(&created_metadata).unwrap();
+    expected_renamed["name"] = serde_json::json!("renamed");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&renamed_metadata).unwrap(),
+        expected_renamed
+    );
+
+    let bump = fixture.run(&["bump", "renamed", "--part", "minor"]);
+    assert_eq!(bump.status.code(), Some(0));
+    assert_eq!(bump.stdout, b"OK: renamed: 1.0.0 -> 1.1.0\n");
+    assert!(bump.stderr.is_empty());
+    let bumped_metadata: Value = serde_json::from_slice(
+        &fs::read(
+            fixture
+                .checkout
+                .root
+                .path()
+                .join("profiles/renamed/profile.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    expected_renamed["version"] = serde_json::json!("1.1.0");
+    assert_eq!(bumped_metadata, expected_renamed);
+
+    let duplicate = fixture.run(&["create", "renamed"]);
+    assert_eq!(duplicate.status.code(), Some(1));
+    assert!(duplicate.stdout.is_empty());
+    assert_eq!(
+        duplicate.stderr,
+        b"ERROR: Profile already exists: renamed\n"
+    );
+
+    let logs = fixture.logs();
+    assert_eq!(logs.len(), 4);
+    let records_for = |action: &str, result: &str| {
+        logs.iter()
+            .find(|records| {
+                records.iter().any(|record| {
+                    record["fields"]["event"] == "profile.operation.started"
+                        && record["fields"]["action"] == action
+                }) && records.iter().any(|record| {
+                    record["fields"]["event"] == "profile.operation.finished"
+                        && record["fields"]["action"] == action
+                        && record["fields"]["result"] == result
+                })
+            })
+            .unwrap_or_else(|| panic!("missing {action} {result} operation in {logs:?}"))
+    };
+
+    for (action, result) in [
+        ("create", "success"),
+        ("rename", "success"),
+        ("bump", "success"),
+        ("create", "error"),
+    ] {
+        let records = records_for(action, result);
+        lifecycle_with_profile_events(
+            records,
+            if result == "success" { 0 } else { 1 },
+            (result == "error").then_some(("operation", "Profile already exists: renamed")),
+        );
+        assert_profile_operation(records, action, result);
+        let source = fixture.checkout.root.path().display().to_string();
+        assert!(records.iter().any(|record| {
+            record["fields"]["event"] == "profile.operation.started"
+                && record["fields"]["source_repository"] == source
+                && record["fields"]["target"] == "source_repository"
+        }));
+    }
+
+    let created = records_for("create", "success");
+    assert!(created.iter().any(|record| {
+        record["fields"]["event"] == "profile.profile.created"
+            && record["fields"]["profile"] == "sample"
+            && record["fields"]["version"] == "1.0.0"
+            && record["fields"]["description"] == "Example profile"
+    }));
+    let renamed = records_for("rename", "success");
+    assert!(renamed.iter().any(|record| {
+        record["fields"]["event"] == "profile.profile.renamed"
+            && record["fields"]["previous_name"] == "sample"
+            && record["fields"]["profile"] == "renamed"
+    }));
+    let bumped = records_for("bump", "success");
+    assert!(bumped.iter().any(|record| {
+        record["fields"]["event"] == "profile.profile.version_bumped"
+            && record["fields"]["profile"] == "renamed"
+            && record["fields"]["previous_version"] == "1.0.0"
+            && record["fields"]["version"] == "1.1.0"
+    }));
+    let failed_create = records_for("create", "error");
+    assert!(failed_create.iter().any(|record| {
+        record["fields"]["event"] == "profile.operation.finished"
+            && record["fields"]["error"]
+                .as_str()
+                .unwrap()
+                .contains("Profile already exists: renamed")
+    }));
+    let assert_metadata_payload = |records: &[Value], expected: &[u8]| {
+        let event = records
+            .iter()
+            .find(|record| {
+                record["fields"]["event"] == "profile.repository.payload"
+                    && record["fields"]["role"] == "profile_metadata"
+                    && record["fields"]["path"] == "profile.json"
+            })
+            .expect("metadata payload event");
+        let payload_id = event["fields"]["payload_id"].as_str().unwrap();
+        let (run_id, sequence) = payload_id.rsplit_once('-').unwrap();
+        let payload_path = fixture
+            .checkout
+            .root
+            .path()
+            .join(".ai-profiles-logs")
+            .join(format!("run-{run_id}"))
+            .join(format!(
+                "payload-{:020}-{:020}.bin",
+                sequence.parse::<u64>().unwrap(),
+                0
+            ));
+        assert_eq!(fs::read(payload_path).unwrap(), expected);
+        assert_eq!(event["fields"]["bytes"], expected.len());
+        assert_eq!(event["fields"]["complete"], true);
+    };
+    assert_metadata_payload(created, &created_metadata);
+    assert_metadata_payload(renamed, &renamed_metadata);
+    assert_metadata_payload(
+        bumped,
+        &fs::read(
+            fixture
+                .checkout
+                .root
+                .path()
+                .join("profiles/renamed/profile.json"),
+        )
+        .unwrap(),
+    );
     fixture.no_fallback();
 }
 

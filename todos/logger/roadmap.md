@@ -102,7 +102,12 @@
   - A — bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (147/147); Debian 13, rustc `1.99.1 (58cf8f9c3 2026-10-13)`, Cargo `1.99.1 (5f94df478 2026-08-27)`. [Artefakty](../../.test-vm/artifacts/20261026T123442Z-973a1441-89cf-4a57-8f6f-636e33fd3e7e/host.log); [worklog](../../changelogs/10-26-2026-13:35-agent-worklog.md).
   - Dodatkowe kontrole: `git diff --check` — PASS. Brak nowych zależności; nie uruchomiono osobnego Rust 1.85 przebiegu, ponieważ nie dodano zależności ani API wymagającego dodatkowego dowodu MSRV. Status nie weryfikuje połączenia/uwierzytelnienia MCP ani ładowania umiejętności.
   - Próba pośrednia końcowej bramki: format, build, Clippy i `make validate` przeszły, lecz istniejący test Novamiry zakończył się `Text file busy` (146/147); pełna bramka po ponowieniu przeszła bez pomijania testów. [Artefakty próby](../../.test-vm/artifacts/20261026T123355Z-afae9402-1697-426e-bf8b-5406fe80e7a3/host.log).
-  - Następne: część B — create/rename/bump.
+  - B — wykonano: `create`, `rename` i `bump` otwierają pojedynczą operację skorelowaną z repozytorium źródeł. Logowane są wejścia/transformacje, opublikowane pliki, wynik oraz pełne bajty zmienianych metadanych w payloadach; zachowano typy i łańcuchy błędów, stdout/stderr i kody CLI. Test prawdziwego procesu potwierdza zawartość źródeł po każdej komendzie, payloady, konflikt create i brak fałszywego celu projektowego.
+  - B — RED: `make test` w Debian 13 VM — 147 passed/1 failed; nowy test wykrył brak zdarzeń operacji dla create/rename/bump. Dwie wcześniejsze próby przed uzyskaniem RED ujawniły błędy fixture testu (nie-ASCII byte literal i konflikt create po zwolnieniu nazwy przez rename); poprawiono wyłącznie test. [Artefakt RED](../../.test-vm/artifacts/20261026T130334Z-7873863c-f144-4567-9b0e-1d4363299887/host.log).
+  - B — GREEN: `make test` — 148/148 passed. Jedna próba pośrednia zakończyła się wyłącznie zbyt szeroką asercją helpera lifecycle CLI (dodatkowe zdarzenia domenowe); helper rozdziela teraz zdarzenia `profile.*`/`payload.*`, pozostawiając ścisłe asercje cyklu CLI. [Artefakt GREEN](../../.test-vm/artifacts/20261026T130609Z-437690a5-21ab-406f-9114-72355568598b/host.log).
+  - B — bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (148/148), VM Debian 13; rustc `1.99.1 (58cf8f9c3 2026-10-13)`, Cargo `1.99.1 (5f94df478 2026-08-27)`. [Artefakty](../../.test-vm/artifacts/20261026T130747Z-199d7cde-378e-419b-8a80-88f27a851020/host.log). Pierwsza próba końcowej bramki zatrzymała się na formatowaniu, poprawiono formatowanie bez zmiany zachowania.
+  - B — dodatkowo: `git diff --check` — PASS. Brak nowych zależności. Nie uruchomiono osobnego Rust 1.85 przebiegu; nie dodano zależności ani API wymagających dodatkowego dowodu MSRV.
+  - Następne: część C — migrate-legacy.
 
 ### Zadanie 2.5: Przepływ WordPress restore
 
@@ -183,7 +188,7 @@
 
 ## Następne zadanie
 
-**Etap 2, zadanie 2.4 — MANAGER-AUX.** PROFILE-LIFECYCLE (A–C) ukończone i zweryfikowane.
+**Etap 2, zadanie 2.4, część C — MANAGER-AUX / migrate-legacy.** Części A i B ukończone i zweryfikowane.
 
 ## Historia aktualizacji
 
@@ -197,3 +202,4 @@
 - 2026-10-26: właściciel przywrócił dostęp do VM. PROFILE-LIFECYCLE B ukończono test-first: RED 132/2, GREEN 134/134, końcowa `make validate-rust-migration` PASS (134/134) w Debian 13. Dodano zdarzenia efektów commit, aktywacji, manifestu i częściowych wyników; następne jest C — uninstall. Szczegóły: [worklog](../../changelogs/10-26-2026-11:51-agent-worklog.md).
 - 2026-10-26: PROFILE-LIFECYCLE C ukończono test-first w Debian 13: RED 134/4 przed instrumentacją; końcowa bramka PASS (139/139). Dodano faktyczne zmiany uninstallu, ostrzeżenia cleanupu, błędy usuwania/zapisu manifestu i wyniki częściowe przy zachowaniu dotychczasowych błędów CLI. `context.txt` pozostaje nietknięty przez logikę uninstallu. Następne: MANAGER-AUX. Szczegóły: [worklog](../../changelogs/10-26-2026-12:56-agent-worklog.md).
 - 2026-10-26: MANAGER-AUX A — status/validate — ukończone test-first. Dodano korelację i terminal statusu, per-klientowe wyniki oraz obserwacje konfiguracji/różnic/payloadów; walidacja raportuje rzeczywisty zakres, kontrole, pominięcia, porównanie MCP i przyczyny. RED ujawnił brak zdarzeń status/validate; końcowa bramka w Debian 13 PASS (147/147). Szczegóły, wersje i artefakty w sekcji zadania 2.4. Następne: część B — create/rename/bump.
+- 2026-10-26: MANAGER-AUX B — create/rename/bump — ukończone test-first. Pojedyncza operacja wskazuje repozytorium źródeł, rejestruje transformacje i opublikowane pliki, a bajty metadanych są dostępne w payloadach; zachowano CLI i łańcuch błędu. RED 147/1, GREEN 148/148, końcowa bramka `make validate-rust-migration` PASS (148/148), Debian 13, rustc/Cargo 1.99.1. `git diff --check` PASS. Szczegóły i artefakty w sekcji 2.4. Następne: część C — migrate-legacy.
