@@ -15,6 +15,470 @@ use crate::{
     },
 };
 
+fn diagnostic_events(root: &Path) -> Vec<serde_json::Value> {
+    let run = fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.is_dir() && path.join("format").exists())
+        .unwrap();
+    let mut segments = fs::read_dir(run)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("events-")
+        })
+        .collect::<Vec<_>>();
+    segments.sort();
+    segments
+        .into_iter()
+        .flat_map(|path| {
+            fs::read_to_string(path)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect::<Vec<serde_json::Value>>()
+        })
+        .collect()
+}
+
+#[test]
+fn profile_install_diagnostics_correlate_calls_and_match_prepared_state() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let results = with_session(&session, || {
+        let first = run(
+            &context,
+            project.path(),
+            A::Install,
+            ClientSelection::All,
+            Some("wordpress"),
+        );
+        let second = run(
+            &context,
+            project.path(),
+            A::Install,
+            ClientSelection::All,
+            Some("wordpress"),
+        );
+        (first, second)
+    });
+    session.flush();
+    assert!(results.0.is_ok() && results.1.is_ok());
+    let events = diagnostic_events(logs.path());
+    let starts = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.operation.started")
+        .collect::<Vec<_>>();
+    assert_eq!(starts.len(), 2, "each call needs its own operation start");
+    let ids = starts
+        .iter()
+        .map(|event| event["fields"]["operation_id"].as_str().unwrap())
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(ids.len(), 2, "operation ids must be unique within one run");
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.client.skipped"
+            && event["fields"]["reason"] == "same_profile"
+    }));
+    assert_eq!(
+        read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]
+            .as_object()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert!(project.path().join("opencode.json").is_file());
+    assert!(project.path().join(".claude/settings.json").is_file());
+    assert!(project.path().join(".codex/config.toml").is_file());
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.operation.finished"
+            && event["fields"]["result"] == "success"
+    }));
+}
+
+#[test]
+fn profile_install_all_conflict_does_not_report_or_commit_prepared_clients() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (source, context) = native_source();
+    put(
+        source.path(),
+        "profiles/empty/profile.json",
+        br#"{"name":"empty","version":"1.0.0","description":"Empty"}"#,
+    );
+    put(
+        source.path(),
+        "profiles/empty/skills.json",
+        br#"{"skills":[]}"#,
+    );
+    put(
+        source.path(),
+        "profiles/empty/mcp.json",
+        br#"{"servers":[]}"#,
+    );
+    let project = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::Claude,
+        Some("empty"),
+    );
+    let before = snapshot(project.path());
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let result = with_session(&session, || {
+        run(
+            &context,
+            project.path(),
+            A::Install,
+            ClientSelection::All,
+            Some("wordpress"),
+        )
+    });
+    session.flush();
+    assert!(result.is_err());
+    assert_eq!(
+        before,
+        snapshot(project.path()),
+        "preflight conflict must precede every commit"
+    );
+    let events = diagnostic_events(logs.path());
+    assert!(
+        events.iter().any(|event| {
+            event["fields"]["event"] == "profile.prepare.started"
+                && event["fields"]["client"] == "opencode"
+        }),
+        "events: {:?}",
+        events
+            .iter()
+            .map(|event| event["fields"].clone())
+            .collect::<Vec<_>>()
+    );
+    let operation_results = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.operation.finished")
+        .map(|event| event["fields"]["result"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(operation_results, ["error"], "operation result records");
+    assert!(!events.iter().any(|event| {
+        event["fields"]["event"] == "profile.change.completed"
+            && event["fields"]["client"] == "opencode"
+    }));
+}
+
+#[test]
+fn profile_lifecycle_errors_report_missing_state_invalid_manifest_and_single_client_conflict() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (_source, context) = native_source();
+    let missing = tempfile::tempdir().unwrap();
+    let invalid = tempfile::tempdir().unwrap();
+    let installed = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        installed.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    let installed_before = snapshot(installed.path());
+    let invalid_bytes = b"{not a manifest";
+    put(invalid.path(), ".ai-profiles/state.json", invalid_bytes);
+
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let results = with_session(&session, || {
+        let missing_state = run(
+            &context,
+            missing.path(),
+            A::Update,
+            ClientSelection::All,
+            None,
+        );
+        let invalid_manifest = run(
+            &context,
+            invalid.path(),
+            A::Update,
+            ClientSelection::All,
+            None,
+        );
+        let single_conflict = run(
+            &context,
+            installed.path(),
+            A::Install,
+            ClientSelection::One(Client::OpenCode),
+            Some("wordpress"),
+        );
+        (missing_state, invalid_manifest, single_conflict)
+    });
+    session.flush();
+    assert!(results.0.is_err() && results.1.is_err() && results.2.is_err());
+    assert!(!missing.path().join(".ai-profiles/state.json").exists());
+    assert_eq!(
+        fs::read(invalid.path().join(".ai-profiles/state.json")).unwrap(),
+        invalid_bytes
+    );
+    assert_eq!(installed_before, snapshot(installed.path()));
+
+    let events = diagnostic_events(logs.path());
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.error"
+            && event["fields"]["stage"] == "manifest_load"
+            && event["fields"]["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty())
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.client.conflict"
+            && event["fields"]["client"] == "opencode"
+            && event["fields"]["reason"] == "already_installed"
+    }));
+    let operation_results = events
+        .iter()
+        .filter(|event| event["fields"]["event"] == "profile.operation.finished")
+        .map(|event| event["fields"]["result"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(operation_results.len(), 3);
+    assert!(operation_results.iter().all(|result| *result == "error"));
+}
+
+#[test]
+fn profile_uninstall_preflight_logs_conflict_and_preserves_modified_managed_file() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        profile_management::scoped::run,
+    };
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    scoped_action(
+        &context,
+        project.path(),
+        A::Install,
+        Client::OpenCode,
+        Some("wordpress"),
+    );
+    let managed = project
+        .path()
+        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md");
+    let user_bytes = b"user-owned edit that uninstall must preserve";
+    fs::write(&managed, user_bytes).unwrap();
+    let state_path = project.path().join(".ai-profiles/state.json");
+    let state_before = fs::read(&state_path).unwrap();
+
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let result = with_session(&session, || {
+        run(
+            &context,
+            project.path(),
+            A::Uninstall,
+            ClientSelection::One(Client::OpenCode),
+            None,
+        )
+    });
+    session.flush();
+
+    assert!(result.is_err());
+    assert_eq!(fs::read(&managed).unwrap(), user_bytes);
+    assert_eq!(fs::read(state_path).unwrap(), state_before);
+    let events = diagnostic_events(logs.path());
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.preflight.started"
+            && event["fields"]["stage"] == "preflight_remove"
+            && event["fields"]["client"] == "opencode"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.error"
+            && event["fields"]["stage"] == "preflight_remove"
+            && event["fields"]["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty())
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.operation.finished"
+            && event["fields"]["result"] == "error"
+    }));
+}
+
+#[test]
+fn profile_commit_logs_applied_changes_activation_and_persisted_manifest() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{Client, ClientSelection, ProfileAction as A},
+        process::{CommandOutput, CommandSpec, ProcessRunner},
+        profile_management::scoped::run_with_runner,
+    };
+    use std::{cell::Cell, os::unix::process::ExitStatusExt};
+    struct Runner(Cell<usize>);
+    impl ProcessRunner for Runner {
+        fn run(
+            &self,
+            _spec: CommandSpec,
+        ) -> std::result::Result<CommandOutput, crate::error::ProcessError> {
+            self.0.set(self.0.get() + 1);
+            Ok(CommandOutput {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        }
+    }
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let runner = Runner(Cell::new(0));
+    let result = with_session(&session, || {
+        run_with_runner(
+            &context,
+            project.path(),
+            A::Install,
+            ClientSelection::One(Client::OpenCode),
+            Some("wordpress"),
+            &runner,
+        )
+    });
+    assert!(
+        session.complete(),
+        "diagnostic session must remain writable"
+    );
+    session.flush();
+    assert!(result.is_ok());
+    assert_eq!(
+        runner.0.get(),
+        0,
+        "OpenCode does not need native activation"
+    );
+    let events = diagnostic_events(logs.path());
+    let changed = events.iter().find(|event| {
+        event["fields"]["event"] == "profile.change.completed"
+            && event["fields"]["stage"] == "managed_files"
+    });
+    let event_names = events
+        .iter()
+        .filter_map(|event| event["fields"]["event"].as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        changed.is_some(),
+        "applied filesystem writes need an event; got: {event_names:?}"
+    );
+    assert_eq!(changed.unwrap()["fields"]["result"], "applied");
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.activation.finished"
+            && event["fields"]["client"] == "opencode"
+            && event["fields"]["result"] == "prepared"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.manifest.saved"
+            && event["fields"]["client"] == "opencode"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.operation.finished"
+            && event["fields"]["result"] == "success"
+            && event["fields"]["coverage"] == "commit_and_activation"
+    }));
+    let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert_eq!(state["clients"]["opencode"]["profile"], "wordpress");
+    assert!(project.path().join("opencode.json").is_file());
+}
+
+#[test]
+fn profile_lifecycle_logs_activation_failure_and_retained_partial_state() {
+    use crate::{
+        logging::{with_session, Config, Session},
+        model::{ClientSelection, ProfileAction as A},
+        process::{CommandOutput, CommandSpec, ProcessRunner},
+        profile_management::scoped::run_with_runner,
+    };
+    use std::{cell::RefCell, os::unix::process::ExitStatusExt};
+    struct Runner(RefCell<Vec<String>>);
+    impl ProcessRunner for Runner {
+        fn run(
+            &self,
+            spec: CommandSpec,
+        ) -> std::result::Result<CommandOutput, crate::error::ProcessError> {
+            self.0
+                .borrow_mut()
+                .push(spec.program.to_string_lossy().into_owned());
+            Ok(CommandOutput {
+                status: std::process::ExitStatus::from_raw(if spec.program == "claude" {
+                    0
+                } else {
+                    256
+                }),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        }
+    }
+    let (_source, context) = native_source();
+    let project = tempfile::tempdir().unwrap();
+    let logs = tempfile::tempdir().unwrap();
+    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+    let runner = Runner(RefCell::new(Vec::new()));
+    let result = with_session(&session, || {
+        run_with_runner(
+            &context,
+            project.path(),
+            A::Install,
+            ClientSelection::All,
+            Some("wordpress"),
+            &runner,
+        )
+    });
+    session.flush();
+    assert!(result.is_err());
+    assert_eq!(*runner.0.borrow(), ["claude", "codex"]);
+    let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+    assert_eq!(state["clients"]["opencode"]["profile"], "wordpress");
+    assert_eq!(
+        state["clients"]["claude"]["native"]["claude"]["activation"],
+        "synchronized"
+    );
+    assert_eq!(
+        state["clients"]["codex"]["native"]["codex"]["activation"],
+        "failed"
+    );
+    let events = diagnostic_events(logs.path());
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.activation.finished"
+            && event["fields"]["client"] == "codex"
+            && event["fields"]["result"] == "failed"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.manifest.saved"
+            && event["fields"]["client"] == "claude"
+    }));
+    assert!(events.iter().any(|event| {
+        event["fields"]["event"] == "profile.operation.finished"
+            && event["fields"]["result"] == "partial"
+            && event["fields"]["retained_clients"] == "opencode,claude,codex"
+    }));
+}
+
 #[test]
 fn client_mcp_ownership_preserves_unrelated_config_and_rejects_manual_changes() {
     use crate::profile_management::native::{configure_claude_mcp, configure_codex_mcp};

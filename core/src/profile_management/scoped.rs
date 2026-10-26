@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{
-    installation, native,
+    diagnostics, installation, native,
     payload::{desired_files_for, PayloadFile, PayloadKind},
     uninstall,
 };
@@ -148,6 +148,13 @@ struct Prepared {
     writes: BTreeMap<String, Vec<u8>>,
     old: Option<Value>,
     record: Value,
+}
+
+#[derive(Default)]
+struct CommitProgress {
+    applied_clients: std::collections::BTreeSet<String>,
+    saved_clients: std::collections::BTreeSet<String>,
+    persisted_clients: std::collections::BTreeSet<String>,
 }
 
 fn check_destination(project: &Path, relative: &str) -> Result<()> {
@@ -357,7 +364,20 @@ impl Prepared {
         project: &Path,
         manifest: &mut Manifest,
         runner: &impl crate::process::ProcessRunner,
+        operation_id: &str,
+        action: &str,
+        progress: &mut CommitProgress,
     ) -> Result<()> {
+        let client = self.client.as_str();
+        let mut removed_count = 0usize;
+        let mut written_count = 0usize;
+        tracing::info!(
+            event = "profile.commit.started",
+            operation_id,
+            action,
+            client,
+            profile = %self.record["profile"],
+        );
         if let Some(old) = &self.old {
             if let Some(files) = old.get("files").and_then(Value::as_object) {
                 let removed: Vec<String> = files
@@ -367,6 +387,17 @@ impl Prepared {
                     .collect();
                 for relative in &removed {
                     fs::remove_file(file_path(project, relative)?)?;
+                    progress.applied_clients.insert(client.to_owned());
+                    removed_count += 1;
+                    tracing::info!(
+                        event = "profile.change.applied",
+                        operation_id,
+                        action,
+                        client,
+                        stage = "managed_files",
+                        change = "removed",
+                        path = relative.as_str(),
+                    );
                 }
                 cleanup_empty_directories(project, &removed)?;
             }
@@ -377,19 +408,59 @@ impl Prepared {
                 PayloadKind::Data => write_bytes(&path, &file.contents)?,
                 PayloadKind::Executable => write_executable(&path, &file.contents)?,
             }
+            progress.applied_clients.insert(client.to_owned());
+            written_count += 1;
+            tracing::info!(
+                event = "profile.change.applied",
+                operation_id,
+                action,
+                client,
+                stage = "managed_files",
+                change = "written",
+                path = file.relative_path.as_str(),
+            );
         }
+        tracing::info!(
+            event = "profile.change.completed",
+            operation_id,
+            action,
+            client,
+            stage = "managed_files",
+            result = "applied",
+            file_count = written_count,
+            removed_count,
+        );
         // Native manifests allow an empty skill selection.
         fs::create_dir_all(
             project.join(format!("{}/skills", Layout::Isolated(self.client).plugin())),
         )?;
         for (relative, bytes) in &self.writes {
             native::write_config(project, relative, bytes).map_err(InstallationError::Native)?;
+            progress.applied_clients.insert(client.to_owned());
+            tracing::info!(
+                event = "profile.change.applied",
+                operation_id,
+                action,
+                client,
+                stage = "configuration",
+                change = "written",
+                path = relative.as_str(),
+            );
         }
         if self.client == Client::OpenCode {
             if let Some(old) = &self.old {
                 crate::project::remove_gitignore_line(project, old)?;
             }
         }
+        tracing::info!(
+            event = "profile.change.completed",
+            operation_id,
+            action,
+            client,
+            stage = "configuration",
+            result = "applied",
+            file_count = self.writes.len(),
+        );
         let key = self.client.as_str();
         let activation = match self.client {
             Client::OpenCode => json!({"activation":"prepared"}),
@@ -439,8 +510,36 @@ impl Prepared {
                 meta.insert("last_successful_sync".into(), previous.clone());
             }
         }
+        let activation_result = activation["activation"].as_str().unwrap_or("unknown");
+        let activation_reason = activation
+            .get("reason")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        let activation_stage = activation
+            .get("stage")
+            .and_then(|value| value.as_str())
+            .unwrap_or("none");
+        tracing::info!(
+            event = "profile.activation.finished",
+            operation_id,
+            action,
+            client,
+            result = activation_result,
+            reason = activation_reason,
+            stage = activation_stage,
+        );
         manifest.clients.insert(key.into(), self.record);
         manifest.save(project)?;
+        progress.saved_clients.insert(key.to_owned());
+        progress.persisted_clients = manifest.clients.keys().cloned().collect();
+        tracing::info!(
+            event = "profile.manifest.saved",
+            operation_id,
+            action,
+            client,
+            result = "saved",
+            clients = manifest.clients.len(),
+        );
         let guide = Layout::Isolated(self.client).readme();
         if project.join(&guide).is_file() {
             println!("Instrukcja konfiguracji: {guide}");
@@ -456,6 +555,15 @@ impl Prepared {
                 format!("{key}: aktywacja nie powiodła się; przygotowany stan zachowano").into(),
             );
         }
+        tracing::info!(
+            event = "profile.client.finished",
+            operation_id,
+            action,
+            client,
+            result = "success",
+            activation = activation["activation"].as_str().unwrap_or("unknown"),
+            state = "persisted",
+        );
         Ok(())
     }
 }
@@ -485,7 +593,101 @@ pub(crate) fn run_with_runner(
     profile: Option<&str>,
     runner: &impl crate::process::ProcessRunner,
 ) -> Result<()> {
-    let mut manifest = Manifest::load(context, project)?;
+    if action == ProfileAction::Status {
+        return run_lifecycle_with_runner(context, project, action, selection, profile, runner, "");
+    }
+    diagnostics::operation(action, project, |operation_id| {
+        run_lifecycle_with_runner(
+            context,
+            project,
+            action,
+            selection,
+            profile,
+            runner,
+            operation_id,
+        )
+    })
+}
+
+fn run_lifecycle_with_runner(
+    context: &RepositoryContext,
+    project: &Path,
+    action: ProfileAction,
+    selection: ClientSelection,
+    profile: Option<&str>,
+    runner: &impl crate::process::ProcessRunner,
+    operation_id: &str,
+) -> Result<()> {
+    if action == ProfileAction::Status {
+        return run_lifecycle_inner(
+            context,
+            project,
+            action,
+            selection,
+            profile,
+            runner,
+            operation_id,
+        );
+    }
+    let result = run_lifecycle_inner(
+        context,
+        project,
+        action,
+        selection,
+        profile,
+        runner,
+        operation_id,
+    );
+    if result.is_ok() {
+        tracing::info!(
+            event = "profile.operation.finished",
+            operation_id,
+            action = diagnostics::action_name(action),
+            project = %project.display(),
+            result = "success",
+            coverage = "commit_and_activation",
+        );
+    }
+    result
+}
+
+fn run_lifecycle_inner(
+    context: &RepositoryContext,
+    project: &Path,
+    action: ProfileAction,
+    selection: ClientSelection,
+    profile: Option<&str>,
+    runner: &impl crate::process::ProcessRunner,
+    operation_id: &str,
+) -> Result<()> {
+    let action_name = diagnostics::action_name(action);
+    let mut manifest = if action == ProfileAction::Status {
+        Manifest::load(context, project)?
+    } else {
+        match Manifest::load(context, project) {
+            Ok(manifest) => {
+                tracing::info!(
+                    event = "profile.manifest.loaded",
+                    operation_id,
+                    action = action_name,
+                    clients = manifest.clients.len(),
+                    result = "success",
+                );
+                manifest
+            }
+            Err(error) => {
+                tracing::error!(
+                    event = "profile.error",
+                    operation_id,
+                    action = action_name,
+                    stage = "manifest_load",
+                    error = %diagnostics::error_chain(error.as_ref()),
+                );
+                diagnostics::failed(operation_id, action_name, project);
+                return Err(error);
+            }
+        }
+    };
     let selected: Vec<Client> = match selection {
         ClientSelection::One(c) => vec![c],
         ClientSelection::All => Client::ALL.to_vec(),
@@ -513,6 +715,35 @@ pub(crate) fn run_with_runner(
     let mut removals = Vec::new();
     for client in selected {
         let old = manifest.clients.get(client.as_str());
+        let effective_profile = match action {
+            ProfileAction::Install | ProfileAction::Switch => profile,
+            ProfileAction::Update => {
+                old.and_then(|record| record.get("profile").and_then(Value::as_str))
+            }
+            ProfileAction::Uninstall => None,
+            _ => None,
+        };
+        let previous_profile = old
+            .and_then(|record| record.get("profile").and_then(Value::as_str))
+            .unwrap_or("none");
+        let client_span = tracing::info_span!(
+            "profile.client",
+            operation_id,
+            action = action_name,
+            client = client.as_str(),
+            project = %project.display(),
+            profile = effective_profile.unwrap_or("none"),
+            previous_profile,
+        );
+        let _client_guard = client_span.enter();
+        tracing::info!(
+            event = "profile.client.selected",
+            operation_id,
+            action = action_name,
+            client = client.as_str(),
+            profile = effective_profile.unwrap_or("none"),
+            previous_profile,
+        );
         match action {
             ProfileAction::Install => {
                 let profile = profile.ok_or("install wymaga profilu")?;
@@ -520,25 +751,98 @@ pub(crate) fn run_with_runner(
                     if selection == ClientSelection::All
                         && old.get("profile").and_then(Value::as_str) == Some(profile)
                     {
+                        tracing::info!(
+                            event = "profile.client.skipped",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            profile,
+                            reason = "same_profile"
+                        );
                         continue;
                     }
+                    let previous_profile = old
+                        .get("profile")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown");
+                    tracing::error!(
+                        event = "profile.client.conflict",
+                        operation_id,
+                        action = action_name,
+                        client = client.as_str(),
+                        profile,
+                        previous_profile,
+                        reason = "already_installed"
+                    );
+                    diagnostics::failed(operation_id, action_name, project);
                     return Err(format!(
                         "{}: profil już zainstalowany; użyj update albo switch",
                         client.as_str()
                     )
                     .into());
                 }
-                prepared.push(prepare(context, project, client, profile, None)?);
+                prepared.push(prepare_logged(
+                    context,
+                    project,
+                    client,
+                    profile,
+                    None,
+                    operation_id,
+                    action_name,
+                )?);
             }
             ProfileAction::Update | ProfileAction::Switch | ProfileAction::Uninstall => {
                 let Some(old) = old else {
                     if selection == ClientSelection::All {
+                        tracing::info!(
+                            event = "profile.client.skipped",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            reason = "not_installed"
+                        );
                         continue;
                     }
+                    tracing::error!(
+                        event = "profile.client.conflict",
+                        operation_id,
+                        action = action_name,
+                        client = client.as_str(),
+                        reason = "not_installed"
+                    );
+                    diagnostics::failed(operation_id, action_name, project);
                     return Err(format!("{}: brak profilu; użyj install", client.as_str()).into());
                 };
                 if action == ProfileAction::Uninstall {
-                    preflight_remove(project, client, old)?;
+                    tracing::info!(
+                        event = "profile.preflight.started",
+                        operation_id,
+                        action = action_name,
+                        client = client.as_str(),
+                        stage = "preflight_remove"
+                    );
+                    match preflight_remove(project, client, old) {
+                        Ok(()) => tracing::info!(
+                            event = "profile.preflight.finished",
+                            operation_id,
+                            action = action_name,
+                            client = client.as_str(),
+                            stage = "preflight_remove",
+                            result = "success"
+                        ),
+                        Err(error) => {
+                            tracing::error!(
+                                event = "profile.error",
+                                operation_id,
+                                action = action_name,
+                                client = client.as_str(),
+                                stage = "preflight_remove",
+                                error = %diagnostics::error_chain(error.as_ref())
+                            );
+                            diagnostics::failed(operation_id, action_name, project);
+                            return Err(error);
+                        }
+                    }
                     removals.push((client, old.clone()));
                 } else {
                     let profile = if action == ProfileAction::Switch {
@@ -547,7 +851,15 @@ pub(crate) fn run_with_runner(
                         old.get("profile").and_then(Value::as_str)
                     }
                     .ok_or("Brak profilu")?;
-                    prepared.push(prepare(context, project, client, profile, Some(old))?);
+                    prepared.push(prepare_logged(
+                        context,
+                        project,
+                        client,
+                        profile,
+                        Some(old),
+                        operation_id,
+                        action_name,
+                    )?);
                 }
             }
             ProfileAction::Help
@@ -564,14 +876,46 @@ pub(crate) fn run_with_runner(
             println!("OK: wszyscy klienci mają wskazany profil; bez zmian");
             return Ok(());
         }
+        diagnostics::failed(operation_id, action_name, project);
         return Err(UninstallError::NoInstalledProfile.into());
     }
     let mut errors = Vec::new();
+    let mut completed_clients = Vec::new();
+    let mut progress = CommitProgress {
+        persisted_clients: manifest.clients.keys().cloned().collect(),
+        ..CommitProgress::default()
+    };
     for operation in prepared {
         let client = operation.client;
-        if let Err(error) = operation.commit(project, &mut manifest, runner) {
-            eprintln!("{}: {error}", client.as_str());
-            errors.push(client.as_str());
+        match operation.commit(
+            project,
+            &mut manifest,
+            runner,
+            operation_id,
+            action_name,
+            &mut progress,
+        ) {
+            Ok(()) => completed_clients.push(client.as_str()),
+            Err(error) => {
+                eprintln!("{}: {error}", client.as_str());
+                tracing::error!(
+                    event = "profile.client.finished",
+                    operation_id,
+                    action = action_name,
+                    client = client.as_str(),
+                    stage = "commit",
+                    result = "error",
+                    error = %diagnostics::error_chain(error.as_ref()),
+                    state = if progress.saved_clients.contains(client.as_str()) {
+                        "persisted"
+                    } else if progress.applied_clients.contains(client.as_str()) {
+                        "changes_applied"
+                    } else {
+                        "unchanged"
+                    },
+                );
+                errors.push(client.as_str());
+            }
         }
     }
     for (client, old) in removals {
@@ -579,6 +923,7 @@ pub(crate) fn run_with_runner(
             Ok(()) => {
                 manifest.clients.remove(client.as_str());
                 manifest.save(project)?;
+                progress.persisted_clients = manifest.clients.keys().cloned().collect();
                 println!("OK: {} usunięty", client.as_str());
             }
             Err(error) => {
@@ -590,11 +935,100 @@ pub(crate) fn run_with_runner(
     if errors.is_empty() {
         Ok(())
     } else {
+        let retained_clients = Client::ALL
+            .iter()
+            .map(|client| client.as_str())
+            .filter(|client| progress.persisted_clients.contains(*client))
+            .collect::<Vec<_>>()
+            .join(",");
+        tracing::error!(
+            event = "profile.operation.finished",
+            operation_id,
+            action = action_name,
+            project = %project.display(),
+            result = if completed_clients.is_empty()
+                && progress.applied_clients.is_empty()
+                && progress.saved_clients.is_empty()
+            {
+                "error"
+            } else {
+                "partial"
+            },
+            coverage = "commit_and_activation",
+            completed_clients = completed_clients.join(","),
+            failed_clients = errors.join(","),
+            retained_clients,
+        );
         Err(format!(
             "Operacja nie powiodła się dla: {}; pozostałe wyniki zachowano",
             errors.join(", ")
         )
         .into())
+    }
+}
+
+fn prepare_logged(
+    context: &RepositoryContext,
+    project: &Path,
+    client: Client,
+    profile: &str,
+    old: Option<&Value>,
+    operation_id: &str,
+    action: &str,
+) -> Result<Prepared> {
+    let span = tracing::info_span!(
+        "profile.stage",
+        operation_id,
+        action,
+        client = client.as_str(),
+        stage = "prepare",
+        profile,
+    );
+    let _guard = span.enter();
+    let previous_profile = old
+        .and_then(|record| record.get("profile").and_then(Value::as_str))
+        .unwrap_or("none");
+    tracing::info!(
+        event = "profile.prepare.started",
+        operation_id,
+        action,
+        client = client.as_str(),
+        profile,
+        previous_profile,
+    );
+    match prepare(context, project, client, profile, old) {
+        Ok(prepared) => {
+            tracing::info!(
+                event = "profile.prepare.finished",
+                operation_id,
+                action,
+                client = client.as_str(),
+                profile,
+                result = "success",
+                files = prepared.files.len(),
+                configurations = prepared.writes.len()
+            );
+            for file in &prepared.files {
+                tracing::info!(event = "profile.change.planned", operation_id, action, client = client.as_str(), profile, path = %file.relative_path, role = match file.kind { PayloadKind::Data => "managed_data", PayloadKind::Executable => "managed_executable" });
+            }
+            for path in prepared.writes.keys() {
+                tracing::info!(
+                    event = "profile.change.planned",
+                    operation_id,
+                    action,
+                    client = client.as_str(),
+                    profile,
+                    path,
+                    role = "configuration"
+                );
+            }
+            Ok(prepared)
+        }
+        Err(error) => {
+            tracing::error!(event = "profile.prepare.finished", operation_id, action, client = client.as_str(), profile, result = "error", error = %diagnostics::error_chain(error.as_ref()));
+            diagnostics::failed(operation_id, action, project);
+            Err(error)
+        }
     }
 }
 

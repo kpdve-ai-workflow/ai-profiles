@@ -1,4 +1,5 @@
 pub mod cli;
+mod diagnostics;
 pub(crate) mod installation;
 pub(crate) mod migration;
 pub(crate) mod native;

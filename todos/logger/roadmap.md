@@ -68,11 +68,21 @@
 
 ### Zadanie 2.3: Instalacja, aktualizacja, zmiana i usuwanie profilu
 
-- [ ] **PROFILE-LIFECYCLE — Instrumentacja install/update/switch/uninstall.**
+- [~] **PROFILE-LIFECYCLE — Instrumentacja install/update/switch/uninstall.**
   - Zależność techniczna: FOUNDATION-BASE. Zalecana kolejność w etapie: po PROCESS-LIFECYCLE; nie wymaga to ukończonego przechwytywania strumieni.
   - Zakres: przygotowanie, decyzje, konflikty, zapis/usuwanie, aktywacja, zapis stanu, wynik każdego klienta i zachowane wyniki częściowe.
   - Kontrakt: [lifecycle klientów](concepts/profiles.md#client-lifecycle).
-  - Weryfikacja: niewykonana.
+  - Podział: A — wybór i przygotowanie; B — zapis i aktywacja; C — uninstall. A i B ukończone i zweryfikowane; C nierozpoczęta.
+  - A — implementacja: dodano korelację `operation_id` z `run_id`, spany operacji/klienta/etapu, wynik manifestu, decyzje wyboru/pominięcia, przygotowanie, planowane ścieżki zmian, preflight uninstallu i błędy przed spłaszczeniem. Status pozostał poza instrumentacją; testy porównują logi z plikami i manifestem, w tym zachowanie zmienionego pliku przy konflikcie uninstallu.
+  - A — RED: `make test` w VM Debian 13 — 128 passed, 2 failed; oba nowe testy wykryły brak zdarzeń operacji/przygotowania. [Artefakty](../../.test-vm/artifacts/20261026T100813Z-ebf88692-16f5-435c-afb5-727dd6fe1aba/host.log).
+  - A — GREEN: `make test` — 131/131 passed, w tym 26 lifecycle tests. [Artefakty](../../.test-vm/artifacts/20261026T102132Z-57717027-62b3-43d9-bd66-07f7a8f3bd33/host.log).
+  - A — bramka: `make validate-rust-migration` — PASS: format, release-build, clippy, make-validate i make-test (132/132; 27 lifecycle tests). VM Debian 13; `rustc 1.99.1 (58cf8f9c3 2026-10-13)`, `cargo 1.99.1 (5f94df478 2026-08-27)`. [Artefakty](../../.test-vm/artifacts/20261026T102612Z-c7b3d3ff-81ab-4985-9865-7c023c875349/host.log).
+  - Próby pośrednie: jedna bramka zatrzymała się na formatowaniu przed innymi kontrolami; późniejsze przebiegi wykryły i poprawiły błąd kompilacji oraz asercje końcowego wyniku. Wystąpiły też przejściowe awarie istniejących testów równoległych/timeoutu; końcowa bramka przeszła bez pomijania testów. Brak zmian zależności.
+  - B — implementacja: commit raportuje faktycznie zapisane/usunięte pliki i konfiguracje, wynik aktywacji, powodzenie zapisu manifestu, rezultat klienta oraz błąd z zachowanym stanem. Wynik operacji częściowej zawiera ukończonych, nieudanych i nadal zapisanych klientów.
+  - B — RED: `make test` w Debian 13 VM — 132 passed, 2 nowe testy failed dokładnie z powodu braku zdarzeń commit/aktywacji. [Artefakty](../../.test-vm/artifacts/20261026T103620Z-154f57ac-4406-4dae-a47f-f711305839ef/host.log).
+  - B — GREEN: `make test` — 134/134 passed. Wcześniejsze przebiegi po RED wykryły problem formatowania, błąd Clippy oraz przejściowe `Text file busy`/timeout w istniejących testach; poprawiono kod, a testów nie pomijano. [Artefakty](../../.test-vm/artifacts/20261026T104642Z-b5f381a3-44b2-4895-918d-9973d15417b8/host.log).
+  - B — bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (134/134), Debian 13. [Artefakty](../../.test-vm/artifacts/20261026T105027Z-dca06e4c-bebc-40e3-ac0b-ba94eb6dc3c9/host.log); [worklog](../../changelogs/10-26-2026-11:51-agent-worklog.md).
+  - Następne zadanie: etap 2, zadanie 2.3, część C — instrumentacja usuwania profilu i wyników po błędzie usuwania.
 
 ### Zadanie 2.4: Pozostałe komendy menedżera
 
@@ -161,7 +171,7 @@
 
 ## Następne zadanie
 
-**Etap 2, zadanie 2.2 — PROCESS-DATA ukończone i zweryfikowane.** STREAM-BOUNDARY rozstrzygnięte przez właściciela. Zadanie 2.3 nie zostało rozpoczęte w tym zleceniu.
+**Etap 2, zadanie 2.3 — PROFILE-LIFECYCLE, część C.** Części A i B ukończone i zweryfikowane; kolejnym zakresem jest uninstall.
 
 ## Historia aktualizacji
 
@@ -170,3 +180,6 @@
 - 2026-10-26: ukończono PROCESS-LIFECYCLE test-first; zapisano RED/GREEN, wyniki `make validate-rust-migration`, wersje kompilatorów i ścieżki artefaktów. PROCESS-DATA nadal blokuje nierozstrzygnięty STREAM-BOUNDARY.
 - 2026-10-26: właściciel rozstrzygnął STREAM-BOUNDARY: zachowanie procesów bez zmian; obserwacja wyłącznie istniejących operacji I/O. PROCESS-DATA rozpoczęte.
 - 2026-10-26: ukończono PROCESS-DATA test-first; targeted 19/19 i `make validate-rust-migration` 128/128 w Debian 13.7, Cargo/rustc 1.99.1. Zapisano logi RED/GREEN i bramki. Nie twierdzimy, że wszystkie strumienie dziecka są przechwytywane.
+- 2026-10-26: ukończono PROFILE-LIFECYCLE A test-first. RED: 128 passed/2 nowe testy failed; GREEN: 131/131; końcowa `make validate-rust-migration` po dodaniu testu preflight uninstallu PASS, 132/132, Debian 13, rustc/Cargo 1.99.1. Szczegóły i artefakty w sekcji zadania 2.3. B — zapis, aktywacja i wyniki częściowe — jest jedynym następnym krokiem.
+- 2026-10-26: rozpoczęto PROFILE-LIFECYCLE B, dodając testy efektów commit/manifestu i zachowanego stanu po błędzie aktywacji. `make test` nie dotarło do Cargo: brak uprawnień hosta do socketu Incus. Nie potwierdzono RED i nie rozpoczęto implementacji; B oczekuje na dostęp do wymaganej VM.
+- 2026-10-26: właściciel przywrócił dostęp do VM. PROFILE-LIFECYCLE B ukończono test-first: RED 132/2, GREEN 134/134, końcowa `make validate-rust-migration` PASS (134/134) w Debian 13. Dodano zdarzenia efektów commit, aktywacji, manifestu i częściowych wyników; następne jest C — uninstall. Szczegóły: [worklog](../../changelogs/10-26-2026-11:51-agent-worklog.md).
