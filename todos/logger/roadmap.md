@@ -2,12 +2,12 @@
 
 **Cel:** pełna lokalna diagnostyka narzędzi Rust, pozwalająca odtworzyć przepływ operacji i danych bez zmiany zachowania aplikacji. Ten plik jest jedynym źródłem bieżących statusów i kolejności prac.
 
-**Aktualnie:** etap 1 ukończony i zweryfikowany; etap 2 jest w toku. PROCESS-LIFECYCLE, PROCESS-DATA i PROFILE-LIFECYCLE ukończone i zweryfikowane; trzy zadania etapu 2 pozostały.
+**Aktualnie:** etap 1 ukończony i zweryfikowany; etap 2 jest w toku. PROCESS-LIFECYCLE, PROCESS-DATA, PROFILE-LIFECYCLE i MANAGER-AUX ukończone i zweryfikowane; dwa zadania etapu 2 pozostały.
 
 | Etap | Zakres i odnośnik | Stan wynikający z zadań |
 | --- | --- | --- |
 | 1 | [Fundament loggera](#etap-1-fundament-loggera) | Ukończony i zweryfikowany: 109/109. |
-| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | W toku: PROCESS-LIFECYCLE, PROCESS-DATA i PROFILE-LIFECYCLE ukończone; trzy zadania pozostały. |
+| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | W toku: PROCESS-LIFECYCLE, PROCESS-DATA, PROFILE-LIFECYCLE i MANAGER-AUX ukończone; dwa zadania pozostały. |
 | 3 | [Diagnostyka Novamiry](#etap-3-diagnostyka-novamiry) | Do wykonania; integracja mostu wymaga ustalenia kanału diagnostycznego. |
 | 4 | [Obserwacja po exec](#etap-4-obserwacja-po-exec) | Zablokowany do ustalenia kontraktu nadzorowania lub collectora. |
 | 5 | [Opcjonalna integracja Grafana i Loki](#etap-5-opcjonalna-integracja-grafana-i-loki) | Poza bieżącym wdrożeniem; wymaga osobnej zgody. |
@@ -91,7 +91,7 @@
 
 ### Zadanie 2.4: Pozostałe komendy menedżera
 
-- [~] **MANAGER-AUX — Status, walidacja, migracja i zarządzanie profilami.**
+- [x] **MANAGER-AUX — Status, walidacja, migracja i zarządzanie profilami.**
   - Zależność: FOUNDATION-BASE.
   - Zakres: status, walidacja źródeł, migracja, tworzenie/zmiana nazwy/wersji profilu; dostępne przyczyny błędów przed spłaszczeniem ich do tekstu.
   - Podział: A — status/validate; B — create/rename/bump; C — migrate-legacy.
@@ -107,7 +107,11 @@
   - B — GREEN: `make test` — 148/148 passed. Jedna próba pośrednia zakończyła się wyłącznie zbyt szeroką asercją helpera lifecycle CLI (dodatkowe zdarzenia domenowe); helper rozdziela teraz zdarzenia `profile.*`/`payload.*`, pozostawiając ścisłe asercje cyklu CLI. [Artefakt GREEN](../../.test-vm/artifacts/20261026T130609Z-437690a5-21ab-406f-9114-72355568598b/host.log).
   - B — bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (148/148), VM Debian 13; rustc `1.99.1 (58cf8f9c3 2026-10-13)`, Cargo `1.99.1 (5f94df478 2026-08-27)`. [Artefakty](../../.test-vm/artifacts/20261026T130747Z-199d7cde-378e-419b-8a80-88f27a851020/host.log). Pierwsza próba końcowej bramki zatrzymała się na formatowaniu, poprawiono formatowanie bez zmiany zachowania.
   - B — dodatkowo: `git diff --check` — PASS. Brak nowych zależności. Nie uruchomiono osobnego Rust 1.85 przebiegu; nie dodano zależności ani API wymagających dodatkowego dowodu MSRV.
-  - Następne: część C — migrate-legacy.
+  - C — wykonano: `migrate-legacy` jest jedną operacją źródłową z terminalem wyniku i pełnym łańcuchem błędu. Zdarzenia opisują wymaganie zgody, rozpoznanie formatu i pary profile/skill, wybór MCP, obecność użytych plików, zapis stanu i usunięcie gate. Surowe bajty legacy state, konfiguracji MCP, sprawdzanych plików i nowego stanu są dostępne przez payloady.
+  - C — RED: `make test` w VM — 148 passed/1 failed; nowy real-process test wykrył brak operacji i zdarzeń migracji. Pierwsza próba testu zakończyła się na wadliwym fixture (źródło binarium MCP); poprawiono fixture, następny RED był merytoryczny. [Artefakt RED](../../.test-vm/artifacts/20261026T131744Z-f1d3ccbe-2689-4f3e-9679-a2de0d2dcca3/host.log).
+  - C — GREEN: `make test` — 149/149 passed, w tym test procesu migracji potwierdzający zgodę, korelację, jeden terminal, wynik plików oraz dokładne bajty payloadów stanu i pliku zarządzanego. [Artefakt GREEN](../../.test-vm/artifacts/20261026T132202Z-25cad0c1-da88-4bdd-9c52-ef59786558f4/export/operation.log).
+  - C — bramka końcowa: `make validate-rust-migration` — PASS: format, release build, Clippy, `make validate`, testy Rust 149/149. Debian 13; rustc `1.99.1 (58cf8f9c3 2026-10-13)`, Cargo `1.99.1 (5f94df478 2026-08-27)`. [Artefakty](../../.test-vm/artifacts/20261026T132202Z-25cad0c1-da88-4bdd-9c52-ef59786558f4/host.log).
+  - Próba bramki przed formatowaniem zatrzymała się na format; formatowanie wykonano w VM, po czym pełna bramka przeszła. `git diff --check` — PASS. Brak nowych zależności; nie uruchomiono osobnego Rust 1.85 przebiegu, bo nie dodano zależności ani API wymagających dodatkowego dowodu MSRV. Brak testu awarii storage specyficznego dla migracji.
 
 ### Zadanie 2.5: Przepływ WordPress restore
 
@@ -188,7 +192,7 @@
 
 ## Następne zadanie
 
-**Etap 2, zadanie 2.4, część C — MANAGER-AUX / migrate-legacy.** Części A i B ukończone i zweryfikowane.
+**Etap 2, zadanie 2.5 — RESTORE-FLOW / przepływ WordPress restore.** MANAGER-AUX ukończone i zweryfikowane.
 
 ## Historia aktualizacji
 
@@ -203,3 +207,5 @@
 - 2026-10-26: PROFILE-LIFECYCLE C ukończono test-first w Debian 13: RED 134/4 przed instrumentacją; końcowa bramka PASS (139/139). Dodano faktyczne zmiany uninstallu, ostrzeżenia cleanupu, błędy usuwania/zapisu manifestu i wyniki częściowe przy zachowaniu dotychczasowych błędów CLI. `context.txt` pozostaje nietknięty przez logikę uninstallu. Następne: MANAGER-AUX. Szczegóły: [worklog](../../changelogs/10-26-2026-12:56-agent-worklog.md).
 - 2026-10-26: MANAGER-AUX A — status/validate — ukończone test-first. Dodano korelację i terminal statusu, per-klientowe wyniki oraz obserwacje konfiguracji/różnic/payloadów; walidacja raportuje rzeczywisty zakres, kontrole, pominięcia, porównanie MCP i przyczyny. RED ujawnił brak zdarzeń status/validate; końcowa bramka w Debian 13 PASS (147/147). Szczegóły, wersje i artefakty w sekcji zadania 2.4. Następne: część B — create/rename/bump.
 - 2026-10-26: MANAGER-AUX B — create/rename/bump — ukończone test-first. Pojedyncza operacja wskazuje repozytorium źródeł, rejestruje transformacje i opublikowane pliki, a bajty metadanych są dostępne w payloadach; zachowano CLI i łańcuch błędu. RED 147/1, GREEN 148/148, końcowa bramka `make validate-rust-migration` PASS (148/148), Debian 13, rustc/Cargo 1.99.1. `git diff --check` PASS. Szczegóły i artefakty w sekcji 2.4. Następne: część C — migrate-legacy.
+- 2026-10-26: rozpoczęto MANAGER-AUX C testem prawdziwego procesu migracji legacy; `make test` nie dotarło do Cargo z powodu braku uprawnień do `/run/incus/unix.socket` (`operation not permitted`). Nie potwierdzono RED ani nie rozpoczęto implementacji produkcyjnej. Zadanie oznaczono `[!]`; pierwszym krokiem po odblokowaniu jest ponowienie `make test` w VM. [Worklog](../../changelogs/10-26-2026-14:16-agent-worklog.md).
+- 2026-10-26: po przywróceniu uprawnień VM ukończono MANAGER-AUX C test-first. RED 148/1; GREEN i `make validate-rust-migration` PASS (149/149), Debian 13, rustc/Cargo 1.99.1. Zapisano wyniki partial state migration, kontrolę zgodności legacy, payloady i usunięcie approval gate. `git diff --check` PASS. MANAGER-AUX ukończone; następne RESTORE-FLOW. [Worklog](../../changelogs/10-26-2026-14:23-agent-worklog.md).

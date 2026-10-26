@@ -677,6 +677,160 @@ fn manager_profile_maintenance_records_source_changes_and_preserves_cli_results(
 }
 
 #[test]
+fn manager_legacy_migration_records_guard_and_successful_adoption() {
+    let fixture = Invocation::new();
+    let project = fixture.outside.path().join("project");
+    let guarded = fixture
+        .command()
+        .args(["migrate-legacy", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    assert_eq!(guarded.status.code(), Some(1));
+    assert!(guarded.stdout.is_empty());
+    assert_eq!(guarded.stderr, b"ERROR: Migrating a legacy installation requires --accept-existing after reviewing the files\n");
+    assert!(!project.join(".opencode/ai-profile-state.json").exists());
+    let guard_logs = fixture.logs();
+    let guard_records = guard_logs.first().expect("guard diagnostic session");
+    lifecycle_with_profile_events(
+        guard_records,
+        1,
+        Some((
+            "operation",
+            "Migrating a legacy installation requires --accept-existing after reviewing the files",
+        )),
+    );
+    assert_profile_operation(guard_records, "migrate-legacy", "error");
+
+    let assets = Checkout::with_assets(&crate::manager_fixture::binaries());
+    // Replace the invocation checkout with a source tree that includes the historical
+    // profile name accepted by migrate-legacy.
+    let root = &assets.root;
+    fs::create_dir_all(root.path().join("profiles/backend-go")).unwrap();
+    fs::write(
+        root.path().join("profiles/backend-go/mcp.json"),
+        br#"{"servers":["postgres"]}"#,
+    )
+    .unwrap();
+    let project = fixture.outside.path().join("project");
+    fs::create_dir_all(project.join(".opencode/plugins")).unwrap();
+    fs::create_dir_all(project.join(".opencode/skills/implementation-breakdown")).unwrap();
+    fs::create_dir_all(project.join(".opencode/skills/refine-plan")).unwrap();
+    fs::create_dir_all(project.join(".opencode/skills/go-backend")).unwrap();
+    fs::write(project.join(".opencode/workflow-rules.md"), b"rules").unwrap();
+    fs::write(project.join(".opencode/plugins/approval-gate.js"), b"gate").unwrap();
+    fs::write(
+        project.join(".opencode/skills/implementation-breakdown/SKILL.md"),
+        b"one",
+    )
+    .unwrap();
+    fs::write(
+        project.join(".opencode/skills/refine-plan/SKILL.md"),
+        b"two",
+    )
+    .unwrap();
+    fs::write(
+        project.join(".opencode/skills/go-backend/SKILL.md"),
+        b"three",
+    )
+    .unwrap();
+    fs::write(
+        project.join(".opencode/ai-profile-state.json"),
+        br#"{"profile":"backend-go","skill":"go-backend","mcp":"postgres"}"#,
+    )
+    .unwrap();
+    fs::write(
+        project.join("opencode.json"),
+        br#"{"mcp":{"postgres":{"type":"local","command":["docker","run"]}}}"#,
+    )
+    .unwrap();
+    fs::write(
+        project.join(".opencode/workflow-approval.json"),
+        b"approval",
+    )
+    .unwrap();
+
+    let fixture = Invocation {
+        checkout: assets,
+        outside: fixture.outside,
+    };
+    let output = fixture
+        .command()
+        .args(["migrate-legacy", "--accept-existing", "--project"])
+        .arg(&project)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    assert!(output.stderr.is_empty());
+    let state: Value =
+        serde_json::from_slice(&fs::read(project.join(".opencode/ai-profile-state.json")).unwrap())
+            .unwrap();
+    assert_eq!(state["format"], 1);
+    assert_eq!(state["profile"], "backend-go");
+    assert_eq!(state["mcp"]["postgres"]["command"][0], "docker");
+    assert!(!project.join(".opencode/workflow-approval.json").exists());
+    let logs = fixture.logs();
+    let success = logs.first().expect("successful migration log");
+    assert_profile_operation(success, "migrate-legacy", "success");
+    assert!(success.iter().any(|record| {
+        record["fields"]["event"] == "profile.migration.state_written"
+            && record["fields"]["path"] == ".opencode/ai-profile-state.json"
+    }));
+    assert!(success.iter().any(|record| {
+        record["fields"]["event"] == "profile.migration.gate_removed"
+            && record["fields"]["result"] == "success"
+    }));
+    let run_id = success[0]["run_id"].as_str().unwrap();
+    let assert_payload = |role: &str, path: &str, expected: &[u8]| {
+        let event = success
+            .iter()
+            .find(|record| {
+                record["fields"]["event"] == "profile.repository.payload"
+                    && record["fields"]["role"] == role
+                    && record["fields"]["path"] == path
+            })
+            .expect("migration payload event");
+        let (_, sequence) = event["fields"]["payload_id"]
+            .as_str()
+            .unwrap()
+            .rsplit_once('-')
+            .unwrap();
+        let payload = fixture
+            .checkout
+            .root
+            .path()
+            .join(".ai-profiles-logs")
+            .join(format!("run-{run_id}"))
+            .join(format!(
+                "payload-{:020}-{:020}.bin",
+                sequence.parse::<u64>().unwrap(),
+                0
+            ));
+        assert_eq!(fs::read(payload).unwrap(), expected);
+        assert_eq!(event["fields"]["complete"], true);
+        assert_eq!(event["fields"]["bytes"], expected.len());
+    };
+    assert_payload(
+        "legacy_state",
+        ".opencode/ai-profile-state.json",
+        br#"{"profile":"backend-go","skill":"go-backend","mcp":"postgres"}"#,
+    );
+    assert_payload(
+        "legacy_managed_file",
+        ".opencode/workflow-rules.md",
+        b"rules",
+    );
+    for name in ["home", "xdg", "tmp", "cwd"] {
+        assert_eq!(
+            fs::read_dir(fixture.outside.path().join(name))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+}
+
+#[test]
 fn manager_logging_help_and_argument_errors_have_complete_lifecycle() {
     for args in [
         vec![],
