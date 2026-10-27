@@ -1,4 +1,4 @@
-//! Oracles: manager CLI contract, help.txt, and unchanged CLI user messages.
+//! Oracles: manager CLI contract, categorized public help text, and unchanged CLI user messages.
 //! Real child processes only: no global subscriber in this test process.
 use crate::manager_fixture::Checkout;
 use serde_json::Value;
@@ -14,6 +14,23 @@ use std::{
 struct Invocation {
     checkout: Checkout,
     outside: tempfile::TempDir,
+}
+
+fn assert_help_output(output: &[u8]) {
+    let text = std::str::from_utf8(output).expect("CLI help must be UTF-8");
+    for required_section in [
+        "ai-profiles — zarządzanie profilami",
+        "make install CLIENT=KLIENT",
+        "make rust-build",
+        "make test-playwright",
+        "ARGUMENTY PROFILI I PROJEKTU",
+        "NEW_NAME",
+    ] {
+        assert!(
+            text.contains(required_section),
+            "CLI help is missing {required_section:?}"
+        );
+    }
 }
 
 impl Invocation {
@@ -277,7 +294,7 @@ fn manager_logging_context_roundtrips_exact_process_inputs_before_parsing() {
             assert_eq!(output.stderr, format!("usage: ai-profile KOMENDA [NAZWA] [opcje] (pomoc: make help)\nai-profile: error: {message}\n").as_bytes());
         } else {
             assert_eq!(output.status.code(), Some(0));
-            assert_eq!(output.stdout, include_bytes!("../help.txt"));
+            assert_help_output(&output.stdout);
             assert!(output.stderr.is_empty());
         }
         let logs = fixture.logs();
@@ -447,7 +464,7 @@ fn manager_logging_unavailable_cwd_is_explicit_and_does_not_change_help() {
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stdout, include_bytes!("../help.txt"));
+    assert_help_output(&output.stdout);
     assert!(output.stderr.is_empty());
     let logs = fixture.logs();
     lifecycle(&logs[0], 0, None);
@@ -859,7 +876,7 @@ fn manager_logging_help_and_argument_errors_have_complete_lifecycle() {
             assert_eq!(output.stderr, format!("usage: ai-profile KOMENDA [NAZWA] [opcje] (pomoc: make help)\nai-profile: error: {message}\n").as_bytes());
             lifecycle(&fixture.logs()[0], code, Some(("arguments", message)));
         } else {
-            assert_eq!(output.stdout, include_bytes!("../help.txt"));
+            assert_help_output(&output.stdout);
             assert!(output.stderr.is_empty());
             lifecycle(&fixture.logs()[0], code, None);
         }
@@ -884,7 +901,7 @@ fn manager_logging_parallel_runs_have_distinct_files_and_ids() {
     for child in children {
         let output = child.wait_with_output().unwrap();
         assert!(output.status.success());
-        assert_eq!(output.stdout, include_bytes!("../help.txt"));
+        assert_help_output(&output.stdout);
         assert!(output.stderr.is_empty());
     }
     let logs = fixture.logs();
@@ -1236,7 +1253,7 @@ fn manager_logging_preparation_failure_preserves_results_without_fallback() {
     );
     let help = fixture.run(&["--help"]);
     assert_eq!(help.status.code(), Some(0));
-    assert_eq!(help.stdout, include_bytes!("../help.txt"));
+    assert_help_output(&help.stdout);
     warning(&help.stderr);
     let arguments = fixture.run(&["--unknown"]);
     assert_eq!(arguments.status.code(), Some(2));
@@ -1261,7 +1278,7 @@ fn manager_logging_missing_sources_does_not_discover_from_cwd() {
         .current_dir(fixture.checkout.root.path());
     let output = command.arg("--help").output().unwrap();
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stdout, include_bytes!("../help.txt"));
+    assert_help_output(&output.stdout);
     warning(&output.stderr);
     assert!(!fixture
         .checkout

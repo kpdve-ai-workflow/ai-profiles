@@ -16,12 +16,10 @@ PRACA Z PROJEKTEM
     Pokazuje wszystkie integracje; opcjonalne CLIENT ogranicza wynik.
   make update CLIENT=KLIENT PROJECT=SCIEZKA_DO_PROJEKTU
     Aktualizuje profil z lokalnych źródeł, bez pobierania zmian z sieci.
-  make pull-update CLIENT=KLIENT PROJECT=SCIEZKA_DO_PROJEKTU
-    Pobiera źródła przez git pull --ff-only, potem aktualizuje profil.
   make uninstall CLIENT=KLIENT PROJECT=SCIEZKA_DO_PROJEKTU
     Usuwa profil, zachowując własne pliki i ustawienia użytkownika.
 
-UTRZYMANIE REPOZYTORIUM
+UTRZYMANIE PROFILI
   make rename PROFILE=STARA_NAZWA NEW_NAME=NOWA_NAZWA
     Zmienia katalog i name w profile.json wyłącznie w ai-profiles.
     Nie aktualizuje zainstalowanych projektów ani wersji profilu.
@@ -32,24 +30,8 @@ UTRZYMANIE REPOZYTORIUM
   make validate PROFILE=NAZWA
     Sprawdza wybrany profil, jego wybrane skille i wpisy w mcp/example.json.
     Cały rejestr MCP i nadmiarowe wpisy sprawdza pełne make validate.
-  make test
-    Pełne testy Rust w trwałej VM Debian 13 amd64 (Incus/QEMU/KVM).
-  make test-playwright
-    Buduje obraz i uruchamia pełny test adaptera/Compose/Chromium w VM.
-  make validate-rust-migration
-    Bramka format/build/Clippy/walidacja/testy Rust w VM.
-  make test-all
-    Bramka walidacji, potem Playwright (bez powtarzania testów Rust).
-  make test-vm-up / test-vm-stop
-    Przygotowuje/wznawia lub zatrzymuje VM bez usuwania cache.
-  make test-vm-sync / test-vm-reprovision
-    Synchronizuje źródła lub jawnie ponawia provisioning istniejącej VM.
-    Wymagania hosta i zasoby: docs/testing.md. Host testów nie wymaga
-    Cargo, Node ani Dockera. Raporty: .test-vm/artifacts/.
-  make help
-    Pokazuje pomoc. Samo make również pokazuje pomoc.
 
-ARGUMENTY
+ARGUMENTY PROFILI I PROJEKTU
   CLIENT       opencode|claude|codex|all; wymagany dla operacji zmieniających instalację.
                CLI: --client KLIENT lub --client=KLIENT. Bez domyślnego klienta.
                all: install dodaje brakujących (konflikt profili blokuje zapis),

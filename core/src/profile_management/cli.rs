@@ -20,7 +20,13 @@ use crate::{
 #[path = "../../tests/cli.rs"]
 mod cli_tests;
 
-const COMMAND_HELP: &str = include_str!("../../help.txt");
+const COMMAND_HELP: &str = concat!(
+    include_str!("../../../make/help/profile.txt"),
+    "\n",
+    include_str!("../../../make/help/bootstrap.txt"),
+    "\n",
+    include_str!("../../../make/help/test.txt"),
+);
 
 struct Options {
     client: Option<ClientSelection>,

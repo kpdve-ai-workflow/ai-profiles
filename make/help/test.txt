@@ -1,0 +1,18 @@
+TESTY I TESTOWA VM
+
+  make test                     Pełne testy Rust w przygotowanej VM
+  make validate-rust-migration  Format, build, Clippy, walidacja i testy Rust
+  make test-playwright          Pełny test integracyjny Playwright w VM
+  make test-all                 Bramka Rust, następnie Playwright
+
+  make test help                Ta pomoc testowa
+
+Zarządzanie VM:
+  make test-vm-up          Przygotowuje lub wznawia VM
+  make test-vm-stop        Zatrzymuje VM bez usuwania cache
+  make test-vm-sync        Synchronizuje aktualny checkout
+  make test-vm-reprovision Ponawia provisioning na żądanie
+  make test-vm-logs        Pokazuje dostępne logi
+
+Wymagana jest przygotowana VM Incus/QEMU/KVM. Testy Rust i Playwright nie
+uruchamiają się lokalnie na hoście. Pełna konfiguracja i zasady: docs/testing.md.
