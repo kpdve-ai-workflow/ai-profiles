@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     fs::{self, File},
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader, Cursor, Read},
     path::Path,
     sync::OnceLock,
 };
@@ -15,7 +15,23 @@ use crate::{
     wordpress::{DumpCompression, DumpInfo, Sha256Digest, SiteMode, TablePrefix},
 };
 
+#[cfg(test)]
 pub(crate) fn inspect_dump(path: &Path) -> Result<DumpInfo, WordPressError> {
+    inspect_dump_inner(path, None)
+}
+
+pub(crate) fn inspect_dump_with_diagnostics(
+    path: &Path,
+    operation_id: &str,
+    role: &str,
+) -> Result<DumpInfo, WordPressError> {
+    inspect_dump_inner(path, Some((operation_id, role)))
+}
+
+fn inspect_dump_inner(
+    path: &Path,
+    diagnostic: Option<(&str, &str)>,
+) -> Result<DumpInfo, WordPressError> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -104,17 +120,26 @@ pub(crate) fn inspect_dump(path: &Path) -> Result<DumpInfo, WordPressError> {
         } else {
             DumpCompression::Plain
         },
-        sha256: file_hash(path)?,
+        sha256: file_hash_with_diagnostics(path, diagnostic)?,
     })
 }
 
 pub(crate) fn file_hash(path: &Path) -> Result<Sha256Digest, WordPressError> {
+    file_hash_with_diagnostics(path, None)
+}
+
+fn file_hash_with_diagnostics(
+    path: &Path,
+    diagnostic: Option<(&str, &str)>,
+) -> Result<Sha256Digest, WordPressError> {
     let mut source = File::open(path).map_err(|source| WordPressError::Io {
         path: path.to_owned(),
         source,
     })?;
     let mut digest = Sha256::new();
     let mut chunk = [0_u8; 1024 * 1024];
+    let mut index = 0usize;
+    let mut offset = 0u64;
     loop {
         let count = source
             .read(&mut chunk)
@@ -126,6 +151,25 @@ pub(crate) fn file_hash(path: &Path) -> Result<Sha256Digest, WordPressError> {
             break;
         }
         digest.update(&chunk[..count]);
+        if let Some((operation_id, role)) = diagnostic {
+            if let Some(session) = crate::logging::current_session() {
+                let summary = session.payload(Cursor::new(&chunk[..count]));
+                tracing::info!(
+                    event = "restore.data.chunk",
+                    operation_id,
+                    role,
+                    path = %path.display(),
+                    index,
+                    offset,
+                    observed_length = count,
+                    payload_id = %summary.payload_id,
+                    stored_length = summary.length,
+                    payload_complete = summary.complete,
+                );
+            }
+        }
+        index += 1;
+        offset += count as u64;
     }
     let digest = digest.finalize();
     let mut value = String::with_capacity(digest.len() * 2);

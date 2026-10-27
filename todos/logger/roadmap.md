@@ -2,12 +2,12 @@
 
 **Cel:** pełna lokalna diagnostyka narzędzi Rust, pozwalająca odtworzyć przepływ operacji i danych bez zmiany zachowania aplikacji. Ten plik jest jedynym źródłem bieżących statusów i kolejności prac.
 
-**Aktualnie:** etap 1 ukończony i zweryfikowany; etap 2 jest w toku. PROCESS-LIFECYCLE, PROCESS-DATA, PROFILE-LIFECYCLE i MANAGER-AUX ukończone i zweryfikowane; dwa zadania etapu 2 pozostały.
+**Aktualnie:** etap 1 ukończony i zweryfikowany; etap 2 jest w toku. PROCESS-LIFECYCLE, PROCESS-DATA, PROFILE-LIFECYCLE, MANAGER-AUX i RESTORE-FLOW ukończone i zweryfikowane; MCP-PREPARE pozostało.
 
 | Etap | Zakres i odnośnik | Stan wynikający z zadań |
 | --- | --- | --- |
 | 1 | [Fundament loggera](#etap-1-fundament-loggera) | Ukończony i zweryfikowany: 109/109. |
-| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | W toku: PROCESS-LIFECYCLE, PROCESS-DATA, PROFILE-LIFECYCLE i MANAGER-AUX ukończone; dwa zadania pozostały. |
+| 2 | [Instrumentacja operacji](#etap-2-instrumentacja-operacji) | W toku: pięć zadań ukończonych; MCP-PREPARE pozostało. |
 | 3 | [Diagnostyka Novamiry](#etap-3-diagnostyka-novamiry) | Do wykonania; integracja mostu wymaga ustalenia kanału diagnostycznego. |
 | 4 | [Obserwacja po exec](#etap-4-obserwacja-po-exec) | Zablokowany do ustalenia kontraktu nadzorowania lub collectora. |
 | 5 | [Opcjonalna integracja Grafana i Loki](#etap-5-opcjonalna-integracja-grafana-i-loki) | Poza bieżącym wdrożeniem; wymaga osobnej zgody. |
@@ -115,10 +115,14 @@
 
 ### Zadanie 2.5: Przepływ WordPress restore
 
-- [ ] **RESTORE-FLOW — Planowanie, wykonanie i stan po przerwaniu restore.**
+- [x] **RESTORE-FLOW — Planowanie, wykonanie i stan po przerwaniu restore.**
   - Zależność: FOUNDATION-BASE. Dane procesów są zależnością interfejsową dla pełnego pokrycia, nie blokadą niezależnych zdarzeń operacji.
   - Zakres i akceptacja: [diagnostyka restore](concepts/restore.md).
-  - Weryfikacja: niewykonana. Testy nie mogą wykonywać restore na rzeczywistej bazie użytkownika.
+  - Wykonano: jedna skorelowana operacja raportuje tryb, plan, preflight, decyzję potwierdzenia/anulowania, blokadę, kopię i weryfikację backupu, rozpoczęcie mutacji, lokalizację, weryfikację końcową oraz odzyskiwanie po błędzie. Surowe bajty dumpa, wejścia importu, backupu i użytego pliku ochronnego są utrwalane przez payloady podczas istniejących odczytów; awaria zapisu diagnostyki nie zastępuje wyniku komendy. Zachowano dotychczasowe stdout/stderr, kody wyjścia, reguły potwierdzenia, cleanup i brak automatycznego rollbacku.
+  - Test-first: RED `make test` w Debian 13 VM — 149 passed/1 failed; nowy test planu wykrył brak zdarzeń startu operacji. [Artefakt RED](../../.test-vm/artifacts/20261026T133301Z-3271e49d-e5d6-463b-b72d-fc3ac42f9ce4/host.log). GREEN `make test` — 157/157 passed, w tym prawdziwy proces CLI z kontrolowanym DDEV dla planu, odmowy potwierdzenia, udanego apply, błędu przed importem i błędu po rozpoczęciu mutacji. [Artefakt GREEN](../../.test-vm/artifacts/20261026T134914Z-be6233ef-acc2-4d36-9b71-def7b3f3db0e/host.log).
+  - Bramka końcowa: `make validate-rust-migration` — PASS: format, release-build, Clippy, `make validate` i `make test` (157/157). Debian 13.7, rustc `1.99.1 (58cf8f9c3 2026-10-13)`, Cargo `1.99.1 (5f94df478 2026-08-27)`. [Artefakty](../../.test-vm/artifacts/20261026T135050Z-2097f5d9-6e0a-4e76-992a-f6923d4df99a/host.log). `git diff --check` — PASS. Brak nowych zależności; nie wykonano osobnego Rust 1.85 przebiegu, bo nie dodano zależności ani API wymagających osobnego dowodu MSRV.
+  - Próby pośrednie: odrębny GREEN poprzedził końcowy rozszerzony zestaw; przy dwóch przebiegach wystąpiło przejściowe `Text file busy` w istniejącym teście Novamiry, bez zmian w tym obszarze. Końcowa bramka przeszła bez pomijania testów.
+  - Ograniczenie: scenariusze apply używają prawdziwego procesu CLI i izolowanego projektu z kontrolowanym executable `ddev`; nie wykonują importu do rzeczywistej bazy WordPress.
 
 ### Zadanie 2.6: Przygotowanie MCP i launcherów
 
@@ -192,7 +196,7 @@
 
 ## Następne zadanie
 
-**Etap 2, zadanie 2.5 — RESTORE-FLOW / przepływ WordPress restore.** MANAGER-AUX ukończone i zweryfikowane.
+**Etap 2, zadanie 2.6 — MCP-PREPARE / konfiguracja i przygotowanie uruchomienia lokalnego MCP.** RESTORE-FLOW ukończone i zweryfikowane.
 
 ## Historia aktualizacji
 
@@ -209,3 +213,4 @@
 - 2026-10-26: MANAGER-AUX B — create/rename/bump — ukończone test-first. Pojedyncza operacja wskazuje repozytorium źródeł, rejestruje transformacje i opublikowane pliki, a bajty metadanych są dostępne w payloadach; zachowano CLI i łańcuch błędu. RED 147/1, GREEN 148/148, końcowa bramka `make validate-rust-migration` PASS (148/148), Debian 13, rustc/Cargo 1.99.1. `git diff --check` PASS. Szczegóły i artefakty w sekcji 2.4. Następne: część C — migrate-legacy.
 - 2026-10-26: rozpoczęto MANAGER-AUX C testem prawdziwego procesu migracji legacy; `make test` nie dotarło do Cargo z powodu braku uprawnień do `/run/incus/unix.socket` (`operation not permitted`). Nie potwierdzono RED ani nie rozpoczęto implementacji produkcyjnej. Zadanie oznaczono `[!]`; pierwszym krokiem po odblokowaniu jest ponowienie `make test` w VM. [Worklog](../../changelogs/10-26-2026-14:16-agent-worklog.md).
 - 2026-10-26: po przywróceniu uprawnień VM ukończono MANAGER-AUX C test-first. RED 148/1; GREEN i `make validate-rust-migration` PASS (149/149), Debian 13, rustc/Cargo 1.99.1. Zapisano wyniki partial state migration, kontrolę zgodności legacy, payloady i usunięcie approval gate. `git diff --check` PASS. MANAGER-AUX ukończone; następne RESTORE-FLOW. [Worklog](../../changelogs/10-26-2026-14:23-agent-worklog.md).
+- 2026-10-26: ukończono RESTORE-FLOW test-first. RED 149/1 ujawnił brak korelacji planu; końcowa `make validate-rust-migration` PASS (157/157) w Debian 13.7, rustc/Cargo 1.99.1. Potwierdzono bezmutacyjny plan, dokładne potwierdzenie, pełny kontrolowany apply i zachowanie backupu przy awarii przed i po rozpoczęciu mutacji; surowe payloady i awaria diagnostyki zachowują wynik. Dwa wcześniejsze pełne przebiegi trafiły na istniejący przejściowy `Text file busy` testu Novamiry; bramka końcowa przeszła bez pomijania testów. `git diff --check` PASS. Następne: MCP-PREPARE. [Worklog](../../changelogs/10-26-2026-14:52-agent-worklog.md).

@@ -14,6 +14,7 @@ pub(crate) fn localize(
     prefix: &TablePrefix,
     mappings: &UrlMappings,
     imported: &WordPressTopology,
+    operation_id: &str,
 ) -> Result<(), WordPressError> {
     let host_map = mappings
         .entries()
@@ -40,6 +41,14 @@ pub(crate) fn localize(
             return Err(WordPressError::InvalidNetworkMapping);
         }
     }
+    tracing::info!(
+        event = "restore.localization.preflight",
+        operation_id,
+        result = "passed",
+        site_count = imported.sites.len(),
+        network_count = imported.networks.len(),
+        mapping_count = mappings.entries().len()
+    );
 
     for site in &imported.sites {
         let home = mapped_url(&site.home, mappings)?;
@@ -49,11 +58,25 @@ pub(crate) fn localize(
             site.options_table,
             literal(&home)
         ))?;
+        tracing::info!(
+            event = "restore.localization.write",
+            operation_id,
+            target = "site_home",
+            table = site.options_table,
+            site_id = site.id
+        );
         ddev.query(&format!(
             "UPDATE `{}` SET option_value={} WHERE option_name='siteurl'",
             site.options_table,
             literal(&site_url)
         ))?;
+        tracing::info!(
+            event = "restore.localization.write",
+            operation_id,
+            target = "site_url",
+            table = site.options_table,
+            site_id = site.id
+        );
         if imported.site_mode == SiteMode::Multisite {
             let domain = host_map
                 .get(site.domain.as_str())
@@ -64,6 +87,13 @@ pub(crate) fn localize(
                 literal(domain),
                 site.id
             ))?;
+            tracing::info!(
+                event = "restore.localization.write",
+                operation_id,
+                target = "blog_domain",
+                table = format!("{}blogs", prefix.as_str()),
+                site_id = site.id
+            );
         }
     }
     for network in &imported.networks {
@@ -76,6 +106,13 @@ pub(crate) fn localize(
             literal(domain),
             network.id
         ))?;
+        tracing::info!(
+            event = "restore.localization.write",
+            operation_id,
+            target = "network_domain",
+            table = format!("{}site", prefix.as_str()),
+            network_id = network.id
+        );
     }
 
     let target = mapped_url(&imported.sites[0].home, mappings)?;
@@ -92,11 +129,14 @@ pub(crate) fn localize(
             "--format=count".to_owned(),
         ];
         let count = ddev.wp(&args)?;
+        tracing::info!(event = "restore.localization.search_replace", operation_id, source = mapping.source.as_str(), target = mapping.target.as_str(), result = "executed", changed_rows = %count);
         let mut dry_run_args = args;
         dry_run_args.push("--dry-run".to_owned());
+        let dry_run_count = ddev.wp(&dry_run_args)?;
+        tracing::info!(event = "restore.localization.search_replace_verification", operation_id, source = mapping.source.as_str(), target = mapping.target.as_str(), remaining_matches = %dry_run_count);
         if count.is_empty()
             || !count.bytes().all(|byte| byte.is_ascii_digit())
-            || ddev.wp(&dry_run_args)? != "0"
+            || dry_run_count != "0"
         {
             return Err(WordPressError::SearchReplaceIncomplete);
         }
@@ -107,6 +147,14 @@ pub(crate) fn localize(
             "UPDATE `{}` SET option_value='0' WHERE option_name='blog_public'",
             site.options_table
         ))?;
+        tracing::info!(
+            event = "restore.localization.write",
+            operation_id,
+            target = "private_site_visibility",
+            table = site.options_table,
+            site_id = site.id,
+            value = 0
+        );
     }
 
     let final_topology = topology(ddev, prefix)?;
@@ -153,5 +201,12 @@ pub(crate) fn localize(
         "core".to_owned(),
         "is-installed".to_owned(),
     ])?;
+    tracing::info!(
+        event = "restore.localization.verified",
+        operation_id,
+        site_count = final_topology.sites.len(),
+        network_count = final_topology.networks.len(),
+        result = "passed"
+    );
     Ok(())
 }

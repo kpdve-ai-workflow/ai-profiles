@@ -8,7 +8,7 @@ use crate::{
     filesystem::file_path,
     wordpress::{
         ddev::{topology, Ddev},
-        dump::inspect_dump,
+        dump::inspect_dump_with_diagnostics,
         DumpInfo, UrlMappings, WordPressTopology,
     },
 };
@@ -29,10 +29,41 @@ pub(crate) fn preflight(
     dump: &Path,
     mappings: &UrlMappings,
     ddev: &mut Ddev<'_>,
+    operation_id: &str,
+) -> Result<PreflightResult, WordPressError> {
+    tracing::info!(event = "restore.preflight.started", operation_id, project = %project.display(), dump = %dump.display(), mapping_count = mappings.entries().len());
+    let result = preflight_inner(project, dump, mappings, ddev, operation_id);
+    match &result {
+        Ok(plan) => tracing::info!(
+            event = "restore.preflight.finished",
+            operation_id,
+            result = "passed",
+            project_name = plan.info.get("name").and_then(|value| value.as_str()).unwrap_or(""),
+            dump_sha256 = plan.source.sha256.as_str(),
+            table_prefix = plan.source.prefix.as_str(),
+            site_mode = ?plan.source.site_mode,
+        ),
+        Err(error) => tracing::error!(
+            event = "restore.preflight.rejected",
+            operation_id,
+            error = %error,
+            source = ?std::error::Error::source(error),
+        ),
+    }
+    result
+}
+
+fn preflight_inner(
+    project: &Path,
+    dump: &Path,
+    mappings: &UrlMappings,
+    ddev: &mut Ddev<'_>,
+    operation_id: &str,
 ) -> Result<PreflightResult, WordPressError> {
     if !inside(project, ".ddev/config.yaml")?.is_file() {
         return Err(WordPressError::DdevProjectRequired);
     }
+    tracing::info!(event = "restore.preflight.check", operation_id, check = "ddev_config", result = "passed", path = %project.join(".ddev/config.yaml").display());
     for name in ["local-guard.php", "local-safety.php"] {
         if !inside(
             project,
@@ -43,8 +74,28 @@ pub(crate) fn preflight(
             return Err(WordPressError::MissingWordPressHelpers);
         }
     }
+    tracing::info!(
+        event = "restore.preflight.check",
+        operation_id,
+        check = "wordpress_helpers",
+        result = "passed"
+    );
 
     let info = ddev.describe()?;
+    tracing::info!(
+        event = "restore.preflight.check",
+        operation_id,
+        check = "ddev_describe",
+        result = "passed",
+        status = info
+            .get("status")
+            .and_then(|value| value.as_str())
+            .unwrap_or(""),
+        project_type = info
+            .get("type")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+    );
     let approot = info
         .get("approot")
         .and_then(Value::as_str)
@@ -63,6 +114,7 @@ pub(crate) fn preflight(
     {
         return Err(WordPressError::InvalidDdevProject);
     }
+    tracing::info!(event = "restore.preflight.check", operation_id, check = "project_identity_and_state", result = "passed", approot = %approot.display());
 
     let docroot = info
         .get("docroot")
@@ -86,6 +138,13 @@ pub(crate) fn preflight(
     {
         return Err(WordPressError::MissingWpContent);
     }
+    tracing::info!(
+        event = "restore.preflight.check",
+        operation_id,
+        check = "wordpress_files",
+        result = "passed",
+        docroot
+    );
 
     let urls = info
         .get("urls")
@@ -120,6 +179,7 @@ pub(crate) fn preflight(
             return Err(WordPressError::UnknownDdevTargetHost);
         }
     }
+    tracing::info!(event = "restore.preflight.check", operation_id, check = "mapping_targets", result = "passed", mapping_count = mappings.entries().len(), available_hosts = ?hosts);
 
     let prefix = ddev.wp(&["ai-profile-local-prefix".to_owned()])?;
     let prefix_pattern = Regex::new(r"^[A-Za-z0-9_]+$").expect("fixed prefix regex is valid");
@@ -143,13 +203,26 @@ pub(crate) fn preflight(
     {
         return Err(WordPressError::DatabaseMismatch);
     }
+    tracing::info!(
+        event = "restore.preflight.check",
+        operation_id,
+        check = "database_identity",
+        result = "passed",
+        host = connection
+            .first()
+            .and_then(|row| row.first())
+            .map(String::as_str)
+            .unwrap_or(""),
+        database = "db"
+    );
 
     let table_prefix = crate::wordpress::TablePrefix::from_validated(prefix);
     let current = topology(ddev, &table_prefix)?;
-    let source = inspect_dump(dump)?;
+    let source = inspect_dump_with_diagnostics(dump, operation_id, "source_dump")?;
     if source.prefix.as_str() != table_prefix.as_str() || source.site_mode != current.site_mode {
         return Err(WordPressError::DumpTopologyMismatch);
     }
+    tracing::info!(event = "restore.preflight.check", operation_id, check = "dump_topology", result = "passed", dump_sha256 = source.sha256.as_str(), table_prefix = source.prefix.as_str(), site_mode = ?source.site_mode, current_site_mode = ?current.site_mode);
 
     let safety_path = Path::new(docroot).join("wp-content/mu-plugins/ai-profile-local-safety.php");
     let guard = inside(project, &safety_path.to_string_lossy())?;
@@ -169,6 +242,7 @@ pub(crate) fn preflight(
     {
         return Err(WordPressError::SafetyFileConflict);
     }
+    tracing::info!(event = "restore.preflight.check", operation_id, check = "local_safety_guard", result = "passed", path = %guard.display(), existed = guard.exists());
     Ok(PreflightResult {
         info,
         source,

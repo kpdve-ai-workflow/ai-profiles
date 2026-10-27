@@ -1,7 +1,7 @@
 use std::{
     env,
     fs::{self, File, OpenOptions},
-    io::{self, Write},
+    io::{self, Read, Write},
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -18,7 +18,7 @@ use crate::{
     process::{CancellationToken, ProcessRunner, SystemProcessRunner},
     wordpress::{
         ddev::{topology, Ddev},
-        dump::{file_hash, inspect_dump},
+        dump::{file_hash, inspect_dump_with_diagnostics},
         localize::localize,
         mapping::mappings,
         preflight::{inside, preflight, PreflightResult},
@@ -40,6 +40,7 @@ pub(crate) enum RestoreMode {
 struct RunDirectory(PathBuf);
 
 static RUN_COUNTER: AtomicU64 = AtomicU64::new(0);
+static OPERATION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn restore(
     project: &Path,
@@ -49,15 +50,94 @@ pub(crate) fn restore(
     runner: &dyn ProcessRunner,
     cancellation: CancellationToken,
 ) -> Result<Option<PathBuf>, WordPressError> {
+    let operation_id = format!(
+        "restore-{}",
+        OPERATION_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    let mode_name = match mode {
+        RestoreMode::Plan => "plan",
+        RestoreMode::Apply => "apply",
+    };
+    let span = tracing::info_span!(
+        "restore.operation",
+        operation_id = %operation_id,
+        mode = mode_name,
+    );
+    tracing::info!(
+        parent: &span,
+        event = "restore.started",
+        operation_id = %operation_id,
+        mode = mode_name,
+        project = %project.display(),
+        dump = %dump.display(),
+        mapping_count = mappings.entries().len(),
+    );
+    let result = span.in_scope(|| {
+        restore_inner(
+            project,
+            dump,
+            mappings,
+            mode,
+            runner,
+            cancellation,
+            &operation_id,
+        )
+    });
+    match &result {
+        Ok(Some(backup)) => tracing::info!(
+            parent: &span,
+            event = "restore.finished",
+            operation_id = %operation_id,
+            result = "applied",
+            backup = %backup.display(),
+        ),
+        Ok(None) => tracing::info!(
+            parent: &span,
+            event = "restore.finished",
+            operation_id = %operation_id,
+            result = "planned",
+        ),
+        Err(error) => tracing::error!(
+            parent: &span,
+            event = "restore.failed",
+            operation_id = %operation_id,
+            classification = "restore.error",
+            error = %error,
+            source = ?std::error::Error::source(error),
+        ),
+    }
+    result
+}
+
+fn restore_inner(
+    project: &Path,
+    dump: &Path,
+    mappings: &UrlMappings,
+    mode: RestoreMode,
+    runner: &dyn ProcessRunner,
+    cancellation: CancellationToken,
+    operation_id: &str,
+) -> Result<Option<PathBuf>, WordPressError> {
     let mut ddev = Ddev::new(project, runner, cancellation.clone());
-    let initial = preflight(project, dump, mappings, &mut ddev)?;
+    let initial = preflight(project, dump, mappings, &mut ddev, operation_id)?;
+    tracing::info!(
+        event = "restore.plan.prepared",
+        operation_id,
+        project_name = initial.info.get("name").and_then(|value| value.as_str()).unwrap_or(""),
+        dump_sha256 = initial.source.sha256.as_str(),
+        table_prefix = initial.source.prefix.as_str(),
+        site_mode = ?initial.source.site_mode,
+        mapping_count = mappings.entries().len(),
+    );
     let name = project_name(&initial.info)?;
     print_plan(project, dump, mappings, &name, &initial);
     if mode == RestoreMode::Plan {
+        tracing::info!(event = "restore.plan.only", operation_id, writes = false);
         println!("PLAN: bez zapisu. Dodaj --apply, aby wykonać import z potwierdzeniem.");
         return Ok(None);
     }
 
+    tracing::info!(event = "restore.confirmation.started", operation_id, expected_project_name = %name);
     let mut answer = String::new();
     print!("Lokalna baza zostanie ZASTĄPIONA. Wpisz nazwę projektu {name}: ");
     io::stdout()
@@ -70,23 +150,47 @@ pub(crate) fn restore(
     });
     let answer = loop {
         if cancellation.is_cancelled() {
+            tracing::warn!(
+                event = "restore.confirmation.cancelled",
+                operation_id,
+                boundary = "waiting_for_input"
+            );
             return Err(WordPressError::RestoreCancelled);
         }
         match receiver.recv_timeout(Duration::from_millis(100)) {
             Ok((Ok(_), answer)) => break answer,
-            Ok((Err(_), _)) => return Err(WordPressError::ConfirmationInput),
+            Ok((Err(error), _)) => {
+                tracing::error!(event = "restore.confirmation.failed", operation_id, error = %error);
+                return Err(WordPressError::ConfirmationInput);
+            }
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(WordPressError::ConfirmationInput)
+                tracing::error!(
+                    event = "restore.confirmation.failed",
+                    operation_id,
+                    reason = "input_worker_disconnected"
+                );
+                return Err(WordPressError::ConfirmationInput);
             }
         }
     };
     if answer.trim() != name {
+        tracing::warn!(
+            event = "restore.confirmation.rejected",
+            operation_id,
+            result = "name_mismatch"
+        );
         return Err(WordPressError::RestoreCancelled);
     }
     if cancellation_was_requested(&cancellation) {
+        tracing::warn!(
+            event = "restore.confirmation.cancelled",
+            operation_id,
+            boundary = "after_input"
+        );
         return Err(WordPressError::RestoreCancelled);
     }
+    tracing::info!(event = "restore.confirmation.accepted", operation_id);
 
     let state_home = state_home()?;
     if state_home == project || state_home.starts_with(project) {
@@ -105,8 +209,9 @@ pub(crate) fn restore(
         .map_err(|_| WordPressError::BackupLock)?;
     lock.try_lock_exclusive()
         .map_err(|_| WordPressError::RestoreAlreadyRunning)?;
+    tracing::info!(event = "restore.lock.acquired", operation_id, path = %lock_path.display());
 
-    let confirmed = preflight(project, dump, mappings, &mut ddev)?;
+    let confirmed = preflight(project, dump, mappings, &mut ddev, operation_id)?;
     if confirmed.source != initial.source
         || confirmed.info.get("name") != initial.info.get("name")
         || confirmed.current != initial.current
@@ -127,10 +232,12 @@ pub(crate) fn restore(
     let incoming = run_dir.0.join(format!("incoming.{extension}"));
     let mut incoming_cleanup = IncomingCleanup(Some(incoming.clone()));
 
-    copy_private(dump, &incoming)?;
+    tracing::info!(event = "restore.backup.directory.created", operation_id, path = %run_dir.0.display());
+    copy_private(dump, &incoming, operation_id)?;
     if file_hash(&incoming)? != initial.source.sha256 {
         return Err(WordPressError::IncomingChanged);
     }
+    tracing::info!(event = "restore.input.verified", operation_id, path = %incoming.display(), sha256 = initial.source.sha256.as_str());
 
     ddev.run(&[
         "export-db".to_owned(),
@@ -138,14 +245,16 @@ pub(crate) fn restore(
         "--gzip".to_owned(),
         format!("--file={}", backup.display()),
     ])?;
+    tracing::info!(event = "restore.backup.created", operation_id, path = %backup.display());
     fs::set_permissions(&backup, fs::Permissions::from_mode(0o600))
         .map_err(|_| WordPressError::RestoreIo)?;
-    let verified_backup = inspect_dump(&backup)?;
+    let verified_backup = inspect_dump_with_diagnostics(&backup, operation_id, "local_backup")?;
     if verified_backup.prefix != initial.source.prefix
         || verified_backup.site_mode != initial.current.site_mode
     {
         return Err(WordPressError::BackupMismatch);
     }
+    tracing::info!(event = "restore.backup.verified", operation_id, path = %backup.display(), sha256 = verified_backup.sha256.as_str(), table_prefix = verified_backup.prefix.as_str(), site_mode = ?verified_backup.site_mode);
     println!("Backup lokalny: {}", backup.display());
 
     let safety = safety_path(project, ddev.docroot())?;
@@ -154,8 +263,26 @@ pub(crate) fn restore(
         &format!("{}/local-safety.php", super::ddev::scripts_for(project)?),
     )?;
     let payload = fs::read(&payload_path).map_err(|_| WordPressError::RestoreIo)?;
+    record_payload(
+        operation_id,
+        "local_safety_template",
+        &payload_path,
+        &payload,
+    );
     let safety_existed = safety.exists();
-    if safety_existed && fs::read(&safety).map_err(|_| WordPressError::RestoreIo)? != payload {
+    let existing_safety = if safety_existed {
+        Some(fs::read(&safety).map_err(|_| WordPressError::RestoreIo)?)
+    } else {
+        None
+    };
+    if let Some(existing) = &existing_safety {
+        record_payload(operation_id, "existing_local_safety", &safety, existing);
+    }
+    tracing::info!(event = "restore.safety.checked", operation_id, path = %safety.display(), existed = safety_existed, result = if existing_safety.as_ref().is_some_and(|bytes| bytes != &payload) { "conflict" } else { "passed" });
+    if existing_safety
+        .as_ref()
+        .is_some_and(|bytes| bytes != &payload)
+    {
         return Err(WordPressError::SafetyChanged);
     }
 
@@ -182,19 +309,37 @@ pub(crate) fn restore(
                 .map_err(|_| WordPressError::RestoreIo)?;
         }
         import_started = true;
+        tracing::info!(event = "restore.database_mutation.started", operation_id, path = %incoming.display());
         ddev.run(&[
             "import-db".to_owned(),
             "--database=db".to_owned(),
             format!("--file={}", incoming.display()),
         ])?;
+        tracing::info!(event = "restore.database.imported", operation_id);
         let imported = topology(&ddev, &initial.source.prefix)?;
         if imported.site_mode != initial.source.site_mode {
             return Err(WordPressError::ImportedTopologyMismatch);
         }
-        localize(&ddev, &initial.source.prefix, mappings, &imported)?;
+        localize(
+            &ddev,
+            &initial.source.prefix,
+            mappings,
+            &imported,
+            operation_id,
+        )?;
+        tracing::info!(
+            event = "restore.localization.finished",
+            operation_id,
+            result = "verified"
+        );
         Ok(())
     })();
 
+    if let Err(error) = &operation {
+        if import_started {
+            tracing::error!(event = "restore.recovery.required", operation_id, backup = %backup.display(), database_mutation_started = true, automatic_rollback = false, cause = %error, source = ?std::error::Error::source(error));
+        }
+    }
     if operation.is_err() && import_started {
         eprintln!("Import przerwany. Brak automatycznego rollbacku. Przywróć backup:");
         eprintln!("cd {}", shell_quote(&project.display().to_string()));
@@ -207,6 +352,7 @@ pub(crate) fn restore(
     operation?;
     fs::remove_file(&incoming).map_err(|_| WordPressError::RestoreIo)?;
     incoming_cleanup.0 = None;
+    tracing::info!(event = "restore.incoming.cleaned", operation_id, path = %incoming.display());
     println!("OK: baza zaimportowana i URL sprawdzone. Ochrona lokalna mail/HTTP/cron pozostaje aktywna.");
     println!("Sprawdź oba hosty multisite, cache, AI Abilities Novamiry i odtwórz lokalne hasło aplikacyjne, jeśli import je zastąpił.");
     Ok(Some(backup))
@@ -466,7 +612,11 @@ fn create_run_dir(parent: &Path) -> Result<RunDirectory, WordPressError> {
     Err(WordPressError::BackupDirectory)
 }
 
-fn copy_private(source: &Path, destination: &Path) -> Result<(), WordPressError> {
+fn copy_private(
+    source: &Path,
+    destination: &Path,
+    operation_id: &str,
+) -> Result<(), WordPressError> {
     let mut input = File::open(source).map_err(|_| WordPressError::RestoreIo)?;
     let mut output = OpenOptions::new()
         .write(true)
@@ -474,8 +624,63 @@ fn copy_private(source: &Path, destination: &Path) -> Result<(), WordPressError>
         .mode(0o600)
         .open(destination)
         .map_err(|_| WordPressError::RestoreIo)?;
-    io::copy(&mut input, &mut output).map_err(|_| WordPressError::RestoreIo)?;
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut index = 0usize;
+    let mut offset = 0u64;
+    loop {
+        let length = match input.read(&mut buffer) {
+            Ok(length) => length,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => return Err(WordPressError::RestoreIo),
+        };
+        if length == 0 {
+            break;
+        }
+        output
+            .write_all(&buffer[..length])
+            .map_err(|_| WordPressError::RestoreIo)?;
+        record_payload_chunk(
+            operation_id,
+            "incoming_dump",
+            source,
+            index,
+            offset,
+            &buffer[..length],
+        );
+        index += 1;
+        offset += length as u64;
+    }
     output.sync_all().map_err(|_| WordPressError::RestoreIo)
+}
+
+fn record_payload_chunk(
+    operation_id: &str,
+    role: &str,
+    path: &Path,
+    index: usize,
+    offset: u64,
+    bytes: &[u8],
+) {
+    let Some(session) = crate::logging::current_session() else {
+        return;
+    };
+    let summary = session.payload(io::Cursor::new(bytes));
+    tracing::info!(
+        event = "restore.data.chunk",
+        operation_id,
+        role,
+        path = %path.display(),
+        index,
+        offset,
+        observed_length = bytes.len(),
+        payload_id = %summary.payload_id,
+        stored_length = summary.length,
+        payload_complete = summary.complete,
+    );
+}
+
+fn record_payload(operation_id: &str, role: &str, path: &Path, bytes: &[u8]) {
+    record_payload_chunk(operation_id, role, path, 0, 0, bytes);
 }
 
 fn safety_path(project: &Path, docroot: &str) -> Result<PathBuf, WordPressError> {

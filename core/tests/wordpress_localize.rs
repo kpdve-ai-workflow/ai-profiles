@@ -74,6 +74,7 @@ fn all_site_urls_are_validated_before_any_process_call() {
         &crate::wordpress::TablePrefix::from_validated("wp_".to_owned()),
         &mapping,
         &imported,
+        "restore-test",
     );
     assert!(matches!(result, Err(WordPressError::UnmappedUrl)));
     assert_eq!(calls.load(Ordering::SeqCst), 0);
