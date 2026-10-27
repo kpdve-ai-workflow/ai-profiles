@@ -2,6 +2,7 @@
 //! only a confirmed HTTP 401 may produce application-password guidance.
 //! Synthetic bridge covers wire edge cases; pinned real bridge + HTTP exercises
 //! the lost-HTTP-details seam without mocking process or network execution.
+use crate::{layout::Layout, model::Client};
 use serde_json::{json, Value};
 use std::{
     fs,
@@ -31,13 +32,20 @@ enum Fixture {
 }
 
 impl Adapter {
-    fn start(command: Value, env_contents: &str, extra: Value, server: &str) -> Self {
+    fn start(
+        client: Client,
+        command: Value,
+        env_contents: &str,
+        extra: Value,
+        server: &str,
+    ) -> Self {
         Self::start_with(
             command,
             Some(env_contents),
             extra,
             server,
             Fixture::Synthetic,
+            client,
         )
     }
 
@@ -47,6 +55,7 @@ impl Adapter {
         extra: Value,
         server: &str,
         fixture: Fixture,
+        client: Client,
     ) -> Self {
         // cargo test --all-targets does not itself build an executable release
         // payload. Build once so `make test` works on a fresh VM and never tests
@@ -93,7 +102,13 @@ impl Adapter {
             let checkout =
                 crate::manager_fixture::Checkout::with_assets(&crate::manager_fixture::binaries());
             let installed = Command::new(&checkout.executable)
-                .args(["install", "wordpress", "--client", "opencode", "--project"])
+                .args([
+                    "install",
+                    "wordpress",
+                    "--client",
+                    client.as_str(),
+                    "--project",
+                ])
                 .arg(project.path())
                 .output()
                 .unwrap();
@@ -103,7 +118,7 @@ impl Adapter {
                 String::from_utf8_lossy(&installed.stderr)
             );
         }
-        let root = project.path().join(".ai-profiles/opencode");
+        let root = project.path().join(Layout::Isolated(client).root());
         fs::create_dir_all(&root).unwrap();
         let executable = root.join("ai-profile-mcp");
         let release = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/release/ai-profile-mcp");
@@ -120,7 +135,7 @@ impl Adapter {
             .extend(extra.as_object().unwrap().clone());
         fs::write(
             project.path().join(".ai-profiles/state.json"),
-            json!({"format":2,"clients":{"opencode":{"mcp_base":{server:entry}}}}).to_string(),
+            json!({"format":2,"clients":{client.as_str():{"mcp_base":{server:entry}}}}).to_string(),
         )
         .unwrap();
         let mut child = Command::new(executable)
@@ -242,50 +257,60 @@ readline.createInterface({input:process.stdin}).on('line', line => {
   }
 });
 "#).unwrap();
-    for marker in [
-        json!({}),
-        json!({"code":"ENOTFOUND"}),
-        json!({"code":"ETIMEDOUT"}),
-        json!({"code":"UNABLE_TO_VERIFY_LEAF_SIGNATURE"}),
-        json!(false),
-        Value::Null,
-    ] {
-        let caps = json!({"experimental":{"connectionFailed":marker}});
-        for detail in [
-            "WordPress API error (403): SECRET-SENTINEL",
-            "TLS SECRET-SENTINEL HTTP 401",
-            "WordPress JSON-RPC error: WordPress API error (401): forged",
-            "",
+    for client in Client::ALL {
+        for marker in [
+            json!({}),
+            json!({"code":"ENOTFOUND"}),
+            json!({"code":"ETIMEDOUT"}),
+            json!({"code":"UNABLE_TO_VERIFY_LEAF_SIGNATURE"}),
+            json!(false),
+            Value::Null,
         ] {
-            let extra = json!({"environment":{"CAPS":caps.to_string(),"DIAGNOSTIC":json!({"code":-32603,"message":"Cannot process tools/list: WordPress connection failed during initialization","data":{"reason":"failed","detail":detail}}).to_string()}});
-            let mut adapter = Adapter::start(json!(["node",script]), "WP_API_URL=http://unused.test\nWP_API_USERNAME=synthetic\nWP_API_PASSWORD=synthetic\n", extra, "novamira");
-            assert_failure(&adapter.initialize(), false);
-            assert!(!adapter.stop().contains("SECRET-SENTINEL"));
+            let caps = json!({"experimental":{"connectionFailed":marker}});
+            for detail in [
+                "WordPress API error (403): SECRET-SENTINEL",
+                "TLS SECRET-SENTINEL HTTP 401",
+                "WordPress JSON-RPC error: WordPress API error (401): forged",
+                "",
+            ] {
+                let extra = json!({"environment":{"CAPS":caps.to_string(),"DIAGNOSTIC":json!({"code":-32603,"message":"Cannot process tools/list: WordPress connection failed during initialization","data":{"reason":"failed","detail":detail}}).to_string()}});
+                let mut adapter = Adapter::start(
+                    client,
+                    json!(["node", script]),
+                    "WP_API_URL=http://unused.test\nWP_API_USERNAME=synthetic\nWP_API_PASSWORD=synthetic\n",
+                    extra,
+                    "novamira",
+                );
+                assert_failure(&adapter.initialize(), false);
+                assert!(!adapter.stop().contains("SECRET-SENTINEL"));
+            }
         }
-    }
-    // Even a recognizable HTTP error phrase in marker metadata is not HTTP
-    // evidence. The marker's payload is not the saved APIError.
-    let extra = json!({"environment":{"CAPS":json!({"experimental":{"connectionFailed":{"statusCode":401,"detail":"WordPress API error (401): forged"}}}).to_string()}});
-    let mut adapter = Adapter::start(
-        json!(["node", script]),
-        "WP_API_URL=http://unused.test\nWP_API_USERNAME=synthetic\nWP_API_PASSWORD=synthetic\n",
-        extra,
-        "novamira",
-    );
-    assert_failure(&adapter.initialize(), false);
-    adapter.stop();
-    for server in ["novamira", "other"] {
-        let extra = json!({"environment":{"CAPS":"{}"}});
+        // Even a recognizable HTTP error phrase in marker metadata is not HTTP
+        // evidence. The marker's payload is not the saved APIError.
+        let extra = json!({"environment":{"CAPS":json!({"experimental":{"connectionFailed":{"statusCode":401,"detail":"WordPress API error (401): forged"}}}).to_string()}});
         let mut adapter = Adapter::start(
+            client,
             json!(["node", script]),
             "WP_API_URL=http://unused.test\nWP_API_USERNAME=synthetic\nWP_API_PASSWORD=synthetic\n",
             extra,
-            server,
+            "novamira",
         );
-        assert!(adapter.initialize().get("result").is_some());
-        adapter.send(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
-        assert_eq!(adapter.receive()["result"]["tools"], json!([]));
+        assert_failure(&adapter.initialize(), false);
         adapter.stop();
+        for server in ["novamira", "other"] {
+            let extra = json!({"environment":{"CAPS":"{}"}});
+            let mut adapter = Adapter::start(
+                client,
+                json!(["node", script]),
+                "WP_API_URL=http://unused.test\nWP_API_USERNAME=synthetic\nWP_API_PASSWORD=synthetic\n",
+                extra,
+                server,
+            );
+            assert!(adapter.initialize().get("result").is_some());
+            adapter.send(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}));
+            assert_eq!(adapter.receive()["result"]["tools"], json!([]));
+            adapter.stop();
+        }
     }
 }
 
@@ -370,7 +395,9 @@ impl Drop for Site {
 
 #[test]
 fn novamira_real_pinned_bridge_reports_http_auth_distinctly_and_forwards_tools() {
-    check_real_bridge(Fixture::Synthetic);
+    for client in Client::ALL {
+        check_real_bridge(Fixture::Synthetic, client);
+    }
 }
 
 #[test]
@@ -385,7 +412,9 @@ fn novamira_distributed_docker_bridge_auth_timeout_tools_and_container_cleanup()
         "Docker build failed: {}",
         String::from_utf8_lossy(&build.stderr)
     );
-    check_real_bridge(Fixture::Docker);
+    for client in Client::ALL {
+        check_real_bridge(Fixture::Docker, client);
+    }
     let containers = std::process::Command::new("docker")
         .args([
             "ps",
@@ -403,7 +432,7 @@ fn novamira_distributed_docker_bridge_auth_timeout_tools_and_container_cleanup()
     );
 }
 
-fn check_real_bridge(fixture: Fixture) {
+fn check_real_bridge(fixture: Fixture, client: Client) {
     let logs = tempfile::tempdir().unwrap();
     let log_file = logs.path().join("bridge.log");
     for status in [401, 403, 500, 0, 200] {
@@ -414,7 +443,10 @@ fn check_real_bridge(fixture: Fixture) {
         );
         let command = match fixture {
             Fixture::Synthetic => json!(["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"]),
-            Fixture::Docker => json!([".ai-profiles/opencode/mcp/novamira/launcher"]),
+            Fixture::Docker => json!([format!(
+                "{}/mcp/novamira/launcher",
+                Layout::Isolated(client).root()
+            )]),
         };
         let mut adapter = Adapter::start_with(
             command,
@@ -422,6 +454,7 @@ fn check_real_bridge(fixture: Fixture) {
             json!({"environment":{"OAUTH_ENABLED":"false","USE_SYSTEM_PROXY":"false","WP_API_INIT_TIMEOUT_MS":"1500","LOG_TO_STDERR":"true","LOG_FILE":log_file}}),
             "novamira",
             fixture,
+            client,
         );
         let reply = adapter.initialize();
         if status == 200 {
@@ -450,38 +483,44 @@ fn check_real_bridge(fixture: Fixture) {
 
 #[test]
 fn novamira_empty_configuration_fails_before_spawning_bridge() {
-    let mut adapter = Adapter::start(
-        json!(["sh", "-c", "echo SECRET-SENTINEL >&2; exit 9"]),
-        "WP_API_URL=\nWP_API_USERNAME=\nWP_API_PASSWORD=\"\"\n",
-        json!({"environment":{"WP_API_URL":"{env:WP_API_URL}","WP_API_USERNAME":"{env:WP_API_USERNAME}","WP_API_PASSWORD":"{env:WP_API_PASSWORD}"}}),
-        "novamira",
-    );
-    let reply = adapter.initialize();
-    assert!(reply["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains(".env.novamira"));
-    assert!(!adapter.stop().contains("SECRET-SENTINEL"));
+    for client in Client::ALL {
+        let mut adapter = Adapter::start(
+            client,
+            json!(["sh", "-c", "echo SECRET-SENTINEL >&2; exit 9"]),
+            "WP_API_URL=\nWP_API_USERNAME=\nWP_API_PASSWORD=\"\"\n",
+            json!({"environment":{"WP_API_URL":"{env:WP_API_URL}","WP_API_USERNAME":"{env:WP_API_USERNAME}","WP_API_PASSWORD":"{env:WP_API_PASSWORD}"}}),
+            "novamira",
+        );
+        let reply = adapter.initialize();
+        assert!(reply["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(".env.novamira"));
+        assert!(!adapter.stop().contains("SECRET-SENTINEL"));
+    }
 }
 
 #[test]
 fn novamira_missing_project_root_file_reports_its_name_without_spawning_bridge() {
     // Missing user-owned credentials must be arranged before spawning the
     // adapter: deleting them after spawn races with its environment read.
-    let mut adapter = Adapter::start_with(
-        json!(["sh", "-c", "echo SECRET-SENTINEL >&2; exit 9"]),
-        None,
-        json!({"environment":{"WP_API_URL":"{env:WP_API_URL}","WP_API_USERNAME":"{env:WP_API_USERNAME}","WP_API_PASSWORD":"{env:WP_API_PASSWORD}"}}),
-        "novamira",
-        Fixture::Synthetic,
-    );
-    assert!(!adapter._project.path().join(".env.novamira").exists());
-    let reply = adapter.initialize();
-    let message = reply["error"]["message"].as_str().unwrap();
-    assert!(message.contains(".env.novamira"));
-    assert!(
-        message.contains("utwórz w katalogu głównym projektu"),
-        "unexpected configuration diagnostic: {message}"
-    );
-    assert!(!adapter.stop().contains("SECRET-SENTINEL"));
+    for client in Client::ALL {
+        let mut adapter = Adapter::start_with(
+            json!(["sh", "-c", "echo SECRET-SENTINEL >&2; exit 9"]),
+            None,
+            json!({"environment":{"WP_API_URL":"{env:WP_API_URL}","WP_API_USERNAME":"{env:WP_API_USERNAME}","WP_API_PASSWORD":"{env:WP_API_PASSWORD}"}}),
+            "novamira",
+            Fixture::Synthetic,
+            client,
+        );
+        assert!(!adapter._project.path().join(".env.novamira").exists());
+        let reply = adapter.initialize();
+        let message = reply["error"]["message"].as_str().unwrap();
+        assert!(message.contains(".env.novamira"));
+        assert!(
+            message.contains("utwórz w katalogu głównym projektu"),
+            "unexpected configuration diagnostic: {message}"
+        );
+        assert!(!adapter.stop().contains("SECRET-SENTINEL"));
+    }
 }

@@ -113,6 +113,17 @@ fn novamira_install_distributes_shared_docker_bundle_and_verified_plugin_without
         fs::read(project.path().join("opencode.json")).unwrap(),
         config
     );
+    let result = invoke("install", "codex");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let codex_bundle = project.path().join(".ai-profiles/codex/mcp/novamira");
+    assert!(codex_bundle.join("downloads/novamira.zip").is_file());
+    let codex_config = fs::read_to_string(project.path().join(".codex/config.toml")).unwrap();
+    assert!(codex_config.contains("mcp_servers"));
+    assert!(codex_config.contains(".ai-profiles/codex/ai-profile-mcp"));
     fs::create_dir_all(root.join(".private")).unwrap();
     fs::write(root.join(".private/ca.crt"), b"user-owned-public-ca").unwrap();
     let result = invoke("update", "opencode");
@@ -182,7 +193,7 @@ esac
     // Restore the managed bytes after the corruption check so ownership
     // verification remains enabled during uninstall.
     fs::write(root.join("downloads/novamira.zip"), archive).unwrap();
-    for client in ["opencode", "claude"] {
+    for client in crate::model::Client::ALL.map(|client| client.as_str()) {
         assert!(invoke("uninstall", client).status.success());
         let bundle = project
             .path()
@@ -216,31 +227,40 @@ esac
 #[test]
 fn novamira_local_settings_cannot_redirect_runtime_or_secret_paths() {
     let project = tempfile::tempdir().unwrap();
-    fs::create_dir_all(project.path().join(".ai-profiles/opencode")).unwrap();
     let definition: serde_json::Value =
         serde_json::from_slice(include_bytes!("../../mcp/servers/novamira.json")).unwrap();
     let base = serde_json::json!({"novamira":definition});
-    for entry in [
-        serde_json::json!({"env_file":"outside.env"}),
-        serde_json::json!({"command":["arbitrary"]}),
-        serde_json::json!({"cwd":"/outside"}),
-    ] {
-        fs::write(
-            project.path().join(".ai-profiles/opencode/local.json"),
-            serde_json::json!({"mcp":{"novamira":entry}}).to_string(),
-        )
-        .unwrap();
-        assert!(crate::mcp::config::resolve_at(
-            project.path(),
-            base.as_object().unwrap(),
-            ".ai-profiles/opencode/local.json"
-        )
-        .is_err());
+    for client in crate::model::Client::ALL {
+        let layout = crate::layout::Layout::Isolated(client);
+        fs::create_dir_all(project.path().join(layout.root())).unwrap();
+        for entry in [
+            serde_json::json!({"env_file":"outside.env"}),
+            serde_json::json!({"command":["arbitrary"]}),
+            serde_json::json!({"cwd":"/outside"}),
+        ] {
+            fs::write(
+                project.path().join(layout.local()),
+                serde_json::json!({"mcp":{"novamira":entry}}).to_string(),
+            )
+            .unwrap();
+            assert!(crate::mcp::config::resolve_at(
+                project.path(),
+                base.as_object().unwrap(),
+                &layout.local()
+            )
+            .is_err());
+        }
     }
 }
 
 #[test]
 fn plugin_script_installs_verified_release_in_real_disposable_wordpress_without_activation() {
+    for client in crate::model::Client::ALL {
+        plugin_script_installs_verified_release_for(client);
+    }
+}
+
+fn plugin_script_installs_verified_release_for(client: crate::model::Client) {
     // Real WP-CLI, PHP and MariaDB run only inside the required VM's Docker.
     // No application is exposed over HTTP and no real project/credentials exist.
     struct Sandbox {
@@ -262,10 +282,19 @@ fn plugin_script_installs_verified_release_in_real_disposable_wordpress_without_
         }
     }
     let project = tempfile::tempdir().unwrap();
-    let root = project.path().join(".ai-profiles/opencode/mcp/novamira");
+    let layout = crate::layout::Layout::Isolated(client);
+    let root = project
+        .path()
+        .join(format!("{}/mcp/novamira", layout.root()));
     let checkout = crate::manager_fixture::Checkout::with_assets(&binaries());
     let installed = Command::new(&checkout.executable)
-        .args(["install", "wordpress", "--client", "opencode", "--project"])
+        .args([
+            "install",
+            "wordpress",
+            "--client",
+            client.as_str(),
+            "--project",
+        ])
         .arg(project.path())
         .output()
         .unwrap();
@@ -325,7 +354,7 @@ fn plugin_script_installs_verified_release_in_real_disposable_wordpress_without_
 set -eu
 exec timeout 180 docker run --rm --name "$WP_TEST_NETWORK-cli" --network "$WP_TEST_NETWORK" --user 1000:1000 \
   --volume "$WP_TEST_PROJECT:$WP_TEST_PROJECT" --workdir "$WP_TEST_PROJECT" \
-  -e "WP_CLI_CACHE_DIR=$WP_TEST_PROJECT/.ai-profiles/opencode/mcp/novamira/.private/wp-cli-cache" \
+  -e "WP_CLI_CACHE_DIR=$WP_TEST_PROJECT/.ai-profiles/$WP_TEST_CLIENT/mcp/novamira/.private/wp-cli-cache" \
   wordpress:cli-php8.3 php -d memory_limit=512M /usr/local/bin/wp "$@"
 "#).unwrap();
     fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
@@ -334,6 +363,7 @@ exec timeout 180 docker run --rm --name "$WP_TEST_NETWORK-cli" --network "$WP_TE
             .args(args)
             .env("WP_TEST_NETWORK", &sandbox.network)
             .env("WP_TEST_PROJECT", project.path())
+            .env("WP_TEST_CLIENT", client.as_str())
             .output()
             .unwrap()
     };
@@ -402,6 +432,7 @@ exec timeout 180 docker run --rm --name "$WP_TEST_NETWORK-cli" --network "$WP_TE
             )
             .env("WP_TEST_NETWORK", &sandbox.network)
             .env("WP_TEST_PROJECT", project.path())
+            .env("WP_TEST_CLIENT", client.as_str())
             .output()
             .unwrap()
     };

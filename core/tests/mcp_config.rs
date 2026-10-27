@@ -2,7 +2,9 @@ use serde_json::json;
 
 use crate::{
     error::McpConfigError,
-    mcp::config::{configured_mcp, merge, native_client_mcp, render, resolve, validate_servers},
+    mcp::config::{
+        configured_mcp_at, merge, native_client_mcp, render, resolve, resolve_at, validate_servers,
+    },
 };
 
 #[test]
@@ -41,6 +43,23 @@ fn invalid_registry_and_boolean_timeout_are_rejected() {
 }
 
 #[test]
+fn legacy_local_override_remains_supported_for_legacy_layout() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(project.path().join(".opencode")).unwrap();
+    std::fs::write(
+        project.path().join(".opencode/ai-profile.local.json"),
+        br#"{"mcp":{"server":{"environment":{"SOURCE":"legacy"}}}}"#,
+    )
+    .unwrap();
+    let base = json!({"server":{"type":"local","command":["run"]}});
+    let resolved = resolve(project.path(), base.as_object().unwrap()).unwrap();
+    assert_eq!(
+        resolved.servers["server"]["environment"]["SOURCE"],
+        "legacy"
+    );
+}
+
+#[test]
 fn native_clients_render_local_remote_disabled_and_timeout_entries() {
     let effective = json!({
         "local":{"type":"local","command":["/project path/.opencode/ai-profile-mcp","local"],"timeout":{"startup":1500,"execution":2500}},
@@ -75,45 +94,55 @@ fn playwright_uses_the_shared_adapter_and_keeps_runtime_overrides() {
         .prefix("project with spaces, ")
         .tempdir()
         .unwrap();
-    std::fs::create_dir(project.path().join(".opencode")).unwrap();
-    std::fs::write(
-        project.path().join(".opencode/ai-profile.local.json"),
-        serde_json::to_vec(&json!({"mcp":{"playwright":{
-            "env_file":".ai-profiles/.env.playwright",
-            "environment":{"AI_PROFILE_PLAYWRIGHT_NETWORK":"{env:DEV_NETWORK}"}
-        }}}))
-        .unwrap(),
-    )
-    .unwrap();
     let definition: serde_json::Value =
         serde_json::from_str(include_str!("../../mcp/servers/playwright.json")).unwrap();
-    let base = json!({"playwright":definition});
-    let base = base.as_object().unwrap();
-    let resolved = resolve(project.path(), base).unwrap();
-    assert_eq!(
-        resolved.servers["playwright"]["command"][0],
-        ".opencode/mcp/playwright/playwright-launcher"
-    );
-    assert_eq!(
-        resolved.servers["playwright"]["env_file"],
-        ".ai-profiles/.env.playwright"
-    );
-    assert_eq!(
-        resolved.servers["playwright"]["environment"]["AI_PROFILE_PLAYWRIGHT_NETWORK"],
-        "{env:DEV_NETWORK}"
-    );
+    for client in crate::model::Client::ALL {
+        let layout = crate::layout::Layout::Isolated(client);
+        let mut client_definition = definition.clone();
+        client_definition["command"][0] = json!(format!(
+            "{}/mcp/playwright/playwright-launcher",
+            layout.root()
+        ));
+        let base = json!({"playwright":client_definition});
+        let base = base.as_object().unwrap();
+        std::fs::create_dir_all(project.path().join(layout.root())).unwrap();
+        std::fs::write(
+            project.path().join(layout.local()),
+            serde_json::to_vec(&json!({"mcp":{"playwright":{
+                "env_file":".ai-profiles/.env.playwright",
+                "environment":{"AI_PROFILE_PLAYWRIGHT_NETWORK":"{env:DEV_NETWORK}"}
+            }}}))
+            .unwrap(),
+        )
+        .unwrap();
+        let resolved = resolve_at(project.path(), base, &layout.local()).unwrap();
+        assert_eq!(
+            resolved.servers["playwright"]["command"][0],
+            format!("{}/mcp/playwright/playwright-launcher", layout.root())
+        );
+        assert_eq!(
+            resolved.servers["playwright"]["env_file"],
+            ".ai-profiles/.env.playwright"
+        );
+        assert_eq!(
+            resolved.servers["playwright"]["environment"]["AI_PROFILE_PLAYWRIGHT_NETWORK"],
+            "{env:DEV_NETWORK}"
+        );
 
-    let rendered = configured_mcp(project.path(), base).unwrap().servers;
-    let adapter = project.path().join(".opencode/ai-profile-mcp");
-    assert_eq!(
-        rendered["playwright"]["command"],
-        json!([adapter.to_str().unwrap(), "playwright"])
-    );
-    assert!(rendered["playwright"].get("environment").is_none());
-    assert!(rendered["playwright"].get("env_file").is_none());
-    for client in ["codex", "claude"] {
-        let native = native_client_mcp(&rendered, client).unwrap();
-        assert_eq!(native["playwright"]["command"], adapter.to_str().unwrap());
-        assert_eq!(native["playwright"]["args"], json!(["playwright"]));
+        let rendered = configured_mcp_at(project.path(), base, &layout.local(), &layout.adapter())
+            .unwrap()
+            .servers;
+        let adapter = project.path().join(layout.adapter());
+        assert_eq!(
+            rendered["playwright"]["command"],
+            json!([adapter.to_str().unwrap(), "playwright"])
+        );
+        assert!(rendered["playwright"].get("environment").is_none());
+        assert!(rendered["playwright"].get("env_file").is_none());
+        for native_client in crate::model::Client::ALL {
+            let native = native_client_mcp(&rendered, native_client.as_str()).unwrap();
+            assert_eq!(native["playwright"]["command"], adapter.to_str().unwrap());
+            assert_eq!(native["playwright"]["args"], json!(["playwright"]));
+        }
     }
 }

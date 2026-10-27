@@ -370,77 +370,80 @@ fn profile_lifecycle_errors_report_missing_state_invalid_manifest_and_single_cli
         model::{Client, ClientSelection, ProfileAction as A},
         profile_management::scoped::run,
     };
-    let (_source, context) = native_source();
-    let missing = tempfile::tempdir().unwrap();
-    let invalid = tempfile::tempdir().unwrap();
-    let installed = tempfile::tempdir().unwrap();
-    scoped_action(
-        &context,
-        installed.path(),
-        A::Install,
-        Client::OpenCode,
-        Some("wordpress"),
-    );
-    let installed_before = snapshot(installed.path());
-    let invalid_bytes = b"{not a manifest";
-    put(invalid.path(), ".ai-profiles/state.json", invalid_bytes);
-
-    let logs = tempfile::tempdir().unwrap();
-    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
-    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
-    let results = with_session(&session, || {
-        let missing_state = run(
-            &context,
-            missing.path(),
-            A::Update,
-            ClientSelection::All,
-            None,
-        );
-        let invalid_manifest = run(
-            &context,
-            invalid.path(),
-            A::Update,
-            ClientSelection::All,
-            None,
-        );
-        let single_conflict = run(
+    for client in Client::ALL {
+        let (_source, context) = native_source();
+        let missing = tempfile::tempdir().unwrap();
+        let invalid = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        scoped_action(
             &context,
             installed.path(),
             A::Install,
-            ClientSelection::One(Client::OpenCode),
+            client,
             Some("wordpress"),
         );
-        (missing_state, invalid_manifest, single_conflict)
-    });
-    session.flush();
-    assert!(results.0.is_err() && results.1.is_err() && results.2.is_err());
-    assert!(!missing.path().join(".ai-profiles/state.json").exists());
-    assert_eq!(
-        fs::read(invalid.path().join(".ai-profiles/state.json")).unwrap(),
-        invalid_bytes
-    );
-    assert_eq!(installed_before, snapshot(installed.path()));
+        let installed_before = snapshot(installed.path());
+        let invalid_bytes = b"{not a manifest";
+        put(invalid.path(), ".ai-profiles/state.json", invalid_bytes);
 
-    let events = diagnostic_events(logs.path());
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.error"
-            && event["fields"]["stage"] == "manifest_load"
-            && event["fields"]["error"]
-                .as_str()
-                .is_some_and(|error| !error.is_empty())
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.client.conflict"
-            && event["fields"]["client"] == "opencode"
-            && event["fields"]["reason"] == "already_installed"
-    }));
-    let operation_results = events
-        .iter()
-        .filter(|event| event["fields"]["event"] == "profile.operation.finished")
-        .map(|event| event["fields"]["result"].as_str().unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(operation_results.len(), 3);
-    assert!(operation_results.iter().all(|result| *result == "error"));
+        let logs = tempfile::tempdir().unwrap();
+        fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+        let session =
+            Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+        let results = with_session(&session, || {
+            let missing_state = run(
+                &context,
+                missing.path(),
+                A::Update,
+                ClientSelection::All,
+                None,
+            );
+            let invalid_manifest = run(
+                &context,
+                invalid.path(),
+                A::Update,
+                ClientSelection::All,
+                None,
+            );
+            let single_conflict = run(
+                &context,
+                installed.path(),
+                A::Install,
+                ClientSelection::One(client),
+                Some("wordpress"),
+            );
+            (missing_state, invalid_manifest, single_conflict)
+        });
+        session.flush();
+        assert!(results.0.is_err() && results.1.is_err() && results.2.is_err());
+        assert!(!missing.path().join(".ai-profiles/state.json").exists());
+        assert_eq!(
+            fs::read(invalid.path().join(".ai-profiles/state.json")).unwrap(),
+            invalid_bytes
+        );
+        assert_eq!(installed_before, snapshot(installed.path()));
+
+        let events = diagnostic_events(logs.path());
+        assert!(events.iter().any(|event| {
+            event["fields"]["event"] == "profile.error"
+                && event["fields"]["stage"] == "manifest_load"
+                && event["fields"]["error"]
+                    .as_str()
+                    .is_some_and(|error| !error.is_empty())
+        }));
+        assert!(events.iter().any(|event| {
+            event["fields"]["event"] == "profile.client.conflict"
+                && event["fields"]["client"] == client.as_str()
+                && event["fields"]["reason"] == "already_installed"
+        }));
+        let operation_results = events
+            .iter()
+            .filter(|event| event["fields"]["event"] == "profile.operation.finished")
+            .map(|event| event["fields"]["result"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(operation_results.len(), 3);
+        assert!(operation_results.iter().all(|result| *result == "error"));
+    }
 }
 
 #[test]
@@ -450,57 +453,61 @@ fn profile_uninstall_preflight_logs_conflict_and_preserves_modified_managed_file
         model::{Client, ClientSelection, ProfileAction as A},
         profile_management::scoped::run,
     };
-    let (_source, context) = native_source();
-    let project = tempfile::tempdir().unwrap();
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::OpenCode,
-        Some("wordpress"),
-    );
-    let managed = project
-        .path()
-        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md");
-    let user_bytes = b"user-owned edit that uninstall must preserve";
-    fs::write(&managed, user_bytes).unwrap();
-    let state_path = project.path().join(".ai-profiles/state.json");
-    let state_before = fs::read(&state_path).unwrap();
-
-    let logs = tempfile::tempdir().unwrap();
-    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
-    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
-    let result = with_session(&session, || {
-        run(
+    for client in Client::ALL {
+        let (_source, context) = native_source();
+        let project = tempfile::tempdir().unwrap();
+        scoped_action(
             &context,
             project.path(),
-            A::Uninstall,
-            ClientSelection::One(Client::OpenCode),
-            None,
-        )
-    });
-    session.flush();
+            A::Install,
+            client,
+            Some("wordpress"),
+        );
+        let managed = project.path().join(format!(
+            ".ai-profiles/{}/plugin/skills/test-gap-discovery/SKILL.md",
+            client.as_str()
+        ));
+        let user_bytes = b"user-owned edit that uninstall must preserve";
+        fs::write(&managed, user_bytes).unwrap();
+        let state_path = project.path().join(".ai-profiles/state.json");
+        let state_before = fs::read(&state_path).unwrap();
 
-    assert!(result.is_err());
-    assert_eq!(fs::read(&managed).unwrap(), user_bytes);
-    assert_eq!(fs::read(state_path).unwrap(), state_before);
-    let events = diagnostic_events(logs.path());
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.preflight.started"
-            && event["fields"]["stage"] == "preflight_remove"
-            && event["fields"]["client"] == "opencode"
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.error"
-            && event["fields"]["stage"] == "preflight_remove"
-            && event["fields"]["error"]
-                .as_str()
-                .is_some_and(|error| !error.is_empty())
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.operation.finished"
-            && event["fields"]["result"] == "error"
-    }));
+        let logs = tempfile::tempdir().unwrap();
+        fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+        let session =
+            Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+        let result = with_session(&session, || {
+            run(
+                &context,
+                project.path(),
+                A::Uninstall,
+                ClientSelection::One(client),
+                None,
+            )
+        });
+        session.flush();
+
+        assert!(result.is_err());
+        assert_eq!(fs::read(&managed).unwrap(), user_bytes);
+        assert_eq!(fs::read(state_path).unwrap(), state_before);
+        let events = diagnostic_events(logs.path());
+        assert!(events.iter().any(|event| {
+            event["fields"]["event"] == "profile.preflight.started"
+                && event["fields"]["stage"] == "preflight_remove"
+                && event["fields"]["client"] == client.as_str()
+        }));
+        assert!(events.iter().any(|event| {
+            event["fields"]["event"] == "profile.error"
+                && event["fields"]["stage"] == "preflight_remove"
+                && event["fields"]["error"]
+                    .as_str()
+                    .is_some_and(|error| !error.is_empty())
+        }));
+        assert!(events.iter().any(|event| {
+            event["fields"]["event"] == "profile.operation.finished"
+                && event["fields"]["result"] == "error"
+        }));
+    }
 }
 
 #[test]
@@ -510,104 +517,118 @@ fn profile_uninstall_logs_actual_removals_manifest_and_preserves_other_state() {
         model::{Client, ClientSelection, ProfileAction as A},
         profile_management::scoped::run,
     };
-    let (_source, context) = native_source();
-    let project = tempfile::tempdir().unwrap();
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::OpenCode,
-        Some("wordpress"),
-    );
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::Codex,
-        Some("wordpress"),
-    );
-    let user_file = project.path().join("context.txt");
-    fs::write(&user_file, b"user-owned context").unwrap();
-    let other_client_record = read_json(&project.path().join(".ai-profiles/state.json")).unwrap()
-        ["clients"]["codex"]
-        .clone();
+    for client in Client::ALL {
+        for other_client in Client::ALL.into_iter().filter(|other| *other != client) {
+            let (_source, context) = native_source();
+            let project = tempfile::tempdir().unwrap();
+            scoped_action(
+                &context,
+                project.path(),
+                A::Install,
+                client,
+                Some("wordpress"),
+            );
+            scoped_action(
+                &context,
+                project.path(),
+                A::Install,
+                other_client,
+                Some("wordpress"),
+            );
+            let user_file = project.path().join("context.txt");
+            fs::write(&user_file, b"user-owned context").unwrap();
+            let other_client_record = read_json(&project.path().join(".ai-profiles/state.json"))
+                .unwrap()["clients"][other_client.as_str()]
+            .clone();
 
-    let logs = tempfile::tempdir().unwrap();
-    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
-    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
-    let result = with_session(&session, || {
-        run(
-            &context,
-            project.path(),
-            A::Uninstall,
-            ClientSelection::One(Client::OpenCode),
-            None,
-        )
-    });
-    session.flush();
+            let logs = tempfile::tempdir().unwrap();
+            fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+            let session =
+                Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+            let result = with_session(&session, || {
+                run(
+                    &context,
+                    project.path(),
+                    A::Uninstall,
+                    ClientSelection::One(client),
+                    None,
+                )
+            });
+            session.flush();
 
-    assert!(result.is_ok());
-    assert_eq!(fs::read(user_file).unwrap(), b"user-owned context");
-    let manifest = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
-    assert!(manifest["clients"]["opencode"].is_null());
-    assert_eq!(manifest["clients"]["codex"], other_client_record);
-    assert!(!project
-        .path()
-        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md")
-        .exists());
+            assert!(result.is_ok());
+            assert_eq!(fs::read(user_file).unwrap(), b"user-owned context");
+            let manifest = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
+            assert!(manifest["clients"][client.as_str()].is_null());
+            assert_eq!(
+                manifest["clients"][other_client.as_str()],
+                other_client_record
+            );
+            assert!(!project
+                .path()
+                .join(format!(
+                    ".ai-profiles/{}/plugin/skills/test-gap-discovery/SKILL.md",
+                    client.as_str()
+                ))
+                .exists());
 
-    let events = diagnostic_events(logs.path());
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.change.applied"
-            && event["fields"]["action"] == "uninstall"
-            && event["fields"]["client"] == "opencode"
-            && event["fields"]["change"] == "removed"
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.manifest.saved"
-            && event["fields"]["client"] == "opencode"
-            && event["fields"]["result"] == "saved"
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.client.finished"
-            && event["fields"]["client"] == "opencode"
-            && event["fields"]["result"] == "success"
-            && event["fields"]["state"] == "removed"
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.operation.finished"
-            && event["fields"]["action"] == "uninstall"
-            && event["fields"]["result"] == "success"
-            && event["fields"]["coverage"] == "removal"
-    }));
+            let events = diagnostic_events(logs.path());
+            assert!(events.iter().any(|event| {
+                event["fields"]["event"] == "profile.change.applied"
+                    && event["fields"]["action"] == "uninstall"
+                    && event["fields"]["client"] == client.as_str()
+                    && event["fields"]["change"] == "removed"
+            }));
+            assert!(events.iter().any(|event| {
+                event["fields"]["event"] == "profile.manifest.saved"
+                    && event["fields"]["client"] == client.as_str()
+                    && event["fields"]["result"] == "saved"
+            }));
+            assert!(events.iter().any(|event| {
+                event["fields"]["event"] == "profile.client.finished"
+                    && event["fields"]["client"] == client.as_str()
+                    && event["fields"]["result"] == "success"
+                    && event["fields"]["state"] == "removed"
+            }));
+            assert!(events.iter().any(|event| {
+                event["fields"]["event"] == "profile.operation.finished"
+                    && event["fields"]["action"] == "uninstall"
+                    && event["fields"]["result"] == "success"
+                    && event["fields"]["coverage"] == "removal"
+            }));
+        }
+    }
 }
 
 #[test]
 fn profile_uninstall_keeps_result_when_diagnostics_are_unavailable() {
     use crate::model::{Client, ClientSelection, ProfileAction as A};
-    let (_source, context) = native_source();
-    let project = tempfile::tempdir().unwrap();
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::OpenCode,
-        Some("wordpress"),
-    );
+    for client in Client::ALL {
+        let (_source, context) = native_source();
+        let project = tempfile::tempdir().unwrap();
+        scoped_action(
+            &context,
+            project.path(),
+            A::Install,
+            client,
+            Some("wordpress"),
+        );
 
-    let result = crate::profile_management::scoped::run(
-        &context,
-        project.path(),
-        A::Uninstall,
-        ClientSelection::One(Client::OpenCode),
-        None,
-    );
+        let result = crate::profile_management::scoped::run(
+            &context,
+            project.path(),
+            A::Uninstall,
+            ClientSelection::One(client),
+            None,
+        );
 
-    assert!(result.is_ok());
-    assert!(
-        read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]["opencode"]
+        assert!(result.is_ok());
+        assert!(
+            read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]
+                [client.as_str()]
             .is_null()
-    );
+        );
+    }
 }
 
 #[test]
@@ -617,73 +638,79 @@ fn profile_uninstall_logs_retained_state_when_file_removal_fails() {
         model::{Client, ClientSelection, ProfileAction as A},
         profile_management::scoped::run,
     };
-    let (_source, context) = native_source();
-    let project = tempfile::tempdir().unwrap();
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::OpenCode,
-        Some("wordpress"),
-    );
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::Codex,
-        Some("wordpress"),
-    );
-    let managed = project
-        .path()
-        .join(".ai-profiles/opencode/plugin/skills/test-gap-discovery/SKILL.md");
-    let state_path = project.path().join(".ai-profiles/state.json");
-    let state_before = fs::read(&state_path).unwrap();
-    let parent = managed.parent().unwrap();
-    fs::set_permissions(parent, fs::Permissions::from_mode(0o500)).unwrap();
+    for client in Client::ALL {
+        for other_client in Client::ALL.into_iter().filter(|other| *other != client) {
+            let (_source, context) = native_source();
+            let project = tempfile::tempdir().unwrap();
+            scoped_action(
+                &context,
+                project.path(),
+                A::Install,
+                client,
+                Some("wordpress"),
+            );
+            scoped_action(
+                &context,
+                project.path(),
+                A::Install,
+                other_client,
+                Some("wordpress"),
+            );
+            let managed = project.path().join(format!(
+                ".ai-profiles/{}/plugin/skills/test-gap-discovery/SKILL.md",
+                client.as_str()
+            ));
+            let state_path = project.path().join(".ai-profiles/state.json");
+            let state_before = fs::read(&state_path).unwrap();
+            let parent = managed.parent().unwrap();
+            fs::set_permissions(parent, fs::Permissions::from_mode(0o500)).unwrap();
 
-    let logs = tempfile::tempdir().unwrap();
-    fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
-    let session = Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
-    let result = with_session(&session, || {
-        run(
-            &context,
-            project.path(),
-            A::Uninstall,
-            ClientSelection::All,
-            None,
-        )
-    });
-    session.flush();
-    fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).unwrap();
+            let logs = tempfile::tempdir().unwrap();
+            fs::set_permissions(&logs, fs::Permissions::from_mode(0o700)).unwrap();
+            let session =
+                Session::open(logs.path(), Config::default(), "profile-lifecycle-test").unwrap();
+            let result = with_session(&session, || {
+                run(
+                    &context,
+                    project.path(),
+                    A::Uninstall,
+                    ClientSelection::All,
+                    None,
+                )
+            });
+            session.flush();
+            fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).unwrap();
 
-    assert!(result.is_err());
-    assert_eq!(
-        fs::read(&managed).unwrap(),
-        b"---\nname: test-gap-discovery\ndescription: Test inventory\n---\n"
-    );
-    let manifest_after = read_json(&state_path).unwrap();
-    assert_ne!(fs::read(&state_path).unwrap(), state_before);
-    assert!(manifest_after["clients"]["opencode"].is_object());
-    assert!(manifest_after["clients"]["codex"].is_null());
-    let events = diagnostic_events(logs.path());
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.error"
-            && event["fields"]["stage"] == "remove"
-            && event["fields"]["error"]
-                .as_str()
-                .is_some_and(|error| !error.is_empty())
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.client.finished"
-            && event["fields"]["client"] == "opencode"
-            && event["fields"]["result"] == "error"
-            && event["fields"]["state"] == "changes_applied_manifest_retained"
-    }));
-    assert!(events.iter().any(|event| {
-        event["fields"]["event"] == "profile.operation.finished"
-            && event["fields"]["result"] == "partial"
-            && event["fields"]["retained_clients"] == "opencode"
-    }));
+            assert!(result.is_err());
+            assert_eq!(
+                fs::read(&managed).unwrap(),
+                b"---\nname: test-gap-discovery\ndescription: Test inventory\n---\n"
+            );
+            let manifest_after = read_json(&state_path).unwrap();
+            assert_ne!(fs::read(&state_path).unwrap(), state_before);
+            assert!(manifest_after["clients"][client.as_str()].is_object());
+            assert!(manifest_after["clients"][other_client.as_str()].is_null());
+            let events = diagnostic_events(logs.path());
+            assert!(events.iter().any(|event| {
+                event["fields"]["event"] == "profile.error"
+                    && event["fields"]["stage"] == "remove"
+                    && event["fields"]["error"]
+                        .as_str()
+                        .is_some_and(|error| !error.is_empty())
+            }));
+            assert!(events.iter().any(|event| {
+                event["fields"]["event"] == "profile.client.finished"
+                    && event["fields"]["client"] == client.as_str()
+                    && event["fields"]["result"] == "error"
+                    && event["fields"]["state"] == "changes_applied_manifest_retained"
+            }));
+            assert!(events.iter().any(|event| {
+                event["fields"]["event"] == "profile.operation.finished"
+                    && event["fields"]["result"] == "partial"
+                    && event["fields"]["retained_clients"] == client.as_str()
+            }));
+        }
+    }
 }
 
 #[test]
@@ -1564,84 +1591,48 @@ fn all_keeps_successful_clients_when_native_activation_fails_later() {
 #[test]
 fn scoped_clients_coexist_and_lifecycle_preserves_foreign_bytes_and_records() {
     use crate::model::{Client, ProfileAction as A};
-    let (_sources, context) = native_source();
-    let project = tempfile::tempdir().unwrap();
-    put(project.path(), ".codex/config.toml", b"malformed = [");
-    put(project.path(), ".claude/settings.json", b"not json");
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::OpenCode,
-        Some("wordpress"),
-    );
-    assert!(!project.path().join(".claude-plugin").exists());
-    assert!(!project.path().join(".agents").exists());
-    assert!(!project
-        .path()
-        .join(".ai-profiles/opencode/plugin/.codex-plugin")
-        .exists());
-    let open_payload = snapshot(&project.path().join(".ai-profiles/opencode"));
-    let open_config = fs::read(project.path().join("opencode.json")).unwrap();
-    let before = read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]
-        ["opencode"]
-        .clone();
-    fs::remove_file(project.path().join(".codex/config.toml")).unwrap();
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::Codex,
-        Some("wordpress"),
-    );
-    assert_eq!(
-        open_payload,
-        snapshot(&project.path().join(".ai-profiles/opencode"))
-    );
-    assert_eq!(
-        open_config,
-        fs::read(project.path().join("opencode.json")).unwrap()
-    );
-    assert_eq!(
-        before,
-        read_json(&project.path().join(".ai-profiles/state.json")).unwrap()["clients"]["opencode"]
-    );
-    fs::remove_file(project.path().join(".claude/settings.json")).unwrap();
-    scoped_action(
-        &context,
-        project.path(),
-        A::Install,
-        Client::Claude,
-        Some("wordpress"),
-    );
-    let claude_payload = snapshot(&project.path().join(".ai-profiles/claude"));
-    let claude_config = fs::read(project.path().join(".claude/settings.json")).unwrap();
-    let claude_record = read_json(&project.path().join(".ai-profiles/state.json")).unwrap()
-        ["clients"]["claude"]
-        .clone();
-    for action in [A::Update, A::Switch, A::Status, A::Uninstall] {
-        scoped_action(
-            &context,
-            project.path(),
-            action,
-            Client::Codex,
-            (action == A::Switch).then_some("wordpress"),
-        );
-        assert_eq!(
-            open_payload,
-            snapshot(&project.path().join(".ai-profiles/opencode"))
-        );
-        assert_eq!(
-            claude_payload,
-            snapshot(&project.path().join(".ai-profiles/claude"))
-        );
-        assert_eq!(
-            claude_config,
-            fs::read(project.path().join(".claude/settings.json")).unwrap()
-        );
-        let state = read_json(&project.path().join(".ai-profiles/state.json")).unwrap();
-        assert_eq!(before, state["clients"]["opencode"]);
-        assert_eq!(claude_record, state["clients"]["claude"]);
+    let native_config = |client| match client {
+        Client::OpenCode => "opencode.json",
+        Client::Claude => ".claude/settings.json",
+        Client::Codex => ".codex/config.toml",
+    };
+    for client in Client::ALL {
+        for other_client in Client::ALL.into_iter().filter(|other| *other != client) {
+            let (_sources, context) = native_source();
+            let project = tempfile::tempdir().unwrap();
+            for selected in [client, other_client] {
+                scoped_action(
+                    &context,
+                    project.path(),
+                    A::Install,
+                    selected,
+                    Some("wordpress"),
+                );
+            }
+            let state_path = project.path().join(".ai-profiles/state.json");
+            let other_root = project
+                .path()
+                .join(crate::layout::Layout::Isolated(other_client).root());
+            let other_payload = snapshot(&other_root);
+            let other_config_path = project.path().join(native_config(other_client));
+            let other_config = fs::read(&other_config_path).unwrap();
+            let manifest = read_json(&state_path).unwrap();
+            let other_record = manifest["clients"][other_client.as_str()].clone();
+
+            for action in [A::Update, A::Switch, A::Status, A::Uninstall] {
+                scoped_action(
+                    &context,
+                    project.path(),
+                    action,
+                    client,
+                    (action == A::Switch).then_some("wordpress"),
+                );
+                assert_eq!(other_payload, snapshot(&other_root));
+                assert_eq!(other_config, fs::read(&other_config_path).unwrap());
+                let state = read_json(&state_path).unwrap();
+                assert_eq!(other_record, state["clients"][other_client.as_str()]);
+            }
+        }
     }
 }
 

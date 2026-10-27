@@ -343,8 +343,10 @@ marker pozwalający zachować historyczny błąd cloud-init bez blokowania test�
 
 Testy jednostkowe aktywacji używają wstrzykniętych runnerów; domyślny runner
 natywnych integracji w testach zgłasza brak CLI. Nigdy nie rejestrują marketplace
-w rzeczywistym HOME. Test adaptera Playwright instaluje wyłącznie CLIENT=opencode
-do jednorazowego projektu, pod `.ai-profiles/opencode/`.
+w rzeczywistym HOME. Test adaptera Playwright instaluje wybranego klienta do
+jednorazowego projektu, pod `.ai-profiles/{client}/`. Wspólne scenariusze
+obejmują `opencode`, `claude` i `codex`, każdy z osobnym projektem, stanem i
+artefaktami; natywne pliki konfiguracyjne pozostają właściwe dla klienta.
 
 Jedna nieefemeryczna VM na kanoniczną ścieżkę checkoutu/użytkownika/hosta.
 Tożsamość w konfiguracji VM jest weryfikowana przed operacjami; kolizja

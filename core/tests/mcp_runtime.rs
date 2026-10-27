@@ -8,15 +8,20 @@ use crate::mcp::environment::{dotenv, environment_for};
 fn project_location_follows_the_installed_adapter_not_its_invocation_path() {
     let temp = tempfile::tempdir().unwrap();
     let project = temp.path().join("installed project,with spaces");
-    std::fs::create_dir_all(project.join(".opencode")).unwrap();
-    let executable = project.join(".opencode/ai-profile-mcp");
-    std::fs::write(&executable, b"adapter").unwrap();
-    let alias = temp.path().join("adapter-alias");
-    std::os::unix::fs::symlink(&executable, &alias).unwrap();
-    assert_eq!(
-        crate::mcp::runtime::project_from_adapter(&alias).unwrap(),
-        project.canonicalize().unwrap()
-    );
+    for client in crate::model::Client::ALL {
+        let layout = crate::layout::Layout::Isolated(client);
+        std::fs::create_dir_all(project.join(layout.root())).unwrap();
+        let executable = project.join(layout.adapter());
+        std::fs::write(&executable, b"adapter").unwrap();
+        let alias = temp
+            .path()
+            .join(format!("adapter-alias-{}", client.as_str()));
+        std::os::unix::fs::symlink(&executable, &alias).unwrap();
+        assert_eq!(
+            crate::mcp::runtime::project_from_adapter(&alias).unwrap(),
+            project.canonicalize().unwrap()
+        );
+    }
     let unrelated = temp.path().join("not-an-installed-adapter");
     std::fs::write(&unrelated, b"adapter").unwrap();
     assert!(crate::mcp::runtime::project_from_adapter(&unrelated).is_err());
