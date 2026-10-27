@@ -10,6 +10,8 @@ else ifeq ($(HELP_REQUEST),test)
 HELP_FILE := make/help/test.txt
 else ifeq ($(HELP_REQUEST),bootstrap)
 HELP_FILE := make/help/bootstrap.txt
+else ifneq ($(filter $(HELP_REQUEST),agent agent-start agent-status agent-stop),)
+HELP_FILE := make/help/agent.txt
 endif
 
 .PHONY: help
@@ -20,7 +22,7 @@ help:
 	fi
 
 ifneq ($(filter help,$(MAKECMDGOALS)),)
-.PHONY: test profile profiles bootstrap
-test profile profiles bootstrap:
+.PHONY: test profile profiles bootstrap agent agent-start agent-status agent-stop
+test profile profiles bootstrap agent agent-start agent-status agent-stop:
 	@:
 endif

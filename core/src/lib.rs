@@ -3,6 +3,7 @@
 //! Make and installed project tooling use this implementation. Python sources
 //! remain in the repository as migration reference only.
 
+pub mod agents;
 mod codec;
 mod error;
 mod filesystem;

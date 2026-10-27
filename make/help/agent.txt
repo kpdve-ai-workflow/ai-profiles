@@ -1,0 +1,14 @@
+Opcjonalna delegacja w ai-profiles (Codex + Herdr)
+
+  make agent CLIENT=codex
+  make agent CLIENT=codex BRAIN_MODEL=gpt-6.1-sol BRAIN_THINKING=xhigh \
+      RESEARCHER_MODEL=gpt-6-luna RESEARCHER_THINKING=medium
+  make agent-status SESSION=/tmp/ai-profiles-agents-...
+  make agent-stop SESSION=/tmp/ai-profiles-agents-...
+
+agent-start jest aliasem agent. Uruchamiaj wewnątrz Herdr.
+Brain powstaje w nowym panelu, Researcher dopiero przy pierwszym zleceniu.
+Zwykłe codex/claude nie włączają tego workflow. Profile nie są modyfikowane.
+Limity: RESEARCH_TIMEOUT=180 sekund, RESEARCHER_MAX_TASKS=8 (potem nowy kontekst).
+Stan i raporty pozostają w prywatnym katalogu SESSION, również po agent-stop.
+Szczegóły i ręczna diagnostyka: docs/agents-flow.md

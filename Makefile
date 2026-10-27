@@ -8,5 +8,6 @@ include make/help.mk
 ifeq ($(filter help,$(MAKECMDGOALS)),)
 include make/bootstrap.mk
 include make/profiles.mk
+include make/agent.mk
 include make/tests.mk
 endif

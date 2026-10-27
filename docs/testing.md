@@ -63,6 +63,7 @@ Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
 | Integracja/obraz Playwright | `make test-playwright` |
 | Wspólne zmiany obejmujące oba obszary | `make test-all` |
 | Orkiestracja VM | `bash tests/vm/check.sh` oraz `make test-all` |
+| Workflow agentów Herdr | `make validate-rust-migration` w VM, `bash tests/agents/check-make.sh` i rzeczywista próba produkcyjna `bash tests/agents/live.sh` na hoście z Herdr/Codex |
 | Wyłącznie dokumentacja/instrukcje | Kontrola treści, odnośników i spójności; bez udawania weryfikacji aplikacji |
 
 `make test` służy również iteracyjnej weryfikacji Rust. Szersza bramka może już

@@ -27,6 +27,7 @@ This builds, but does not run, the executables in
 | `ai-profile-mcp` | Standalone MCP adapter | Configured as the project's MCP executable |
 | `restore-updraft` | WordPress database restore | `core/target/release/restore-updraft --help` |
 | `test-inventory` | Shared test-discovery skill inventory | Installed as the skill's `scripts/inventory-tests` |
+| `ai-profile-agent` | Checkout-only Brain + Researcher in Herdr; not installed into profiles | `make agent CLIENT=codex` |
 
 These are examples of how to invoke the programs, not build or validation
 steps. `make install CLIENT=<client> PROFILE=<profile> PROJECT=<project>` builds all
