@@ -45,6 +45,53 @@ fn adapter(project: &Path, client: &str) -> std::path::PathBuf {
 }
 
 #[test]
+fn mcp_launch_records_consumed_configuration_and_prepared_environment() {
+    let project = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let base = br#"{"format":2,"clients":{"opencode":{"mcp_base":{"probe":{"type":"local","command":["/bin/sh","-c","printf '%s' \"$VALUE:$AI_PROFILE_PROJECT_DIR\""]}}}}}"#;
+    fs::create_dir_all(project.path().join(".ai-profiles")).unwrap();
+    fs::write(project.path().join(crate::layout::STATE), base).unwrap();
+    fs::create_dir_all(project.path().join(".opencode")).unwrap();
+    let override_bytes = br#"{"mcp":{"probe":{"env_file":".env.probe","environment":{"VALUE":"{env:FROM_DOTENV}"}}}}"#;
+    fs::write(project.path().join(".opencode/ai-profile.local.json"), override_bytes).unwrap();
+    let dotenv_bytes = b"FROM_DOTENV='exact value'\n";
+    fs::write(project.path().join(".env.probe"), dotenv_bytes).unwrap();
+    let executable = adapter(project.path(), "opencode");
+    let output = Command::new(executable)
+        .arg("probe")
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .current_dir(outside.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, format!("exact value:{}", project.path().canonicalize().unwrap().display()).as_bytes());
+    assert!(output.stderr.is_empty());
+
+    let sessions = records(project.path());
+    assert_eq!(sessions.len(), 1);
+    let events = &sessions[0];
+    let operation_id = events.iter()
+        .find(|record| record["fields"]["event"] == "mcp.prepare.started")
+        .and_then(|record| record["fields"]["operation_id"].as_str())
+        .expect("MCP preparation starts one correlated operation");
+    let related: Vec<_> = events.iter().filter(|record| record["fields"]["operation_id"] == operation_id).collect();
+    assert!(related.iter().any(|record| record["fields"]["event"] == "mcp.config.consumed"));
+    assert!(related.iter().any(|record| record["fields"]["event"] == "mcp.environment.dotenv"));
+    assert!(related.iter().any(|record| record["fields"]["event"] == "mcp.environment.prepared"));
+    assert!(related.iter().any(|record| record["fields"]["event"] == "mcp.prepare.finished"));
+    assert_eq!(related.last().unwrap()["fields"]["outcome"], "handoff");
+    let payloads: Vec<_> = fs::read_dir(project.path().join(".ai-profiles-logs"))
+        .unwrap().flat_map(|entry| fs::read_dir(entry.unwrap().path()).unwrap())
+        .map(|entry| entry.unwrap().path()).filter(|path| path.extension().is_some_and(|ext| ext == "bin"))
+        .map(|path| fs::read(path).unwrap()).collect();
+    assert!(payloads.iter().any(|payload| payload == base));
+    assert!(payloads.iter().any(|payload| payload == override_bytes));
+    assert!(payloads.iter().any(|payload| payload == dotenv_bytes));
+    assert_eq!(fs::read_dir(outside.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn installed_parallel_clients_handoff_preserves_protocol_and_exit_from_foreign_cwd() {
     let project = tempfile::tempdir().unwrap();
     let outside = tempfile::tempdir().unwrap();

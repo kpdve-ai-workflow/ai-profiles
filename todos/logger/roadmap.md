@@ -126,7 +126,7 @@
 
 ### Zadanie 2.6: Przygotowanie MCP i launcherów
 
-- [ ] **MCP-PREPARE — Konfiguracja i przygotowanie uruchomienia lokalnego MCP.**
+- [~] **MCP-PREPARE — Konfiguracja i przygotowanie uruchomienia lokalnego MCP.**
   - Zależność: FOUNDATION-BASE.
   - Zakres: faktycznie odczytana konfiguracja/dotenv, rozwiązywanie środowiska, wybór komendy, przygotowanie uruchomienia i błędy do istniejącej granicy przekazania sterowania.
   - Kontrakt: [przygotowanie MCP](concepts/mcp.md).

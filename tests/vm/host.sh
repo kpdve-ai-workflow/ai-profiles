@@ -63,8 +63,28 @@ if ! $exists; then
         -c "user.ai-profiles.identity=$identity" -c "user.ai-profiles.image=$fingerprint" \
         -c "cloud-init.user-data=$(cat "$state/cloud-init.yaml")"
 fi
-status=$(ic list "$name" --format json | jq -r --arg n "$name" '.[] | select(.name == $n) | .status')
-[[ $status == Running ]] || ic start "$name"
+# Odczyt pojedynczego zasobu zamiast listy instancji; bez automatycznych restartów.
+vm_status() {
+    ic_query "/1.0/instances/$name/state?project=default" |
+        jq -er '.status | select(type == "string" and length > 0)'
+}
+status=$(vm_status) || fail 'Nie można odczytać stanu VM.'
+echo "VM: $name, stan przed startem: $status"
+case $status in
+    Running) ;;
+    Stopped)
+        start_result=0
+        ic start "$name" || start_result=$?
+        if (( start_result != 0 )); then
+            # Stan mógł zmienić się po odczycie. Zachowaj błąd w logu i sprawdź
+            # rzeczywisty stan, bez dopasowywania tekstu błędu ani ponawiania startu.
+            status=$(vm_status) || { echo 'VM: nie można potwierdzić stanu po błędzie startu.' >&2; exit "$start_result"; }
+            [[ $status == Running ]] || { echo "VM: start nie powiódł się; stan: $status" >&2; exit "$start_result"; }
+            echo 'VM: po błędzie startu potwierdzono Running; sprawdzam gotowość.'
+        fi
+        ;;
+    *) fail "Nieobsługiwany stan VM: $status; nie uruchamiam ani nie restartuję maszyny." ;;
+esac
 ready=false
 for ((i=0; i<180; i++)); do
     if ic exec "$name" -- true >/dev/null 2>&1; then ready=true; break; fi
