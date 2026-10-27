@@ -28,8 +28,9 @@ możliwym przyszłym rozszerzeniem.
 
 **Brain** prowadzi rozmowę z użytkownikiem, interpretuje zadanie i podejmuje
 decyzje. Może analizować, planować oraz implementować zmiany zlecone przez
-użytkownika. Przy szerszej eksploracji kodu zleca Researcherowi zebranie dowodów,
-a następnie wykorzystuje raport do przygotowania odpowiedzi lub dalszej pracy.
+użytkownika. Całą wiedzę o kodzie pozyskuje przez Researchera: zleca mu
+wyszukiwanie, odczyt i weryfikację źródeł, a następnie rozumuje na podstawie
+raportów. Nie otwiera sam plików, nawet pojedynczych wskazanych odnośników.
 
 **Researcher** wyszukuje pliki, symbole i miejsca użycia, śledzi przepływy danych
 oraz opisuje zależności. Zwraca krótkie ustalenia z odnośnikami do kodu.
@@ -58,6 +59,12 @@ sequenceDiagram
     R->>R: Odczytaj kod i zbierz dowody
     R->>M: submit_report(task_id, report)
     M->>B: Zwróć krótki raport
+    opt W raporcie brakuje dowodów
+        B->>M: research(konkretne braki do uzupełnienia)
+        M->>R: Przekaż nowe pytanie uzupełniające
+        R->>M: submit_report(nowy task_id, uzupełnienie)
+        M->>B: Zwróć dodatkowe ustalenia
+    end
     B->>U: Odpowiedź na podstawie ustaleń
 ```
 
@@ -92,8 +99,8 @@ Polecenie buduje natywny launcher, tworzy sąsiedni panel z Brainem i drukuje
 wywołującym. Przełącz się do wskazanego panelu Brain i rozmawiaj z nim normalnie,
 np. „Znajdź punkt wejścia narzędzia i prześledź instalację profilu”.
 
-Brain dostaje tylko dla tej sesji instrukcje delegowania szerszej eksploracji
-repo. Pojedynczy znany plik może przeczytać sam. Researcher uruchamia się przy
+Brain dostaje tylko dla tej sesji instrukcje obowiązkowego delegowania każdego
+odczytu i wyszukiwania w repo. Researcher uruchamia się przy
 pierwszym wywołaniu narzędzia `research`, w kolejnym panelu Herdr. Kolejne
 zlecenia wykorzystują ten sam proces. Brain nie musi być agentem ze skilla
 `brain-to-implementer`; ta nazwa oznacza tu rolę prowadzącą rozmowę.
@@ -105,9 +112,18 @@ Przykładowe polecenie do Braina:
 > bez modyfikowania plików.
 
 Nie trzeba osobno uruchamiać Researchera ani przeklejać między panelami jego
-wyników. Odczyt jednego znanego pliku lub sprawdzenie konkretnego odnośnika
-może wykonać sam Brain. Instrukcje sesji zalecają delegowanie szerszego skanu,
-ale rozpoznanie takiej potrzeby pozostaje zachowaniem modelu.
+wyników. Także odczyt jednego znanego pliku, sprawdzenie numeru linii i
+weryfikacja wniosku należą wyłącznie do Researchera. Brain ma wyłączone
+narzędzia wykonywania poleceń (`features.shell_tool=false`); instrukcje
+zabraniają obchodzenia tej zasady innymi narzędziami odczytu.
+
+Jeżeli raport jest niewystarczający, Brain wskazuje konkretne braki i wysyła
+kolejne zlecenie do Researchera. Na przykład: „Potwierdź obsługę częściowej
+awarii instalacji; wskaż warunek i krótki fragment kodu oraz opisz stan po
+błędzie”. Po następnym raporcie ponownie ocenia kompletność dowodów. Nie
+zastępuje tego własnym grepem. Gdy nie da się potwierdzić faktu, jawnie podaje
+ograniczenie. Kolejne pytanie uzupełniające powstaje po zakończonym raporcie;
+nie jest automatycznym ponowieniem zadania o niepewnym dostarczeniu.
 
 ## Modele i limity
 
@@ -159,13 +175,15 @@ obejmującego wszystkie niezależne wywołania `make agent`.
 
 ## Uprawnienia i raporty
 
-Brain działa z `workspace-write` i `on-request`. Researcher ma `read-only`
+Brain działa z `workspace-write` i `on-request`, ale z wyłączonym wykonywaniem
+poleceń (`features.shell_tool=false`). Researcher ma włączone narzędzia poleceń
+(`features.shell_tool=true`) i sandbox `read-only`
 i `never`: nie może uzyskać eskalacji poleceń. Oba procesy mają wyłączone natywne
 subagenty. Researcher ma ponadto wyłączone Apps, pluginy, hooks, przeglądarkę,
 wyszukiwanie internetowe oraz skonfigurowane wcześniej serwery MCP. Efektywny
 inwentarz MCP jest odczytywany przed każdym tworzeniem Researchera. Zachowaj
 konfigurację klienta niezmienioną podczas życia procesu; po jej zmianie uruchom
-nową sesję. Domyślne narzędzia odczytu plików działają w sandboxie Codexa.
+nową sesję. Polecenia odczytu Researchera działają w sandboxie Codexa.
 
 ### Co oznacza prawo zapisu Braina
 
@@ -173,6 +191,13 @@ nową sesję. Domyślne narzędzia odczytu plików działają w sandboxie Codexa
 `workspace-write`, ponieważ ma móc realizować także zlecenia implementacyjne.
 `on-request` określa sposób proszenia o eskalację; nie wymaga osobnego
 potwierdzenia każdej edycji dozwolonej przez sandbox.
+
+Wyłączenie narzędzi poleceń Braina blokuje również samodzielne uruchamianie
+komend budowania i testowania przez tę rolę. Researcher nadal ma zakaz
+uruchamiania testów. Wykonanie tych operacji wymaga osobnego działania
+użytkownika lub innego, jawnie wybranego sposobu pracy. Dostępne narzędzia
+edycji nie mogą służyć Brainowi do odczytywania źródeł; ewentualne zmiany
+muszą opierać się na dowodach i kontekście uzyskanym od Researchera.
 
 Polecenie „tylko analiza, bez zmian” ogranicza zadanie Braina na poziomie
 instrukcji. Nie zmienia jego sandboxa na `read-only`. Techniczna blokada
@@ -198,7 +223,7 @@ Raport wymaga pięciu niepustych sekcji: `SUMMARY`, `RELEVANT FILES`,
 Brain otrzymuje raport, identyfikator zadania i konfigurację modelu Researchera.
 Launcher nie czyta terminalowej historii skanowania. Raporty są danymi;
 nie zmieniają instrukcji ani uprawnień Braina. Dowody istotne dla decyzji nadal
-wymagają oceny, a w razie potrzeby sprawdzenia wskazanego pliku.
+wymagają oceny; dodatkowe sprawdzenie wskazanego pliku Brain zleca Researcherowi.
 
 ### Narzędzia dostępne w rolach
 
@@ -412,6 +437,12 @@ Instrukcje ról są dołączane do binarium podczas kompilacji i przekazywane
 nowym procesom jako konfiguracja sesji. Nie są dopisywane do `AGENTS.md`
 ani instalowane jako skill aktywujący się przy zwykłym uruchomieniu klienta.
 Po ich zmianie potrzebna jest kompilacja i nowa sesja, aby załadować nową treść.
+
+Po aktualizacji tej zasady uruchom ponownie `make agent CLIENT=codex`.
+Komenda przebuduje launcher i utworzy nowego Braina. Dotychczasowe panele
+zachowują wcześniejsze instrukcje i dostępne narzędzia; aktualizacja plików
+repozytorium nie przełącza ich automatycznie na nowe ustawienia. Starą sesję
+możesz wcześniej zakończyć przez `make agent-stop SESSION=<jej-ścieżka>`.
 
 Obecne wdrożenie nie dostarcza obsługi Claude, wyboru innych workflow,
 parametru sandboxa Braina, kolejki wielu workerów ani dystrybucji mechanizmu

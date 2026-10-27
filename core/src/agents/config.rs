@@ -168,6 +168,9 @@ pub(super) fn codex_args(
     ));
     set("features.multi_agent=false".into());
     set("features.multi_agent_v2=false".into());
+    // Source discovery belongs exclusively to Researcher, including verification.
+    // Explicitly enable its shell so a user's disabled default cannot prevent reads.
+    set(format!("features.shell_tool={}", role == Role::Researcher));
     let instructions = match role {
         Role::Brain => include_str!("../../agents/brain.md"),
         Role::Researcher => include_str!("../../agents/researcher.md"),

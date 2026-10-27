@@ -392,6 +392,27 @@ fn codex_instances_get_independent_models_and_worker_cannot_escalate() {
 }
 
 #[test]
+fn brain_delegates_source_lookup_without_command_tools_while_researcher_can_read() {
+    let config = Config::parse(|_, default| default.to_owned()).unwrap();
+    for (role, expected_shell) in [(Role::Brain, false), (Role::Researcher, true)] {
+        let args = codex_args(
+            &config,
+            role,
+            Path::new("/repo"),
+            Path::new("/private"),
+            Path::new("/launcher"),
+            &[],
+        );
+        let shell = args
+            .windows(2)
+            .filter(|pair| pair[0] == "--config")
+            .filter_map(|pair| pair[1].parse::<toml_edit::DocumentMut>().ok())
+            .find_map(|document| document.get("features")?.get("shell_tool")?.as_bool());
+        assert_eq!(shell, Some(expected_shell), "role: {role:?}");
+    }
+}
+
+#[test]
 fn model_changes_are_explicit_and_invalid_limits_fail_before_launch() {
     let custom = Config::parse(|name, default| match name {
         "AI_AGENT_BRAIN_MODEL" => "custom-brain".into(),

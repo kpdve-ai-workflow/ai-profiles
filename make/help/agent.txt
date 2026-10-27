@@ -8,7 +8,8 @@ Opcjonalna delegacja w ai-profiles (Codex + Herdr)
 
 agent-start jest aliasem agent. Uruchamiaj wewnątrz Herdr.
 Brain powstaje w nowym panelu, Researcher dopiero przy pierwszym zleceniu.
+Brain nie wykonuje poleceń; każdy odczyt kodu i uzupełnienie raportu zleca Researcherowi.
 Zwykłe codex/claude nie włączają tego workflow. Profile nie są modyfikowane.
 Limity: RESEARCH_TIMEOUT=180 sekund, RESEARCHER_MAX_TASKS=8 (potem nowy kontekst).
 Stan i raporty pozostają w prywatnym katalogu SESSION, również po agent-stop.
-Szczegóły i ręczna diagnostyka: docs/agents-flow.md
+Szczegóły i ręczna diagnostyka: docs/agents/agents-flow.md
