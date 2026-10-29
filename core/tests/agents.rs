@@ -47,6 +47,18 @@ impl Control for FakeHerdr {
         self.calls.borrow_mut().push(args.to_vec());
         match (args[0].as_str(), args[1].as_str()) {
             ("pane", "layout") => Ok(json!({"layout":{"area":{"width":120,"height":30}}})),
+            ("workspace", "create") => {
+                let n = self
+                    .calls
+                    .borrow()
+                    .iter()
+                    .filter(|a| a[0] == "workspace" && a[1] == "create")
+                    .count();
+                Ok(json!({
+                    "workspace":{"workspace_id":format!("w{n}")},
+                    "root_pane":{"pane_id":format!("w{n}:p1"),"terminal_id":format!("term{n}")}
+                }))
+            }
             ("pane", "split") => {
                 let n = self
                     .calls
@@ -65,7 +77,7 @@ impl Control for FakeHerdr {
                 let pane = args[pane_index].clone();
                 let terminal = format!(
                     "term{}",
-                    pane.rsplit(':').next().unwrap().trim_start_matches('p')
+                    pane.split(':').next().unwrap().trim_start_matches('w')
                 );
                 self.handles
                     .borrow_mut()
@@ -100,7 +112,7 @@ impl Control for FakeHerdr {
                 } else {
                     format!(
                         "term{}",
-                        args[2].rsplit(':').next().unwrap().trim_start_matches('p')
+                        args[2].split(':').next().unwrap().trim_start_matches('w')
                     )
                 };
                 Ok(json!({"pane":{"terminal_id":terminal}}))
@@ -144,6 +156,7 @@ fn fixture() -> Fixture {
             disabled_mcp: vec![],
             brain: Some(Handle {
                 name: "fixture-brain".into(),
+                workspace: None,
                 pane: "w0:p0".into(),
                 terminal: "term0".into(),
             }),
@@ -202,6 +215,51 @@ fn lazy_research_reuses_one_worker_and_returns_only_report() {
         "# fixture entry point\n"
     );
     assert_eq!(f.session.data.disabled_mcp, ["production_database"]);
+}
+
+#[test]
+fn brain_and_researcher_use_separate_non_focused_workspaces() {
+    let mut f = fixture();
+    f.session.data.brain = None;
+    f.session.start(&f.control).unwrap();
+    f.session
+        .research(&f.control, "Find the entry point")
+        .unwrap();
+
+    assert_eq!(count(&f.control, "workspace", "create"), 2);
+    assert_eq!(count(&f.control, "pane", "split"), 0);
+    assert_eq!(count(&f.control, "pane", "layout"), 0);
+    assert_eq!(
+        f.session.data.brain.as_ref().unwrap().workspace.as_deref(),
+        Some("w1")
+    );
+    assert_eq!(f.session.data.brain.as_ref().unwrap().pane, "w1:p1");
+    assert_eq!(
+        f.session
+            .data
+            .researcher
+            .as_ref()
+            .unwrap()
+            .workspace
+            .as_deref(),
+        Some("w2")
+    );
+    assert_eq!(f.session.data.researcher.as_ref().unwrap().pane, "w2:p1");
+
+    let create_calls: Vec<_> = f
+        .control
+        .calls
+        .borrow()
+        .iter()
+        .filter(|a| a[0] == "workspace" && a[1] == "create")
+        .cloned()
+        .collect();
+    assert!(create_calls
+        .iter()
+        .all(|args| args.contains(&"--no-focus".into())));
+    assert!(create_calls
+        .iter()
+        .all(|args| args.contains(&"--cwd".into())));
 }
 
 #[test]

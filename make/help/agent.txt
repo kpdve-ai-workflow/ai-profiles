@@ -1,12 +1,13 @@
 Opcjonalna delegacja w ai-profiles (Codex + Herdr)
 
-  make agent CLIENT=codex
-  make agent CLIENT=codex BRAIN_MODEL=gpt-6.1-sol BRAIN_THINKING=xhigh \
+  make agent CLIENT=codex brain-researcher
+  make agent CLIENT=codex brain-researcher BRAIN_MODEL=gpt-6.1-sol BRAIN_THINKING=xhigh \
       RESEARCHER_MODEL=gpt-6-luna RESEARCHER_THINKING=medium
   make agent-status SESSION=/tmp/ai-profiles-agents-...
   make agent-stop SESSION=/tmp/ai-profiles-agents-...
 
-agent-start jest aliasem agent. Uruchamiaj wewnątrz Herdr.
+brain-researcher uruchamia narzędzie Brain + Researcher. agent i agent-start
+pozostają aliasami dla zgodności. Uruchamiaj wewnątrz Herdr.
 Brain powstaje w nowym panelu, Researcher dopiero przy pierwszym zleceniu.
 Brain nie wykonuje poleceń; każdy odczyt kodu i uzupełnienie raportu zleca Researcherowi.
 Zwykłe codex/claude nie włączają tego workflow. Profile nie są modyfikowane.

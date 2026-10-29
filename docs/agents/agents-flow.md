@@ -15,7 +15,7 @@ Nie stanowi obowiązkowego sposobu rozwijania `ai-profiles`.
 | --- | --- |
 | `codex` | Zwykła sesja klienta z dotychczasową konfiguracją; bez automatycznej aktywacji opisanego workflow |
 | `claude` | Zwykła sesja Claude; obecne wdrożenie nie dodaje integracji tego klienta |
-| `make agent CLIENT=codex` | Nowy Brain w Herdr z możliwością automatycznego zlecania eksploracji Researcherowi |
+| `make agent CLIENT=codex brain-researcher` | Nowy Brain w Herdr z możliwością automatycznego zlecania eksploracji Researcherowi |
 | `make install CLIENT=… PROFILE=… PROJECT=…` | Dotychczasowa instalacja zasobów profilu; nie uruchamia sesji Brain + Researcher |
 
 Obecnie obsługiwany jest wyłącznie `CLIENT=codex`. Parametry `PROFILE` i
@@ -38,7 +38,7 @@ Nie implementuje zmian, nie uruchamia testów i nie podejmuje decyzji
 architektonicznych. Jego ograniczenie do odczytu obejmuje polecenia wykonywane
 w sandboxie Codexa; raport zapisuje osobne narzędzie MCP poza repozytorium.
 
-**Herdr** zarządza panelami i osobnymi procesami Codexa. **Launcher** tworzy
+**Herdr** zarządza workspace'ami, panelami i osobnymi procesami Codexa. **Launcher** tworzy
 te procesy, przekazuje konfigurację i koordynuje zadania oraz raporty. Są to
 rzeczywiste procesy, a nie natywne subagenty jednej rozmowy Codexa.
 
@@ -51,11 +51,11 @@ sequenceDiagram
     participant B as Brain (Sol xhigh)
     participant M as MCP sesji
     participant R as Researcher (Luna medium)
-    U->>L: make agent CLIENT=codex
-    L->>B: Uruchom osobny proces w panelu Herdr
+    U->>L: make agent CLIENT=codex brain-researcher
+    L->>B: Utwórz workspace Brain i uruchom proces w jego root pane
     U->>B: Pytanie wymagające eksploracji repo
     B->>M: research(question)
-    M->>R: Uruchom przy pierwszym zleceniu / wykorzystaj istniejący proces
+    M->>R: Utwórz workspace Researchera przy pierwszym zleceniu / użyj istniejącego procesu
     R->>R: Odczytaj kod i zbierz dowody
     R->>M: submit_report(task_id, report)
     M->>B: Zwróć krótki raport
@@ -84,24 +84,26 @@ sesji; przez narzędzie delegacji do Braina trafia raport.
 W terminalu **wewnątrz uruchomionego Herdr**, z katalogu tego repozytorium:
 
 ```sh
-make agent CLIENT=codex
+make agent CLIENT=codex brain-researcher
 ```
 
 Wymagania: Linux, Rust/Cargo jak dla pozostałych komend produkcyjnych repo,
-zalogowany Codex CLI i działający Herdr z `agent start/prompt/get`, `pane split`,
-metadanymi `terminal_id` oraz `pane layout`. Wdrożenie sprawdzano z Codex
+zalogowany Codex CLI i działający Herdr z `workspace create`, `agent start/prompt/get`
+oraz metadanymi `workspace_id` i `terminal_id`. Wdrożenie sprawdzano z Codex
 0.164.0 i Herdr 0.9.5. Nie instalujemy klientów ani nie zatwierdzamy za użytkownika
 ich okien logowania, zaufania projektu czy uprawnień. Poza Herdr polecenie
 odmawia działania; nie uruchamia zagnieżdżonego multipleksera.
 
-Polecenie buduje natywny launcher, tworzy sąsiedni panel z Brainem i drukuje
-`SESSION=/tmp/ai-profiles-agents-…` oraz JSON stanu. Fokus pozostaje w terminalu
-wywołującym. Przełącz się do wskazanego panelu Brain i rozmawiaj z nim normalnie,
+Polecenie buduje natywny launcher, tworzy osobny workspace dla Braina i drukuje
+`SESSION=/tmp/ai-profiles-agents-…` oraz JSON stanu. Fokus pozostaje w workspace
+wywołującym, który służy do zarządzania sesją. Przełącz się do workspace Brain
+i rozmawiaj z nim normalnie,
 np. „Znajdź punkt wejścia narzędzia i prześledź instalację profilu”.
 
 Brain dostaje tylko dla tej sesji instrukcje obowiązkowego delegowania każdego
 odczytu i wyszukiwania w repo. Researcher uruchamia się przy
-pierwszym wywołaniu narzędzia `research`, w kolejnym panelu Herdr. Kolejne
+pierwszym wywołaniu narzędzia `research`, we własnym workspace Herdr. Brain i
+Researcher nie dzielą workspace z terminalem zarządzającym ani ze sobą. Kolejne
 zlecenia wykorzystują ten sam proces. Brain nie musi być agentem ze skilla
 `brain-to-implementer`; ta nazwa oznacza tu rolę prowadzącą rozmowę.
 
@@ -111,7 +113,7 @@ Przykładowe polecenie do Braina:
 > jak powstaje zestaw plików i gdzie zapisywany jest stan. Tylko analiza,
 > bez modyfikowania plików.
 
-Nie trzeba osobno uruchamiać Researchera ani przeklejać między panelami jego
+Nie trzeba osobno uruchamiać Researchera ani przeklejać między workspace'ami jego
 wyników. Także odczyt jednego znanego pliku, sprawdzenie numeru linii i
 weryfikacja wniosku należą wyłącznie do Researchera. Brain ma wyłączone
 narzędzia wykonywania poleceń (`features.shell_tool=false`); instrukcje
@@ -128,7 +130,7 @@ nie jest automatycznym ponowieniem zadania o niepewnym dostarczeniu.
 ## Modele i limity
 
 ```sh
-make agent CLIENT=codex \
+make agent CLIENT=codex brain-researcher \
   BRAIN_MODEL=gpt-6.1-sol BRAIN_THINKING=xhigh \
   RESEARCHER_MODEL=gpt-6-luna RESEARCHER_THINKING=medium \
   RESEARCH_TIMEOUT=180 RESEARCHER_MAX_TASKS=8
@@ -154,7 +156,7 @@ uruchomienie; nie edytuj ręcznie `state.json` aktywnej sesji.
 Przykład zmiany samego poziomu reasoning Researchera:
 
 ```sh
-make agent CLIENT=codex RESEARCHER_THINKING=low
+make agent CLIENT=codex brain-researcher RESEARCHER_THINKING=low
 ```
 
 Zmiana parametrów dotyczy nowo uruchamianej sesji. Nie przełącza modeli
@@ -279,7 +281,7 @@ ai-profiles-agents-XXXXXX/
 
 | Plik | Zawartość lub rola |
 | --- | --- |
-| `state.json` | Ścieżki checkoutu i launchera, konfiguracja modeli, kontekst Herdr, własne panele, ostatnie pytanie i stan jego wysyłki, liczniki |
+| `state.json` | Ścieżki checkoutu i launchera, konfiguracja modeli, kontekst Herdr, własne workspace'y i panele, ostatnie pytanie i stan jego wysyłki, liczniki |
 | `worker.lock` | Blokada operacji na workerze; istnienie pliku nie oznacza, że blokada jest aktualnie zajęta |
 | `task-N.report.json` | Identyfikator zadania, tekst raportu i konfiguracja Researchera |
 
@@ -300,7 +302,7 @@ make agent-status SESSION=/tmp/ai-profiles-agents-XXXXXX
 make agent-stop SESSION=/tmp/ai-profiles-agents-XXXXXX
 ```
 
-Status pokazuje modele, thinking, identyfikatory paneli/procesów, aktywne zadanie
+Status pokazuje modele, thinking, identyfikatory workspace'ów, paneli/procesów, aktywne zadanie
 i obecność raportu. Rzeczywiste ustawienia klienta można też sprawdzić przez
 `/status` w danym panelu Codexa; stan launchera opisuje żądane ustawienia.
 
@@ -360,7 +362,8 @@ przerwij pracę w odpowiednim panelu klienta i ponownie sprawdź stan; samo
 przerwanie komendy oczekującej nie dowodzi zakończenia wszystkich procesów.
 
 `agent-stop` zamyka tylko panele utworzone przez wskazaną sesję po sprawdzeniu
-ich `terminal_id`. Nie zatrzymuje serwera Herdr ani wcześniejszych agentów.
+ich `terminal_id`; nie zamyka całych workspace'ów ani paneli spoza sesji.
+Nie zatrzymuje serwera Herdr ani wcześniejszych agentów.
 Katalog `SESSION` (0700), stan i raporty (0600) pozostają do inspekcji. Nie
 zawierają kopii poświadczeń. Usuń ten konkretny katalog samodzielnie, gdy nie
 jest już potrzebny. `/tmp` może być czyszczone przez system: po utracie katalogu
@@ -394,8 +397,9 @@ bash tests/agents/live.sh
 ```
 
 Wymaga działającego Herdr i zalogowanego Codexa z dostępem do obu modeli.
-Uruchamia prawdziwego Braina, zadaje dwa pytania o repo i sprawdza raporty,
-ponowne użycie Researchera oraz brak zmian śledzonych plików repo. Po sukcesie
+Uruchamia prawdziwego Braina i Researchera w osobnych workspace'ach, zadaje dwa
+pytania o repo i sprawdza raporty, ponowne użycie Researchera oraz brak zmian
+śledzonych plików repo. Po sukcesie
 zamyka wyłącznie utworzone przez siebie panele. Po błędzie pozostawia sesję
 do diagnozy i drukuje jej ścieżkę. Próba korzysta z konta Codexa i zużywa tokeny.
 Mockowane testy Rust nie zastępują tej integracji.
@@ -438,7 +442,7 @@ nowym procesom jako konfiguracja sesji. Nie są dopisywane do `AGENTS.md`
 ani instalowane jako skill aktywujący się przy zwykłym uruchomieniu klienta.
 Po ich zmianie potrzebna jest kompilacja i nowa sesja, aby załadować nową treść.
 
-Po aktualizacji tej zasady uruchom ponownie `make agent CLIENT=codex`.
+Po aktualizacji tej zasady uruchom ponownie `make agent CLIENT=codex brain-researcher`.
 Komenda przebuduje launcher i utworzy nowego Braina. Dotychczasowe panele
 zachowują wcześniejsze instrukcje i dostępne narzędzia; aktualizacja plików
 repozytorium nie przełącza ich automatycznie na nowe ustawienia. Starą sesję

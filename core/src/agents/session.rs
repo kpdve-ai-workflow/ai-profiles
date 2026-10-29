@@ -28,6 +28,8 @@ const HEADINGS: [&str; 5] = [
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct Handle {
     pub name: String,
+    #[serde(default)]
+    pub workspace: Option<String>,
     pub pane: String,
     pub terminal: String,
 }
@@ -148,48 +150,14 @@ impl Session {
         if self.data.brain.is_some() {
             return Err(AgentError::Input("Brain już został utworzony"));
         }
-        let caller = self.data.context.caller_pane.clone();
-        self.launch(control, Role::Brain, &caller)
+        self.launch(control, Role::Brain)
     }
 
-    fn launch(&mut self, control: &impl Control, role: Role, parent: &str) -> Result<()> {
+    fn launch(&mut self, control: &impl Control, role: Role) -> Result<()> {
         if role == Role::Researcher {
             // Re-read effective MCP inventory when creating/recreating the worker.
             self.data.disabled_mcp = control.mcp_names()?;
         }
-        let layout = control.call(
-            &strings(&["pane", "layout", "--pane", parent]),
-            Duration::from_secs(10),
-        )?;
-        let width = layout
-            .pointer("/layout/area/width")
-            .and_then(Value::as_u64)
-            .unwrap_or(80);
-        let height = layout
-            .pointer("/layout/area/height")
-            .and_then(Value::as_u64)
-            .unwrap_or(40);
-        let direction = if width >= height.saturating_mul(3) {
-            "right"
-        } else {
-            "down"
-        };
-        let created = control.call(
-            &strings(&[
-                "pane",
-                "split",
-                "--pane",
-                parent,
-                "--direction",
-                direction,
-                "--cwd",
-                &self.data.repository.to_string_lossy(),
-                "--no-focus",
-            ]),
-            Duration::from_secs(10),
-        )?;
-        let pane = field(&created, "/pane/pane_id")?;
-        let terminal = field(&created, "/pane/terminal_id")?;
         let suffix = self
             .directory
             .file_name()
@@ -197,8 +165,25 @@ impl Session {
             .unwrap_or("session")
             .trim_start_matches("ai-profiles-agents-");
         let name = format!("aip-{}-{}", role.as_str(), suffix.to_ascii_lowercase());
+        let label = format!("ai-profiles {} {}", role.as_str(), suffix);
+        let created = control.call(
+            &strings(&[
+                "workspace",
+                "create",
+                "--cwd",
+                &self.data.repository.to_string_lossy(),
+                "--label",
+                &label,
+                "--no-focus",
+            ]),
+            Duration::from_secs(10),
+        )?;
+        let workspace = field(&created, "/workspace/workspace_id")?;
+        let pane = field(&created, "/root_pane/pane_id")?;
+        let terminal = field(&created, "/root_pane/terminal_id")?;
         let handle = Handle {
             name: name.clone(),
+            workspace: Some(workspace),
             pane: pane.clone(),
             terminal,
         };
@@ -247,14 +232,10 @@ impl Session {
             self.close_worker(control)?;
         }
         if self.data.researcher.is_none() {
-            let parent = self
-                .data
-                .brain
-                .as_ref()
-                .ok_or(AgentError::Input("Brak panelu Brain"))?
-                .pane
-                .clone();
-            self.launch(control, Role::Researcher, &parent)?;
+            if self.data.brain.is_none() {
+                return Err(AgentError::Input("Brak panelu Brain"));
+            }
+            self.launch(control, Role::Researcher)?;
         }
         let worker = self
             .data
@@ -403,10 +384,10 @@ impl Session {
                 Duration::from_secs(10),
             ) {
                 Ok(value) => {
-                    json!({"name":handle.name,"pane":handle.pane,"agent":value.get("agent")})
+                    json!({"name":handle.name,"workspace":handle.workspace,"pane":handle.pane,"agent":value.get("agent")})
                 }
                 Err(error) => {
-                    json!({"name":handle.name,"pane":handle.pane,"error":error.to_string()})
+                    json!({"name":handle.name,"workspace":handle.workspace,"pane":handle.pane,"error":error.to_string()})
                 }
             },
         };

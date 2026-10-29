@@ -10,14 +10,16 @@ for program in cargo herdr codex; do
 done
 export PATH="$scratch:$PATH"
 output=$(make --no-print-directory agent help)
-[[ $output == *'make agent CLIENT=codex'* ]]
+[[ $output == *'make agent CLIENT=codex brain-researcher'* ]]
 [[ $output != *'cargo build'* && $output != *'unexpected operational command'* ]]
 output=$(make --no-print-directory help)
 [[ $output == *'make agent help'* ]]
-if make --no-print-directory agent CLIENT=claude >"$scratch/invalid" 2>&1; then
+plan=$(make --no-print-directory --dry-run agent CLIENT=codex brain-researcher)
+[[ $(grep -c 'release/ai-profile-agent" start' <<< "$plan") -eq 1 ]]
+if make --no-print-directory agent CLIENT=claude brain-researcher >"$scratch/invalid" 2>&1; then
     echo 'Unsupported client was accepted' >&2
     exit 1
 fi
 [[ $(cat "$scratch/invalid") == *'CLIENT=codex'* ]]
 [[ $(cat "$scratch/invalid") != *'unexpected operational command'* ]]
-printf 'PASSED: agent Make help, default goal, unsupported client\n'
+printf 'PASSED: agent Make help, brain-researcher dispatch, unsupported client\n'

@@ -16,8 +16,11 @@ export AI_AGENT_RESEARCHER_MAX_TASKS = $(RESEARCHER_MAX_TASKS)
 export AI_AGENT_SESSION = $(SESSION)
 AGENT_CLI := "$(RUST_TARGET)/release/ai-profile-agent"
 
-.PHONY: agent agent-start agent-status agent-stop
-agent agent-start:
+.PHONY: agent agent-start brain-researcher agent-status agent-stop
+agent agent-start: brain-researcher
+
+# Named tool entry point. The generic targets remain aliases for compatibility.
+brain-researcher:
 	@test "$$AI_AGENT_CLIENT" = codex || (echo 'Ten tryb wymaga CLIENT=codex' >&2; exit 2)
 	$(MAKE) rust-build
 	@$(AGENT_CLI) start

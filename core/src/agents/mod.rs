@@ -91,7 +91,7 @@ fn run(args: Vec<String>) -> Result<()> {
         [] => {
             println!(
                 "{}",
-                json!({"usage":"make agent CLIENT=codex; make agent help"})
+                json!({"usage":"make agent CLIENT=codex brain-researcher; make agent help"})
             );
             Ok(())
         }
