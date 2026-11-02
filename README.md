@@ -74,7 +74,6 @@ aplikacji przez agentów ani obsługi równoległych instalatorów.
 ### Pozostałe instrukcje
 
 - [Zarządzanie profilami, wersjami i instalacjami](docs/profile-management.md)
-- [Opcjonalne `make agent CLIENT=codex brain-researcher`: Brain + Researcher w Herdr](docs/agents/agents-flow.md)
 - [Testy Rust i Playwright w trwałej VM Debian 13 (Incus)](docs/testing.md)
 - [MCP: rejestr, konfiguracja lokalna, adapter i launchery](mcp/README.md)
 - [Instrukcja profilu WordPress](profiles/wordpress/README.md)

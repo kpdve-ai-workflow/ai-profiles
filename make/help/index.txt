@@ -5,6 +5,5 @@ Wybierz kategorię, aby zobaczyć dostępne komendy i wymagane argumenty:
   make test help       Testy Rust, Playwright i zarządzanie testową VM
   make profile help    Tworzenie, instalacja i utrzymanie profili
   make bootstrap help  Budowanie narzędzia i praca z głównym repozytorium
-  make agent help      Opcjonalna sesja Brain + Researcher w Herdr (tylko to repo)
 
 Szczegółowe wymagania środowiska testowego: docs/testing.md
