@@ -67,8 +67,9 @@ Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
 
 `make test` służy również iteracyjnej weryfikacji Rust. Szersza bramka może już
 obejmować wymagane testy (`make test-all` obejmuje bramkę Rust i Playwright,
-a `make validate-rust-migration` obejmuje `make test`); nie uruchamiaj ich
-ponownie wyłącznie dla formalności. Dla nowych obszarów ustal kontrakt
+a `make validate-rust-migration` obejmuje `make test`). Nie powtarzaj osobno
+kontroli już wykonanych w szerszej bramce; bez nowych zmian ponowne uruchamianie
+tych samych poleceń nie daje dodatkowej wartości. Dla nowych obszarów ustal kontrakt
 weryfikacji na podstawie rzeczywistych narzędzi projektu; nie wymyślaj komend.
 
 Zapisuj rzeczywiście wykonane polecenia, ich rezultaty i ograniczenia
