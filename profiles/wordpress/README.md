@@ -104,18 +104,18 @@ Profil nie zakłada blog ID `1`, BIP ani konkretnej domeny.
 
 To standardowy krok dla lokalnego WordPressa używającego HTTPS z certyfikatem
 DDEV/mkcert. Wykonaj go na hoście, w katalogu głównym projektu WordPressa,
-po instalacji profilu. Dla OpenCode:
+po instalacji profilu. Ustaw `client` zgodnie z instalacją:
 
 ```sh
 CAROOT="$(mkcert -CAROOT)"
+client=opencode # opencode, claude albo codex
 test -s "$CAROOT/rootCA.pem" || { echo "Brak $CAROOT/rootCA.pem; sprawdź mkcert -install i ponów." >&2; exit 1; }
-mkdir -p .ai-profiles/opencode/mcp/novamira/.private
-chmod 700 .ai-profiles/opencode/mcp/novamira/.private
-install -m 644 "$CAROOT/rootCA.pem" .ai-profiles/opencode/mcp/novamira/.private/ca.crt
+mkdir -p ".ai-profiles/$client/mcp/novamira/.private"
+chmod 700 ".ai-profiles/$client/mcp/novamira/.private"
+install -m 644 "$CAROOT/rootCA.pem" ".ai-profiles/$client/mcp/novamira/.private/ca.crt"
 ```
 
-Zamień `opencode` na `claude` albo `codex`, jeśli profil zainstalowano dla
-innego klienta. `mkcert -CAROOT` wskazuje katalog lokalnego CA, a `rootCA.pem`
+`mkcert -CAROOT` wskazuje katalog lokalnego CA, a `rootCA.pem`
 jest jego publicznym certyfikatem. Jeśli polecenie `mkcert` nie jest dostępne
 lub certyfikat nie istnieje, zainstaluj/skonfiguruj mkcert dla hosta i upewnij
 się, że DDEV używa tego CA; nie twórz certyfikatu ani nie kopiuj klucza
@@ -192,7 +192,8 @@ uzupełnienie env → build obrazu → restart klienta/MCP**.
 Z katalogu projektu zbuduj obraz bez sekretów w kontekście:
 
 ```sh
-docker build -t ai-profiles-novamira:0.1.0 .ai-profiles/<klient>/mcp/novamira
+client=opencode # opencode, claude albo codex
+docker build -t ai-profiles-novamira:0.1.0 ".ai-profiles/$client/mcp/novamira"
 ```
 Nie ma dodatkowego polecenia aktywacji. Tylko po zmianie lokalnej konfiguracji
 (np. jawnego `disabled: true` lub timeoutu) wykonaj standardowe

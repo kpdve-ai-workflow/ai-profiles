@@ -2,7 +2,7 @@
 # Lekkie regresje powłoki i transportu; NIE dowód działania VM/E2E.
 set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)
-scratch=$(mktemp -d "${TMPDIR:-/tmp/opencode}/ai-profiles-vm-check.XXXXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/ai-profiles-vm-check.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 expect() {
     local expected=$1; shift
@@ -50,7 +50,19 @@ case "$1 $2" in
     "query /1.0/instances/$MOCK_NAME?project=default")
         id=$MOCK_ID; [[ $MOCK_STATE != collision ]] || id=foreign
         printf '{"type":"virtual-machine","status":"Running","config":{"user.ai-profiles.identity":"%s"}}\n' "$id" ;;
-    list*) printf '[{"name":"%s","status":"Running"}]\n' "$MOCK_NAME" ;;
+    "query /1.0/instances/$MOCK_NAME/state?project=default")
+        if [[ -f $MOCK_CALLS.started ]]; then
+            [[ ${MOCK_AFTER_START:-Running} != query-error ]] || exit 23
+            current=${MOCK_AFTER_START:-Running}
+        else current=${MOCK_VM_STATUS:-Running}; fi
+        printf '{"status":"%s"}\n' "$current" ;;
+    "start $MOCK_NAME")
+        touch "$MOCK_CALLS.started"
+        if [[ ${MOCK_START_RESULT:-0} != 0 ]]; then
+            echo 'Error: simulated start failure' >&2
+            exit "$MOCK_START_RESULT"
+        fi ;;
+    list*) printf '[{"name":"%s","status":"%s"}]\n' "$MOCK_NAME" "${MOCK_VM_STATUS:-Running}" ;;
     'exec '*)
         [[ $* != *'runuser -u tester'* ]] || exit "$MOCK_RESULT"
         ;;
@@ -79,13 +91,13 @@ flock -u 8
 
 # Rzeczywisty rsync: prywatność stagingu, zmiany/delecje, symlinki i cache.
 src=$scratch/source; stage=$scratch/stage; dest=$scratch/dest
-mkdir -p "$src/core/rust/target" "$src/.git" "$src/.opencode" "$src/node_modules" "$stage" "$dest/core/rust/target"
+mkdir -p "$src/core/target" "$src/.git" "$src/.opencode" "$src/node_modules" "$stage" "$dest/core/target"
 echo secret > "$src/.env.local"
 echo secret > "$src/base-auth.json"
 echo secret > "$src/playwright-auth.json"
 echo private > "$src/.git/config"
-echo host-build > "$src/core/rust/target/host"
-echo cache > "$dest/core/rust/target/cache"
+echo host-build > "$src/core/target/host"
+echo cache > "$dest/core/target/cache"
 echo stale > "$dest/removed"
 echo modified > "$src/new file"
 echo context > "$src/.dockerignore"
@@ -94,23 +106,23 @@ chmod 755 "$src/executable"
 echo unrelated > "$scratch/private"
 ln -s "$scratch/private" "$src/link"
 rsync -a --no-owner --no-group --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
-[[ ! -e $stage/.env.local && ! -e $stage/base-auth.json && ! -e $stage/playwright-auth.json && ! -e $stage/.git && ! -e $stage/core/rust/target ]]
+[[ ! -e $stage/.env.local && ! -e $stage/base-auth.json && ! -e $stage/playwright-auth.json && ! -e $stage/.git && ! -e $stage/core/target ]]
 [[ -L $stage/link && $(readlink "$stage/link") == "$scratch/private" ]]
 mkdir "$scratch/unpacked"
 tar -C "$stage" -cf "$scratch/source.tar" .
 tar --no-same-owner -xf "$scratch/source.tar" -C "$scratch/unpacked"
 [[ -L $scratch/unpacked/link && -x $scratch/unpacked/executable && -f $scratch/unpacked/.dockerignore ]]
 rsync -a --delete --no-owner --no-group --exclude-from="$root/tests/vm/excludes" -- "$stage/" "$dest/"
-[[ -f $dest/core/rust/target/cache && ! -e $dest/removed && -x $dest/executable && -f $dest/.dockerignore && -L $dest/link ]]
+[[ -f $dest/core/target/cache && ! -e $dest/removed && -x $dest/executable && -f $dest/.dockerignore && -L $dest/link ]]
 rm "$src/new file"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$stage/" "$dest/"
-[[ ! -e $dest/'new file' && -f $dest/core/rust/target/cache ]]
+[[ ! -e $dest/'new file' && -f $dest/core/target/cache ]]
 # Usunięcie również katalogów nadrzędnych źródeł nie usuwa guest target.
 rm -rf -- "$src/core"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$src/" "$stage/"
 rsync -a --delete --exclude-from="$root/tests/vm/excludes" -- "$stage/" "$dest/"
-[[ -f $dest/core/rust/target/cache ]]
+[[ -f $dest/core/target/cache ]]
 
 # Exercise the exact production selector: nested and top-level reports are
 # included, while private files, unsupported extensions and symlinks are not.
@@ -139,6 +151,33 @@ for excluded_report in \
 done
 
 if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+    # Kontrakt trwałej VM: ponowne użycie, pojedynczy start i wyścig bez restartu.
+    : > "$MOCK_CALLS"
+    expect 0 bash "$checkout/tests/vm/host.sh" up
+    ! grep -q ' start ' "$MOCK_CALLS"
+    for start_result in 0 17; do
+        : > "$MOCK_CALLS"
+        rm -f "$MOCK_CALLS.started"
+        MOCK_VM_STATUS=Stopped MOCK_START_RESULT=$start_result MOCK_AFTER_START=Running \
+            expect 0 bash "$checkout/tests/vm/host.sh" up
+        [[ $(grep -c ' start ' "$MOCK_CALLS") == 1 ]]
+        grep -q ' exec ' "$MOCK_CALLS"
+        if [[ $start_result == 17 ]]; then
+            grep -q 'simulated start failure' "$scratch/output"
+        fi
+    done
+    for after_start in Stopped Frozen query-error; do
+        : > "$MOCK_CALLS"
+        rm -f "$MOCK_CALLS.started"
+        MOCK_VM_STATUS=Stopped MOCK_START_RESULT=17 MOCK_AFTER_START=$after_start \
+            expect 17 bash "$checkout/tests/vm/host.sh" up
+        grep -q 'simulated start failure' "$scratch/output"
+        ! grep -q ' exec ' "$MOCK_CALLS"
+    done
+    : > "$MOCK_CALLS"
+    rm -f "$MOCK_CALLS.started"
+    MOCK_VM_STATUS=Frozen expect 1 bash "$checkout/tests/vm/host.sh" up
+    ! grep -Eq ' (start|exec) ' "$MOCK_CALLS"
     MOCK_RESULT=37 MOCK_EXPORT=0 expect 37 bash "$checkout/tests/vm/host.sh" test
     grep -q 'runuser -u tester.*setsid --wait.*guest.sh test' "$MOCK_CALLS"
     grep -q -- '--force-local --project default file pull -r -P' "$MOCK_CALLS"

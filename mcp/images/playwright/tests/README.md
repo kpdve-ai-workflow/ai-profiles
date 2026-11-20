@@ -24,8 +24,10 @@ Nie trzeba ręcznie uruchamiać usług ani przeglądarki. Test używa produkcyjn
 Compose z testowym nadpisaniem obrazu/entrypointu. Sprawdza MCP stdio, schematy
 i roots, Chromium, axe 4.14.0, naruszenia button-name/image-alt, screenshoty
 względne/bezwzględne/automatyczne, trwałość init script po nawigacji,
-HTTPS i cookie uwierzytelnienia. Następnie rzeczywiste `make install CLIENT=opencode PROFILE=react`
-i zainstalowany adapter wykonują pełny drugi etap. Nie ma mockowania adaptera.
+HTTPS i cookie uwierzytelnienia. Następnie rzeczywiste `make install CLIENT=<klient> PROFILE=react`
+i zainstalowany adapter wykonują pełny drugi etap dla `opencode`, `claude` i `codex`,
+każdy w osobnym projekcie. Orkiestrator jawnie przekazuje `SMOKE_CLIENT`, a konfiguracja
+pozostaje w natywnym pliku wybranego klienta. Nie ma mockowania adaptera.
 
 Czysty projekt bez `.ai-profiles/reports/` i `local.json` uruchamia dystrybuowany launcher
 z cwd `/`, w ścieżce ze spacjami i przecinkiem. Test sprawdza automatyczne

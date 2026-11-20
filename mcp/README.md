@@ -196,10 +196,9 @@ nie wymaga Dockera i nie buduje ani nie pobiera obrazu.
 Z katalogu głównego projektu, mając działający Docker Engine i plugin Compose:
 
 ```sh
-docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
+client=opencode # opencode, claude albo codex — zgodnie z instalacją
+docker build --tag ai-profiles-playwright:0.2.0 ".ai-profiles/$client/mcp/playwright"
 ```
-
-Dla Claude Code lub Codex zastąp `opencode` odpowiednio `claude` lub `codex`.
 Opcjonalnie przygotuj [plik Basic Auth](images/playwright/README.md#http-basic-auth).
 Następnie zrestartuj klienta AI i zatwierdź jego natywne zgody projektu/MCP,
 jeśli wymagane. Jak dla pozostałych lokalnych MCP, wspólny

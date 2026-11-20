@@ -32,7 +32,9 @@ async function tool(name, args) {
   return result;
 }
 async function start() {
-  child = spawn(`${project}/.ai-profiles/opencode/ai-profile-mcp`, ['playwright'], { cwd: '/', env: { ...process.env, PWD: '/' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const client = process.env.SMOKE_CLIENT;
+  if (!['opencode', 'claude', 'codex'].includes(client)) throw new Error('SMOKE_CLIENT must name an installed client');
+  child = spawn(`${project}/.ai-profiles/${client}/ai-profile-mcp`, ['playwright'], { cwd: '/', env: { ...process.env, PWD: '/' }, stdio: ['pipe', 'pipe', 'pipe'] });
   child.stderr.on('data', chunk => { stderr += chunk; });
   const fail = error => { for (const waiter of pending.values()) waiter.reject(error); pending.clear(); };
   child.on('error', fail);
@@ -72,8 +74,8 @@ async function checkPage(url) {
   assert.match(JSON.stringify(result), /SYNTHETIC_HOST_LOOPBACK_T03/);
 }
 async function main() {
-  const payload = `${project}/.ai-profiles/opencode/mcp/playwright`;
-  const local = `${project}/.ai-profiles/opencode/local.json`;
+  const payload = `${project}/.ai-profiles/${process.env.SMOKE_CLIENT}/mcp/playwright`;
+  const local = `${project}/.ai-profiles/${process.env.SMOKE_CLIENT}/local.json`;
   assert.ok(!fs.existsSync(local));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   await start();

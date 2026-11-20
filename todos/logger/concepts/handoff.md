@@ -6,7 +6,7 @@
 
 Observe relevant process diagnostics and actual termination after the Rust program currently calls exec. Existing pre-exec events are not sufficient evidence of later success/failure.
 
-Known boundaries: [mcp/runtime.rs](../../../core/rust/src/mcp/runtime.rs) `launch`; [playwright/runtime.rs](../../../core/rust/src/playwright/runtime.rs) `main`; [logging/entry.rs](../../../core/rust/src/logging/entry.rs) `handoff`. The Novamira guard already has a different owned-child lifecycle and must not be conflated with exec.
+Known boundaries: [mcp/runtime.rs](../../../core/src/mcp/runtime.rs) `launch`; [playwright/runtime.rs](../../../core/src/playwright/runtime.rs) `main`; [logging/entry.rs](../../../core/src/logging/entry.rs) `handoff`. The Novamira guard already has a different owned-child lifecycle and must not be conflated with exec.
 
 ## Required contract before implementation
 

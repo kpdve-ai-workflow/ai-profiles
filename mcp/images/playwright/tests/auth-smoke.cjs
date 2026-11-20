@@ -141,9 +141,11 @@ function writeCredentials(origin, secret) {
 
 async function main() {
   assert.ok(!fs.existsSync(`${project}/.ai-profiles/reports`), 'fixture must not pre-create reports');
-  assert.ok(!fs.existsSync(`${project}/.ai-profiles/opencode/local.json`), 'fixture must not use local.json');
+  const client = process.env.SMOKE_CLIENT;
+  if (!['opencode', 'claude', 'codex'].includes(client)) throw new Error('SMOKE_CLIENT must name an installed client');
+  assert.ok(!fs.existsSync(`${project}/.ai-profiles/${client}/local.json`), 'fixture must not use local.json');
   assert.ok(!fs.existsSync(`${project}/base-auth.json`), 'fixture starts without credentials');
-  assert.ok(fs.existsSync(`${project}/.ai-profiles/opencode/mcp/playwright/playwright-launcher`));
+  assert.ok(fs.existsSync(`${project}/.ai-profiles/${client}/mcp/playwright/playwright-launcher`));
 
   authServer = http.createServer((req, res) => {
     const observed = { url: req.url, authorization: req.headers.authorization };

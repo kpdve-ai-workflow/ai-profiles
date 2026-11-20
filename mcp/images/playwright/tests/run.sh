@@ -12,7 +12,7 @@ chmod 755 "$run" "$project" "$project/.ai-profiles" "$project/.ai-profiles/repor
 # Only this fresh, disposable reports tree is writable by container UID 1000.
 chmod 777 "$project/.ai-profiles/reports"
 cleanup() {
-  docker rm -f "$name" "$name-fixtures" "$name-dns" >/dev/null 2>&1 || true
+  docker rm -f "$name" "$name-fixtures" "$name-dns" "$name-dns-opencode" "$name-dns-claude" "$name-dns-codex" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -66,8 +66,21 @@ AI_PROFILE_PROJECT_DIR="$project" AI_PROFILE_SMOKE_IMAGE="$image" AI_PROFILE_SMO
 # Real installed adapter integration, not merely the image entrypoint. Host Node
 # is used only as the test MCP client; browser/runtime dependencies stay in Docker.
 repo=$(CDPATH= cd -- "$tests/../../../.." && pwd)
-make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$project"
-cat > "$project/.ai-profiles/opencode/mcp/playwright/smoke-image.yaml" <<'YAML'
+image_project=$project
+for client in opencode claude codex; do
+if [ "$client" = opencode ]; then
+  project=$image_project
+else
+  project="$run/project-$client"
+fi
+mkdir -p "$project/.ai-profiles/reports"
+cp "$tests/fixture.html" "$project/fixture.html"
+if [ "$project" != "$image_project" ]; then
+  cp -a "$image_project/.ai-profiles/.private" "$project/.ai-profiles/"
+  cp "$image_project/auth.json" "$project/auth.json"
+fi
+make -C "$repo" install CLIENT="$client" PROFILE=react PROJECT="$project"
+cat > "$project/.ai-profiles/$client/mcp/playwright/smoke-image.yaml" <<'YAML'
 services:
   playwright:
     image: "${AI_PROFILE_SMOKE_IMAGE:?}"
@@ -75,59 +88,66 @@ YAML
 cat > "$project/.ai-profiles/.env.smoke" <<'ENV'
 AI_PROFILE_PROJECT_DIR=/wrong/dotenv
 ENV
-cat > "$project/.ai-profiles/opencode/local.json" <<'JSON'
+cat > "$project/.ai-profiles/$client/local.json" <<JSON
 {"mcp":{"playwright":{"env_file":".ai-profiles/.env.smoke","environment":{
   "AI_PROFILE_PROJECT_DIR":"/wrong/local-mapping",
   "AI_PROFILE_PLAYWRIGHT_NETWORK":"host",
   "AI_PROFILE_PLAYWRIGHT_CA_CERT":".ai-profiles/.private/ca.crt",
   "AI_PROFILE_PLAYWRIGHT_STORAGE_STATE":"auth.json",
-  "COMPOSE_FILE":".ai-profiles/opencode/mcp/playwright/compose.yaml:.ai-profiles/opencode/mcp/playwright/compose.ca.yaml:.ai-profiles/opencode/mcp/playwright/compose.auth.yaml:.ai-profiles/opencode/mcp/playwright/smoke-image.yaml"
+  "COMPOSE_FILE":".ai-profiles/$client/mcp/playwright/compose.yaml:.ai-profiles/$client/mcp/playwright/compose.ca.yaml:.ai-profiles/$client/mcp/playwright/compose.auth.yaml:.ai-profiles/$client/mcp/playwright/smoke-image.yaml"
 }}}}
 JSON
 # Preserve the first run's evidence, including automatic filename checks.
-mkdir "$project/.ai-profiles/reports/direct"
-find "$project/.ai-profiles/reports" -maxdepth 1 -type f -exec mv {} "$project/.ai-profiles/reports/direct/" \;
-SMOKE_PROJECT_DIR="$project" SMOKE_ADAPTER="$project/.ai-profiles/opencode/ai-profile-mcp" \
+if [ "$client" = opencode ]; then
+  mkdir "$project/.ai-profiles/reports/direct"
+  find "$project/.ai-profiles/reports" -maxdepth 1 -type f -exec mv {} "$project/.ai-profiles/reports/direct/" \;
+  SMOKE_VERIFY_DIRECT=1
+else
+  SMOKE_VERIFY_DIRECT=0
+fi
+SMOKE_VERIFY_DIRECT="$SMOKE_VERIFY_DIRECT" SMOKE_CLIENT="$client" SMOKE_PROJECT_DIR="$project" SMOKE_ADAPTER="$project/.ai-profiles/$client/ai-profile-mcp" \
   AI_PROFILE_SMOKE_IMAGE="$image" \
   timeout --signal=TERM --kill-after=10s 180s node "$tests/smoke.cjs"
 
 # The production workflow must work without reports, local.json or an environment
 # override, after only a manual image build. This fresh scratch project tests it.
-auth_project="$run/clean project"
+auth_project="$run/clean project $client"
 mkdir -p "$auth_project"
 cp "$tests/fixture.html" "$auth_project/fixture.html"
 repo=$(CDPATH= cd -- "$tests/../../../.." && pwd)
-make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$auth_project"
+make -C "$repo" install CLIENT="$client" PROFILE=react PROJECT="$auth_project"
 test ! -e "$auth_project/.ai-profiles/reports"
-test ! -e "$auth_project/.ai-profiles/opencode/local.json"
+test ! -e "$auth_project/.ai-profiles/$client/local.json"
 git -C "$auth_project" init -q
 docker image tag "$image" ai-profiles-playwright:0.2.0
-SMOKE_AUTH_PROJECT="$auth_project" \
-  SMOKE_AUTH_ADAPTER="$auth_project/.ai-profiles/opencode/ai-profile-mcp" \
+SMOKE_CLIENT="$client" SMOKE_AUTH_PROJECT="$auth_project" \
+  SMOKE_AUTH_ADAPTER="$auth_project/.ai-profiles/$client/ai-profile-mcp" \
   timeout --signal=TERM --kill-after=10s 240s node "$tests/auth-smoke.cjs"
 git -C "$auth_project" check-ignore --no-index -q base-auth.json
 
-network_project="$run/network project space,comma"
+network_project="$run/network project space,comma $client"
 mkdir "$network_project"
-make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$network_project"
-docker run -d --rm --pull=never --name "$name-dns" --network host --entrypoint node \
+make -C "$repo" install CLIENT="$client" PROFILE=react PROJECT="$network_project"
+dns_name="$name-dns-$client"
+docker run -d --rm --pull=never --name "$dns_name" --network host --entrypoint node \
   --mount "type=bind,src=$tests,dst=/smoke,readonly" \
   "$image" /smoke/dns-fixture.cjs
 attempt=0
-until docker logs "$name-dns" 2>&1 | grep -q DNS_READY; do
-  if [ "$(docker inspect --format '{{.State.Running}}' "$name-dns")" != true ] || [ "$attempt" -ge 50 ]; then
-    docker logs "$name-dns" >&2
+until docker logs "$dns_name" 2>&1 | grep -q DNS_READY; do
+  if [ "$(docker inspect --format '{{.State.Running}}' "$dns_name")" != true ] || [ "$attempt" -ge 50 ]; then
+    docker logs "$dns_name" >&2
     echo 'FAIL: synthetic DNS fixture unavailable (infrastructure)' >&2
     exit 1
   fi
   attempt=$((attempt + 1))
   sleep 0.1
 done
-SMOKE_NETWORK_PROJECT="$network_project" SMOKE_DNS_CONTAINER="$name-dns" \
+SMOKE_CLIENT="$client" SMOKE_NETWORK_PROJECT="$network_project" SMOKE_DNS_CONTAINER="$dns_name" \
   timeout --signal=TERM --kill-after=10s 180s node "$tests/network-smoke.cjs"
+docker rm -f "$dns_name" >/dev/null
 
-ca_project="$run/CA project space,comma"
-ca_fixtures="$run/CA fixtures"
+ca_project="$run/CA project space,comma $client"
+ca_fixtures="$run/CA fixtures $client"
 mkdir "$ca_project" "$ca_fixtures"
 for ca in 'CA with spaces' 'other CA'; do
   timeout --signal=TERM --kill-after=10s 30s docker run --rm --pull=never --name "$name-fixtures" --entrypoint node \
@@ -137,6 +157,7 @@ for ca in 'CA with spaces' 'other CA'; do
     --volume "$ca_fixtures:/fixtures" \
     "$image" /smoke/create-fixtures.cjs
 done
-make -C "$repo" install CLIENT=opencode PROFILE=react PROJECT="$ca_project"
-SMOKE_CA_PROJECT="$ca_project" SMOKE_CA_FIXTURES="$ca_fixtures" \
+make -C "$repo" install CLIENT="$client" PROFILE=react PROJECT="$ca_project"
+SMOKE_CLIENT="$client" SMOKE_CA_PROJECT="$ca_project" SMOKE_CA_FIXTURES="$ca_fixtures" \
   timeout --signal=TERM --kill-after=10s 180s node "$tests/ca-smoke.cjs"
+done

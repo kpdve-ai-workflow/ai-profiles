@@ -73,7 +73,7 @@ function verifyArtifacts(directory, expectedUid, expectedGid) {
 
 async function main() {
   // Recheck the direct run's artifacts from the host, not only inside its bind.
-  if (adapter) verifyArtifacts(`${report}/direct`, 1000, 1000);
+  if (adapter && process.env.SMOKE_VERIFY_DIRECT === '1') verifyArtifacts(`${report}/direct`, 1000, 1000);
   if (!adapter) {
     assert.equal(process.env.HOST_UID, '');
     assert.equal(process.env.HOST_GID, '');

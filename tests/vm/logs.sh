@@ -18,7 +18,7 @@ if [[ ! ${INCUS_SOCKET+x} && -S /run/incus/unix.socket ]]; then
 fi
 identity=$(printf '%s\0%s\0%s' "$root" "$(id -u)" "$(cat /etc/machine-id)" | sha256sum | cut -d' ' -f1)
 name=ai-profiles-${identity:0:24}
-scratch=$(mktemp -d "${TMPDIR:-/tmp/opencode}/ai-profiles-logs.XXXXXXXX")
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/ai-profiles-logs.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 trap 'exit 0' INT TERM HUP
 host_offset=0; cloud_offset=0; current=

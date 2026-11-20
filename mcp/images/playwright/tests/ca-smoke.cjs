@@ -41,7 +41,9 @@ function evaluated(result) {
 async function start(caroot) {
   const environment = { ...process.env, PWD: '/', CAROOT: caroot };
   delete environment.AI_PROFILE_PLAYWRIGHT_CA_CERT;
-  child = spawn(`${project}/.ai-profiles/opencode/ai-profile-mcp`, ['playwright'], { cwd: '/', env: environment, stdio: ['pipe', 'pipe', 'pipe'] });
+  const client = process.env.SMOKE_CLIENT;
+  if (!['opencode', 'claude', 'codex'].includes(client)) throw new Error('SMOKE_CLIENT must name an installed client');
+  child = spawn(`${project}/.ai-profiles/${client}/ai-profile-mcp`, ['playwright'], { cwd: '/', env: environment, stdio: ['pipe', 'pipe', 'pipe'] });
   child.stderr.on('data', chunk => { stderr += chunk; });
   child.stdout.on('data', chunk => { stdout += chunk; });
   const fail = error => { for (const waiter of pending.values()) waiter.reject(error); pending.clear(); };
@@ -105,7 +107,7 @@ async function main() {
   fs.chmodSync(`${project}/storage.json`, 0o600);
   fs.writeFileSync(`${project}/base-auth.json`, JSON.stringify({ username, password, origin: good }), { mode: 0o600 });
   // No manual CA setting or COMPOSE_FILE; storage state is still an explicit input.
-  fs.writeFileSync(`${project}/.ai-profiles/opencode/local.json`, JSON.stringify({ mcp: { playwright: { environment: { AI_PROFILE_PLAYWRIGHT_STORAGE_STATE: 'storage.json' } } } }));
+  fs.writeFileSync(`${project}/.ai-profiles/${process.env.SMOKE_CLIENT}/local.json`, JSON.stringify({ mcp: { playwright: { environment: { AI_PROFILE_PLAYWRIGHT_STORAGE_STATE: 'storage.json' } } } }));
   await start(caroot);
   await tool('browser_navigate', { url: good });
   const content = await tool('browser_evaluate', { function: "() => ({text:document.body.innerText,cookie:document.cookie.includes('smoke-session=synthetic-test-only'),axe:window.axe.version})" });

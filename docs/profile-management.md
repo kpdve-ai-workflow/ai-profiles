@@ -144,7 +144,7 @@ wykonuje commitów ani nie tworzy tagów.
 Instaluj przez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> PROJECT=<projekt>`.
 Aliasy: `install-opencode`, `install-claude`, `install-codex` z tymi samymi PROFILE
 i PROJECT; sprzeczny CLIENT jest błędem. Make buduje
-manager i runtime Rust w `core/rust/target/release/` przed operacją. Adapter MCP,
+manager i runtime Rust w `core/target/release/` przed operacją. Adapter MCP,
 launcher Playwright i restore WordPress trafiają do projektu jako samodzielne
 pliki wykonywalne. Python pozostaje wyłącznie w repozytorium jako kod
 referencyjny. Współdzielone zasoby legacy (również dawne `.py`) pozostają zamrożone;
@@ -215,10 +215,9 @@ do `.ai-profiles/<klient>/mcp/playwright/`, bez uruchamiania Dockera lub npm. Pr
 obrazu wykonuje użytkownik w katalogu głównym docelowego repozytorium:
 
 ```sh
-docker build --tag ai-profiles-playwright:0.2.0 .ai-profiles/opencode/mcp/playwright
+client=opencode # opencode, claude albo codex — zgodnie z instalacją
+docker build --tag ai-profiles-playwright:0.2.0 ".ai-profiles/$client/mcp/playwright"
 ```
-
-Dla Claude Code/Codex użyj w ścieżce odpowiednio `claude`/`codex`.
 Do korzystania potrzebny jest lokalny Linux Docker Engine i plugin Compose.
 Adapter uruchamia dostarczony `playwright-launcher`, który automatycznie tworzy
 `.ai-profiles/reports/` i przygotowuje kontener, bez konfiguracji VPN lub hosta.

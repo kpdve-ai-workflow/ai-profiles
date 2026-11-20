@@ -8,10 +8,10 @@ Provide local storage, configuration, session identity, payload persistence, rot
 
 Existing implementation touchpoints:
 
-- [logging.rs](../../../core/rust/src/logging.rs): shared logging module.
-- [session.rs](../../../core/rust/src/logging/session.rs): `Config::from_env`, `Session::open`, `Session::payload`, `complete`, `flush`, `subscriber`.
-- [entry.rs](../../../core/rust/src/logging/entry.rs): shared location/Git-ignore preparation, `with_diagnostics`, `diagnostics_complete`, `handoff`, `runtime_entry`.
-- [bin entry points](../../../core/rust/src/bin): manager, MCP adapter, Playwright launcher, restore and test inventory.
+- [logging.rs](../../../core/src/logging.rs): shared logging module.
+- [session.rs](../../../core/src/logging/session.rs): `Config::from_env`, `Session::open`, `Session::payload`, `complete`, `flush`, `subscriber`.
+- [entry.rs](../../../core/src/logging/entry.rs): shared location/Git-ignore preparation, `with_diagnostics`, `diagnostics_complete`, `handoff`, `runtime_entry`.
+- [bin entry points](../../../core/src/bin): manager, MCP adapter, Playwright launcher, restore and test inventory.
 
 ## Boundaries and failure behavior
 
@@ -21,6 +21,6 @@ Do not restore old flat-JSONL-only assumptions, reopen storage location, or chan
 
 ## Acceptance and evidence ownership
 
-Evidence pointers and accepted platform belong to FOUNDATION-BASE in the roadmap. Existing coverage includes [logging_session.rs](../../../core/rust/tests/logging_session.rs), [runtime_logging.rs](../../../core/rust/tests/runtime_logging.rs), and [manager_logging.rs](../../../core/rust/tests/manager_logging.rs).
+Evidence pointers and accepted platform belong to FOUNDATION-BASE in the roadmap. Existing coverage includes [logging_session.rs](../../../core/tests/logging_session.rs), [runtime_logging.rs](../../../core/tests/runtime_logging.rs), and [manager_logging.rs](../../../core/tests/manager_logging.rs).
 
 Regression-sensitive invariants: exact binary reconstruction, complete records across rotation, explicit limits/I/O failure, safe interrupted retention, no active/unknown-resource deletion, no external fallback, and unchanged stdout/protocol/handoff behavior. Later tasks must reuse these contracts rather than reassert completion solely from an existing API.

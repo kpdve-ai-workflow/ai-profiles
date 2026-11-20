@@ -45,9 +45,9 @@ skipów tylko po to, by uzyskać GREEN.
 
 Mockowane wywołanie procesu nie dowodzi działania prawdziwego programu.
 Kontrola orkiestracji nie zastępuje rzeczywistej integracji. W Rust samo dodanie
-pliku do `core/rust/tests/` nie gwarantuje wykonania: `core/rust/Cargo.toml`
+pliku do `core/tests/` nie gwarantuje wykonania: `core/Cargo.toml`
 ustawia `autotests = false`, a pliki są jawnie dołączane jako moduły testowe
-w `core/rust/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
+w `core/src/lib.rs`. Sprawdź rejestrację modułu i potwierdź w wynikach
 uruchomienie nowych testów, nie tylko sukces całego polecenia.
 
 ### Wymagana weryfikacja przed akceptacją
@@ -59,7 +59,7 @@ Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
 
 | Zakres zmiany | Weryfikacja przed akceptacją |
 | --- | --- |
-| Zachowanie `core/rust` | `make validate-rust-migration` |
+| Zachowanie `core` | `make validate-rust-migration` |
 | Integracja/obraz Playwright | `make test-playwright` |
 | Wspólne zmiany obejmujące oba obszary | `make test-all` |
 | Orkiestracja VM | `bash tests/vm/check.sh` oraz `make test-all` |
@@ -67,8 +67,9 @@ Rust i Playwright w VM, bez lokalnego fallbacku. Lekką kontrolę orkiestracji
 
 `make test` służy również iteracyjnej weryfikacji Rust. Szersza bramka może już
 obejmować wymagane testy (`make test-all` obejmuje bramkę Rust i Playwright,
-a `make validate-rust-migration` obejmuje `make test`); nie uruchamiaj ich
-ponownie wyłącznie dla formalności. Dla nowych obszarów ustal kontrakt
+a `make validate-rust-migration` obejmuje `make test`). Nie powtarzaj osobno
+kontroli już wykonanych w szerszej bramce; bez nowych zmian ponowne uruchamianie
+tych samych poleceń nie daje dodatkowej wartości. Dla nowych obszarów ustal kontrakt
 weryfikacji na podstawie rzeczywistych narzędzi projektu; nie wymyślaj komend.
 
 Zapisuj rzeczywiście wykonane polecenia, ich rezultaty i ograniczenia
@@ -343,8 +344,10 @@ marker pozwalający zachować historyczny błąd cloud-init bez blokowania test�
 
 Testy jednostkowe aktywacji używają wstrzykniętych runnerów; domyślny runner
 natywnych integracji w testach zgłasza brak CLI. Nigdy nie rejestrują marketplace
-w rzeczywistym HOME. Test adaptera Playwright instaluje wyłącznie CLIENT=opencode
-do jednorazowego projektu, pod `.ai-profiles/opencode/`.
+w rzeczywistym HOME. Test adaptera Playwright instaluje wybranego klienta do
+jednorazowego projektu, pod `.ai-profiles/{client}/`. Wspólne scenariusze
+obejmują `opencode`, `claude` i `codex`, każdy z osobnym projektem, stanem i
+artefaktami; natywne pliki konfiguracyjne pozostają właściwe dla klienta.
 
 Jedna nieefemeryczna VM na kanoniczną ścieżkę checkoutu/użytkownika/hosta.
 Tożsamość w konfiguracji VM jest weryfikowana przed operacjami; kolizja
@@ -363,7 +366,7 @@ Staging jest usuwany także po błędach. Nie używamy `--copy-links` ani
 `--delete-excluded`. Usunięte źródła znikają z workspace.
 
 Na dysku Incus zostają: `/home/tester/.cargo` (registry/git/toolchain),
-`/home/tester/ai-profiles/core/rust/target` (debug/release) i obrazy/warstwy Docker.
+`/home/tester/ai-profiles/core/target` (debug/release) i obrazy/warstwy Docker.
 Build pozostaje w miejscu wymaganym przez wykrywanie payloadów repozytorium.
 **Wyniki testów nigdy nie służą do pomijania wykonania**; obraz Playwright jest
 budowany przy każdym żądaniu (Docker może wykorzystać warstwy).
@@ -391,7 +394,7 @@ Nazwę VM znajdziesz w `artifacts/<run>/instance` lub `incus list`. Diagnostyka:
 incus exec NAZWA_VM -- cloud-init status --long
 incus exec NAZWA_VM -- cat /var/log/cloud-init-output.log
 incus exec NAZWA_VM -- df -h /home/tester
-incus exec NAZWA_VM -- du -sh /home/tester/.cargo /home/tester/ai-profiles/core/rust/target /home/tester/test-runs
+incus exec NAZWA_VM -- du -sh /home/tester/.cargo /home/tester/ai-profiles/core/target /home/tester/test-runs
 incus exec NAZWA_VM -- docker system df
 ```
 
