@@ -1,0 +1,15 @@
+services:
+  playwright:
+    volumes:
+      - type: bind
+        source: /etc/hosts
+        target: /etc/hosts
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /etc/resolv.conf
+        target: /etc/resolv.conf
+        read_only: true
+        bind:
+          create_host_path: false

@@ -1,7 +1,8 @@
 {
   "type": "local",
-  "command": ["npx", "-y", "@automattic/mcp-wordpress-remote@0.4.0"],
-  "disabled": true,
+  "command": [".opencode/mcp/novamira/launcher"],
+  "disabled": false,
+  "env_file": ".env.novamira",
   "environment": {
     "WP_API_URL": "{env:WP_API_URL}",
     "WP_API_USERNAME": "{env:WP_API_USERNAME}",

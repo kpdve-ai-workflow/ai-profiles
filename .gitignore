@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .opencode/node_modules/
+core/target/
+skills-main
+.test-vm/
+/.ai-profiles-logs/

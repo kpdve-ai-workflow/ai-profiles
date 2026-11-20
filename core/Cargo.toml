@@ -1,0 +1,26 @@
+[package]
+name = "ai-profiles-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+autotests = false
+
+[lib]
+name = "ai_profiles_core"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision"] }
+sha2 = "0.10"
+thiserror = "2"
+tempfile = "3"
+regex = "1"
+flate2 = "1"
+fs2 = "0.4"
+url = "2"
+ctrlc = { version = "3", features = ["termination"] }
+toml_edit = "0.22"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+rustix = { version = "1", features = ["fs"] }

@@ -1,8 +1,8 @@
-# Repository guide
+Instalacja odbywa się poprzez `make install CLIENT=opencode|claude|codex|all PROFILE=<profil> PROJECT=<projekt>`.
 
-- Python 3.10+; runtime and tests use only the standard library.
-- Verify changes with `make validate` and `make test` (`python3 -m unittest discover -s tests -v`). Tests use temporary repo/project copies; never test against a real project or database. Mock Docker/downloads and DDEV/WP-CLI where needed.
-- Preserve project-owned data and safety behavior. `.opencode/ai-profile.local.json` is user-owned; never replace it with generated configuration. Avoid hand-editing generated entries in project `opencode.json`.
-- Installing/updating profiles must not execute user tools in `profiles/<name>/scripts/`. WordPress Updraft restore defaults to a read-only plan; database replacement requires `--apply`, project-name confirmation and a verified local backup. See [WordPress documentation](profiles/wordpress/README.md) before working on its restore tooling.
-- Follow [profile management](docs/profile-management.md) and [MCP documentation](mcp/README.md) for repository conventions and component details. Bump affected profiles deliberately when changing delivered profile content; versions are independent.
-- Documentation changes belong in the README of the relevant area. Update the root `README.md` only when repository-wide introductory information changes, and `AGENTS.md` only when agent rules change. Do not add task reports or change summaries to either file.
+## Obowiązkowa polityka testowania
+
+- Przed projektowaniem, dodawaniem, modyfikowaniem lub oceną testów przeczytaj [docs/testing.md](docs/testing.md) i stosuj metodykę `test-gap-discovery`; wczytaj skill, jeśli jest dostępny. Gdy jest niedostępny, zgłoś to i nadal stosuj metodykę opisaną w tym dokumencie, zamiast zastępować ją dowolnym podejściem.
+- Zmiana zachowania aplikacji wymaga adekwatnej ochrony testowej i wykonania wymaganej weryfikacji zgodnie z `docs/testing.md`. Obowiązuje to również bez Brain i handoffu.
+- Brak środowiska, uprawnień lub możliwości wykonania wymaganych testów blokuje weryfikację; nie oznacza sukcesu. Zatrzymaj pracę i zgłoś blokadę, zachowując informację o wykonanych zmianach.
+- Nie osłabiaj testów, nie pomijaj wymaganych kontroli ani nie obchodź izolacji, aby zakończyć zadanie. Wymagana VM dotyczy testów Rust i integracji Playwright, nie lokalnych operacji produkcyjnych, takich jak instalacja profilu.

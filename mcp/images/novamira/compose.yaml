@@ -1,0 +1,34 @@
+services:
+  novamira:
+    image: ai-profiles-novamira:0.1.0
+    pull_policy: never
+    init: true
+    stdin_open: true
+    tty: false
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+      - /home/node/.config:uid=1000,gid=1000,mode=0700
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      WP_API_URL: "${WP_API_URL:?Missing WP_API_URL}"
+      WP_API_USERNAME: "${WP_API_USERNAME:?Missing WP_API_USERNAME}"
+      WP_API_PASSWORD: "${WP_API_PASSWORD:?Missing WP_API_PASSWORD}"
+      OAUTH_ENABLED: "false"
+      LOG_LEVEL: "-1"
+      NODE_OPTIONS: --use-system-ca
+    volumes:
+      - type: bind
+        source: /etc/hosts
+        target: /etc/hosts
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /etc/resolv.conf
+        target: /etc/resolv.conf
+        read_only: true
+        bind:
+          create_host_path: false

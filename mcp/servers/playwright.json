@@ -1,0 +1,8 @@
+{
+  "type": "local",
+  "command": [".opencode/mcp/playwright/playwright-launcher"],
+  "enabled": true,
+  "environment": {
+    "COMPOSE_FILE": ".opencode/mcp/playwright/compose.yaml"
+  }
+}

@@ -1,0 +1,14 @@
+BOOTSTRAP I PRACA Z REPOZYTORIUM
+
+  make rust-build
+    Buduje manager i natywne payloady z bieżących źródeł.
+
+  make migrate-legacy PROJECT=ŚCIEŻKA
+    Migruje istniejące dane legacy do wskazanego projektu.
+
+  make pull-update CLIENT=opencode|claude|codex|all PROJECT=ŚCIEŻKA
+    Pobiera zmiany przez git pull --ff-only i aktualizuje instalację.
+
+Komendy operujące na repozytorium automatycznie budują binaria przed użyciem.
+Wymagania narzędzi instalacyjnych i testowych opisuje README.md oraz
+docs/testing.md.
