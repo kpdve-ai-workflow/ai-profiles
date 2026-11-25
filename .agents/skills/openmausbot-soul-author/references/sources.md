@@ -1,0 +1,10 @@
+# Sources
+
+These links inform the procedure above. The summaries are paraphrases, not quotations. Product documentation describes its documented behavior; the OpenMausBot design document is a design source and is not proof of every current runtime detail.
+
+- [OpenMausBot Skills](https://docs.openmausbot.com/docs/features/skills) — skills are reusable procedures, not permissions; descriptions should communicate when a skill applies, and skill instructions do not supersede governing instructions or the user's current request. Keep the main procedure focused and move useful detail into references.
+- [OpenMausBot Bots and Tasks](https://docs.openmausbot.com/docs/features/bots-and-tasks) — a bot profile combines identity and operating context such as instructions, memory, skills, tools, and computer preferences. Roles and access can justify separate bots; delegation benefits from a bounded result. Profile access is distinct from SOUL prose.
+- [OpenMausBot bot-folder and self-setup design](https://github.com/milind-soni/OpenMausBot/blob/main/docs/superpowers/specs/2026-09-05-bot-folder-and-self-setup-design.md) — describes SOUL as standing instructions distinct from the bot description and specifies a 24,000 UTF-8 byte limit. This is a design document, not independent confirmation of all current implementation behavior.
+- [Agent Skills specification](https://agentskills.io/specification) — defines `name` and `description` frontmatter, naming and folder conventions, and focused instructions with progressive disclosure of supporting material.
+- [OpenAI, A practical guide to building agents](https://openai.com/business/guides-and-resources/a-practical-guide-to-building-agents/) — recommends using established procedures, dividing complex work into clear steps, and defining concrete actions.
+- [Anthropic, Prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices) — supports making role, context, instructions, and expected output explicit and easy to distinguish.
